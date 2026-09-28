@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 
 [ -f .env ] || { echo "Missing .env: cp .env.example .env and fill it in." >&2; exit 1; }
 # .env holds values with spaces, so read single keys instead of sourcing it.
-env_get() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//'; }
+# `|| true` so a missing key returns empty instead of aborting the script under `set -e`.
+env_get() { grep -E "^$1=" .env | tail -n 1 | cut -d= -f2- | sed -e 's/^["'\'']//' -e 's/["'\'']$//' || true; }
 port="$(env_get HTTP_PORT)"; port="${port:-80}"
 old_dir="$(env_get OLD_APP_DIR)"
 
@@ -32,6 +33,32 @@ if [ -n "$others" ]; then
   echo "Port $port is used by other containers ($others). Set a free HTTP_PORT in .env." >&2
   exit 1
 fi
+
+# The app reaches MongoDB on the compose network. The host port is only for a shell on the server,
+# so another stack may keep 27019 and this one moves to a free port (written into .env).
+mongo_port="$(env_get MONGO_PORT)"; mongo_port="${mongo_port:-27019}"
+port_holders() {
+  docker ps --format '{{.Names}} {{.Ports}}' \
+    | grep -E "(127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::\\]):${1}->" \
+    | awk '{print $1}' \
+    | grep -vx ariov2_mongodb || true
+}
+mongo_holders="$(port_holders "$mongo_port")"
+if [ -n "$mongo_holders" ]; then
+  echo "Port $mongo_port is used by $mongo_holders. Publishing this MongoDB on 27029."
+  mongo_port=27029
+  mongo_holders="$(port_holders "$mongo_port")"
+  if [ -n "$mongo_holders" ]; then
+    echo "Port $mongo_port is also used by $mongo_holders. Set a free MONGO_PORT in .env." >&2
+    exit 1
+  fi
+  if grep -q '^MONGO_PORT=' .env; then
+    sed "s/^MONGO_PORT=.*/MONGO_PORT=$mongo_port/" .env > .env.tmp && mv .env.tmp .env
+  else
+    echo "MONGO_PORT=$mongo_port" >> .env
+  fi
+fi
+export MONGO_PORT="$mongo_port"
 
 docker compose build
 docker compose up -d --wait mongodb
