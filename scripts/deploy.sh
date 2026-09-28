@@ -17,10 +17,10 @@ if [ -n "$old_dir" ] && [ -f "$old_dir/docker-compose.yml" ]; then
   (cd "$old_dir" && docker compose down)
 fi
 
-others="$(docker ps --filter "publish=$port" --format '{{.Names}}' | grep -vx ario_app || true)"
+others="$(docker ps --filter "publish=$port" --format '{{.Names}}' | grep -vx ariov2_app || true)"
 if [ -n "$others" ]; then
-  echo "Stopping containers still using port $port: $others"
-  docker stop $others
+  echo "Port $port is used by other containers ($others). Set a free APP_PORT in .env." >&2
+  exit 1
 fi
 
 docker compose build

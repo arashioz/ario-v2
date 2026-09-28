@@ -1,10 +1,12 @@
-name: ario-application
+# Every name below is prefixed "ariov2" so this stack never adopts or replaces containers/volumes of other
+# apps on the same server (compose matches existing containers by project + service name).
+name: ario-v2
 
 services:
   mongodb:
     # 4.4 is the newest MongoDB that runs on CPUs without AVX (mongo:5+ exits with code 132 there).
     image: mongo:4.4
-    container_name: ario_mongodb
+    container_name: ariov2_mongodb
     restart: always
     # Only reachable from the server itself (and the app over the compose network).
     ports:
@@ -22,8 +24,8 @@ services:
 
   app:
     build: .
-    image: ario-app:latest
-    container_name: ario_app
+    image: ariov2-app:latest
+    container_name: ariov2_app
     restart: always
     ports:
       - "${APP_PORT:-3000}:3000"
@@ -49,8 +51,8 @@ services:
 
 volumes:
   mongo_data:
-    name: ario_mongo_data
+    name: ariov2_mongo_data
   uploads:
-    name: ario_uploads
+    name: ariov2_uploads
   backups:
-    name: ario_backups
+    name: ariov2_backups

@@ -22,7 +22,7 @@ const { loadLegacy } = require('./legacy-source');
 const { guard, snapshot, restore } = require('./preserve-app-data');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27019/ario_db';
-const MONGO_CONTAINER = process.env.MONGO_CONTAINER || 'ario_mongodb';
+const MONGO_CONTAINER = process.env.MONGO_CONTAINER || 'ariov2_mongodb';
 const BACKUP_DIR = path.join(__dirname, '../backups');
 
 function dumpDatabase() {
