@@ -17,6 +17,16 @@ if [ -n "$old_dir" ] && [ -f "$old_dir/docker-compose.yml" ]; then
   (cd "$old_dir" && docker compose down)
 fi
 
+# This repo used to be project "ario-application" (the directory name). Those containers are not
+# part of project ario-v2, so compose leaves them running and they keep port 27019.
+legacy="$(docker ps -aq \
+  --filter label=com.docker.compose.project=ario-application \
+  --filter label=com.docker.compose.project.working_dir="$PWD" || true)"
+if [ -n "$legacy" ]; then
+  echo "Stopping leftover containers from the previous project name (volumes are kept)..."
+  docker compose -p ario-application down
+fi
+
 others="$(docker ps --filter "publish=$port" --format '{{.Names}}' | grep -vx ariov2_nginx || true)"
 if [ -n "$others" ]; then
   echo "Port $port is used by other containers ($others). Set a free HTTP_PORT in .env." >&2
