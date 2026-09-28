@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -45,6 +46,19 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   weightPerUnitKg?: number;
+
+  @IsOptional()
+  @IsIn(['stock', 'kg', 'other'])
+  sellBy?: 'stock' | 'kg' | 'other';
+
+  @IsOptional()
+  @IsString()
+  saleUnit?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  salePerStock?: number;
 
   @IsOptional()
   @IsNumber({}, { message: 'قیمت خرید باید عدد باشد' })

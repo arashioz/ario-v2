@@ -627,6 +627,30 @@ export class AccountingService {
       byPid.get(l.productId)!.push(l);
     }
     const pids = new Set([...byPid.keys(), ...changes.map((c) => c.productId)]);
+    for (const [pid, lots] of f.lotsByProduct) {
+      if (lots.some((lot) => this.inPeriod(lot.date, period))) pids.add(pid);
+    }
+
+    const allSales = new Map<string, SaleLine[]>();
+    for (const l of f.saleLines) {
+      if (l.kg <= 0) continue;
+      if (!allSales.has(l.productId)) allSales.set(l.productId, []);
+      allSales.get(l.productId)!.push(l);
+    }
+    const sinceDay = (days: number) => dayKey(new Date(Date.now() - (days - 1) * 86400000));
+    const avgSince = (pid: string, from: string) => {
+      let kg = 0;
+      let rev = 0;
+      for (const l of allSales.get(pid) ?? []) {
+        if (dayKey(l.date) < from) continue;
+        kg += l.kg;
+        rev += l.revenue;
+      }
+      return kg > 0 ? r0(rev / kg) : null;
+    };
+    const day7 = sinceDay(7);
+    const day30 = sinceDay(30);
+    const day90 = sinceDay(90);
 
     const sellAvg = (ls: SaleLine[]) => {
       const kg = ls.reduce((s, l) => s + l.kg, 0);
@@ -646,6 +670,9 @@ export class AccountingService {
       const sellStart = sellAvg(ls.filter((l) => firstDays.has(dayKey(l.date))));
       const sellEnd = sellAvg(ls.filter((l) => lastDays.has(dayKey(l.date))));
 
+      const bought = lots.filter((lot) => this.inPeriod(lot.date, period));
+      const purchasedKg = bought.reduce((s, lot) => s + lot.kgIn, 0);
+      const purchasedAmount = bought.reduce((s, lot) => s + lot.kgIn * lot.costPerKg, 0);
       const open = lots.filter((lot) => lot.kgLeft > 1e-6);
       const last = f.lastCost.get(pid) ?? 0;
       const stockKg = open.reduce((s, lot) => s + lot.kgLeft, 0);
@@ -662,6 +689,12 @@ export class AccountingService {
         sellStart: sellStart !== null ? r0(sellStart) : null,
         sellEnd: sellEnd !== null ? r0(sellEnd) : null,
         sellChangePercent: sellStart && sellEnd ? pct(sellEnd - sellStart, sellStart) : 0,
+        purchasedKg: r1(purchasedKg),
+        purchasedAmount: r0(purchasedAmount),
+        avgBuyPerKg: purchasedKg > 0 ? r0(purchasedAmount / purchasedKg) : null,
+        sellAvg7: avgSince(pid, day7),
+        sellAvg30: avgSince(pid, day30),
+        sellAvg90: avgSince(pid, day90),
         priceChanges: changes.filter((c) => c.productId === pid).length,
         holdingGain: r0(holdingGain),
         stockKg: r1(stockKg),
@@ -669,7 +702,10 @@ export class AccountingService {
         unrealizedGain: r0(unrealized),
       };
     });
-    products.sort((a, b) => b.profit - a.profit);
+    products.sort((a, b) => b.revenue + b.purchasedAmount - (a.revenue + a.purchasedAmount) || b.profit - a.profit);
+
+    const purchasedKg = products.reduce((s, p) => s + p.purchasedKg, 0);
+    const purchasedAmount = products.reduce((s, p) => s + p.purchasedAmount, 0);
 
     // Weighted by kg sold in the period (or purchased, if nothing was sold).
     const weightOf = (p: (typeof products)[number]) => p.kg || (f.lotsByProduct.get(p.productId) ?? []).filter((lot) => this.inPeriod(lot.date, period)).reduce((s, lot) => s + lot.kgIn, 0);
@@ -695,6 +731,9 @@ export class AccountingService {
         ...split(lines),
         invoices: new Set(lines.map((l) => l.invoiceId)).size,
         holdingGain: r0(changes.reduce((s, c) => s + c.gain, 0)),
+        purchasedKg: r1(purchasedKg),
+        purchasedAmount: r0(purchasedAmount),
+        avgBuyPerKg: purchasedKg > 0 ? r0(purchasedAmount / purchasedKg) : 0,
         priceChanges: changes.length,
         costInflationPercent: Math.round(costInflation * 100) / 100,
         sellChangePercent: Math.round(sellChange * 100) / 100,
@@ -755,7 +794,7 @@ export class AccountingService {
     const filter: any = opts.productIds?.length ? { _id: { $in: opts.productIds } } : { isActive: { $ne: false } };
     const products = await this.productModel
       .find(filter)
-      .select('name unit weightPerUnitKg stock buyPrice sellPrice priceRetail priceSupermarket priceWholesale priceSetAt priceCostBasisPerKg')
+      .select('name unit weightPerUnitKg hasDualUnit secondaryUnit unitRatio stock buyPrice sellPrice priceRetail priceSupermarket priceWholesale priceSetAt priceCostBasisPerKg')
       .lean();
 
     const salesByPid = new Map<string, SaleLine[]>();
@@ -772,9 +811,14 @@ export class AccountingService {
     return products
       .map((p: any) => {
         const pid = String(p._id);
-        const wpu = p.weightPerUnitKg || 0;
+        const wpu =
+          p.weightPerUnitKg ||
+          (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio || 0 : 0) ||
+          (p.unit === 'کیلوگرم' ? 1 : 0);
+        const byWeight = wpu > 0;
+        const scale = byWeight ? wpu : 1;
         const last = f.lastCost.get(pid);
-        if (!wpu || !last) return null;
+        if (!last) return null;
 
         const lots = f.lotsByProduct.get(pid) ?? [];
         const lastLot = lots[lots.length - 1];
@@ -824,7 +868,7 @@ export class AccountingService {
         const recentMarkup = rKg && rRev - rTrading > 0 ? (rTrading / (rRev - rTrading)) * 100 : null;
 
         const retail = p.priceRetail || p.sellPrice || 0;
-        const listPerKg = retail / wpu;
+        const listPerKg = retail / scale;
 
         const unchanged = Math.abs(baseCost - priceBaseCost) < 0.5;
         let suggestedPerKg: number;
@@ -834,16 +878,16 @@ export class AccountingService {
         else suggestedPerKg = baseCost * (1 + DEFAULT_MARKUP / 100);
 
         const keepCurrent = mode === 'list' && unchanged && retail > 0;
-        const suggestedRetail = keepCurrent ? r0(retail) : roundPrice(suggestedPerKg * wpu);
+        const suggestedRetail = keepCurrent ? r0(retail) : roundPrice(suggestedPerKg * scale);
         const ratio = (v: number) => (retail > 0 && v > 0 ? v / retail : 1);
         const suggestedSupermarket = keepCurrent ? r0(p.priceSupermarket || retail) : roundPrice(suggestedRetail * ratio(p.priceSupermarket));
         const suggestedWholesaleRaw = keepCurrent ? r0(p.priceWholesale || retail) : roundPrice(suggestedRetail * ratio(p.priceWholesale));
-        const floorUnit = last > 0 && wpu > 0 ? Math.ceil((last * wpu) / 1000) * 1000 : 0;
+        const floorUnit = last > 0 ? Math.ceil((last * scale) / 1000) * 1000 : 0;
         const atCost = (n: number) => (floorUnit > 0 && n < floorUnit ? floorUnit : n);
         const safeRetail = atCost(suggestedRetail);
         const safeSuper = atCost(suggestedSupermarket);
         const safeWholesale = atCost(suggestedWholesaleRaw);
-        const safePerKg = wpu ? safeRetail / wpu : 0;
+        const safePerKg = safeRetail / scale;
         const lossGuarded = safeRetail > suggestedRetail || safeSuper > suggestedSupermarket || safeWholesale > suggestedWholesaleRaw;
         const drifted = (next: number, prev: number) => (prev > 0 ? Math.abs(next - prev) / prev > 0.005 : next > 0);
 
@@ -852,10 +896,11 @@ export class AccountingService {
           name: p.name,
           unit: p.unit,
           weightPerUnitKg: wpu,
+          byWeight,
           stockUnits: p.stock ?? 0,
           stockKg: r1(openKg),
           lastCostPerKg: r0(last),
-          lastCostPerUnit: r0(last * wpu),
+          lastCostPerUnit: r0(last * scale),
           lastInvoicePricePerKg: r0(lastLot?.invoicePricePerKg ?? last),
           lastFreightPerKg: r0(lastLot?.freightPerKg ?? 0),
           lastPurchaseDate: lastLot?.date ?? null,

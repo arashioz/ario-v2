@@ -11,7 +11,7 @@ import { productsService } from '../../services/products.service';
 import type { Product } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
 import { LoadingOverlay } from '../LoadingOverlay';
-import { formatToman, num, parseToman, toman } from '../../lib/format';
+import { formatToman, num, parseSignedDecimal, parseToman, percent, toman } from '../../lib/format';
 import { kgPerUnit, pricePerKg, tierPrice } from '../pos/cart';
 import { PriceTiers, StockAmount } from './ProductPriceInfo';
 
@@ -22,7 +22,17 @@ interface UpdatePriceModalProps {
   onPriceUpdated: (updatedProduct: Product) => void;
 }
 
-const round1000 = (n: number) => Math.round(n / 1000) * 1000;
+const ROUNDS = [
+  { id: 1, label: 'دقیق' },
+  { id: 100, label: '۱۰۰' },
+  { id: 1000, label: '۱٬۰۰۰' },
+  { id: 10000, label: '۱۰٬۰۰۰' },
+] as const;
+
+const roundMoney = (n: number, step: number) => {
+  const s = step > 1 ? step : 1;
+  return Math.round(n / s) * s;
+};
 
 /** Package price input paired with a per-kg input; typing in either updates the other. */
 const DualPriceInput: React.FC<{
@@ -100,6 +110,9 @@ export const UpdatePriceModal: React.FC<UpdatePriceModalProps> = ({
   const [newBuyPrice, setNewBuyPrice] = useState<string>('');
   const [reason, setReason] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [pctText, setPctText] = useState('6');
+  const [pctBase, setPctBase] = useState<'buy' | 'current'>('buy');
+  const [roundStep, setRoundStep] = useState<(typeof ROUNDS)[number]['id']>(1000);
 
   useEffect(() => {
     if (product && isOpen) {
@@ -109,6 +122,9 @@ export const UpdatePriceModal: React.FC<UpdatePriceModalProps> = ({
       setNewBuyPrice(product.buyPrice ? product.buyPrice.toString() : '');
       setReason('');
       setShowHistory(false);
+      setPctText('6');
+      setPctBase('buy');
+      setRoundStep(1000);
     }
   }, [product, isOpen]);
 
@@ -132,11 +148,23 @@ export const UpdatePriceModal: React.FC<UpdatePriceModalProps> = ({
   const grossProfit = parsedNewSell - parsedNewBuy;
   const profitMarginPercent = parsedNewSell > 0 ? ((grossProfit / parsedNewSell) * 100).toFixed(1) : '0';
 
-  const applyPercent = (pct: number) => {
+  const applyPercent = (pct: number, base: 'buy' | 'current' = pctBase, step: number = roundStep) => {
+    const onBuy = base === 'buy' && parsedNewBuy > 0;
+    if (onBuy) {
+      const retail = Math.max(roundMoney(parsedNewBuy * (1 + pct / 100), step), parsedNewBuy);
+      const curRetail = currentSell || retail;
+      const superRatio = curRetail > 0 ? tierPrice(product, 'supermarket') / curRetail : 1;
+      const wholeRatio = curRetail > 0 ? tierPrice(product, 'wholesale') / curRetail : 1;
+      setNewSellPrice(String(retail));
+      setNewSupermarket(String(Math.max(roundMoney(retail * superRatio, step), parsedNewBuy)));
+      setNewWholesale(String(Math.max(roundMoney(retail * wholeRatio, step), parsedNewBuy)));
+      setReason(`سود ${pct}٪ روی قیمت خرید`);
+      return;
+    }
     const f = 1 + pct / 100;
-    setNewSellPrice(String(round1000(currentSell * f)));
-    setNewSupermarket(String(round1000(tierPrice(product, 'supermarket') * f)));
-    setNewWholesale(String(round1000(tierPrice(product, 'wholesale') * f)));
+    setNewSellPrice(String(Math.max(0, roundMoney(currentSell * f, step))));
+    setNewSupermarket(String(Math.max(0, roundMoney(tierPrice(product, 'supermarket') * f, step))));
+    setNewWholesale(String(Math.max(0, roundMoney(tierPrice(product, 'wholesale') * f, step))));
     setReason(`${pct > 0 ? 'افزایش' : 'کاهش'} ${Math.abs(pct)} درصدی قیمت`);
   };
 
@@ -274,33 +302,90 @@ export const UpdatePriceModal: React.FC<UpdatePriceModalProps> = ({
             kgPerUnit={k}
           />
 
-          {/* Quick Percentage Chips */}
-          <div className="space-y-1.5 text-right">
-            <span className="text-[11px] text-slate-500 font-bold">تغییر همه قیمت‌ها با یک درصد</span>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[5, 10, 15, 20].map((pct) => (
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 space-y-2">
+            <span className="text-xs font-bold text-slate-700 block">درصد دستی، با اعشار</span>
+            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
+              {(
+                [
+                  ['buy', 'سود روی خرید'],
+                  ['current', 'روی قیمت فعلی'],
+                ] as const
+              ).map(([id, label]) => (
                 <button
-                  key={pct}
+                  key={id}
                   type="button"
-                  onClick={() => applyPercent(pct)}
-                  className="py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold active:scale-95"
+                  onClick={() => setPctBase(id)}
+                  className={`py-1.5 rounded-lg text-[11px] font-bold ${pctBase === id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
                 >
-                  +{pct}٪
+                  {label}
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {[-5, -10].map((pct) => (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={pctText}
+                onChange={(e) =>
+                  setPctText(
+                    e.target.value
+                      .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+                      .replace(/[٫,]/g, '.')
+                      .replace(/[^0-9.-]/g, ''),
+                  )
+                }
+                placeholder="۳.۲"
+                dir="ltr"
+                className="flex-1 px-3 py-2.5 text-lg font-mono font-extrabold text-center rounded-2xl bg-slate-50 border border-slate-200 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => applyPercent(parseSignedDecimal(pctText))}
+                className="px-4 rounded-2xl bg-emerald-600 text-white text-xs font-bold"
+              >
+                اعمال ٪
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {ROUNDS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setRoundStep(r.id);
+                    if (pctText && pctText !== '-' && pctText !== '.') applyPercent(parseSignedDecimal(pctText), pctBase, r.id);
+                  }}
+                  className={`py-1.5 rounded-xl text-[10px] font-bold border ${
+                    roundStep === r.id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              {[3, 3.2, 5, 6, 10].map((pct) => (
                 <button
                   key={pct}
                   type="button"
-                  onClick={() => applyPercent(pct)}
-                  className="py-2.5 rounded-2xl bg-white text-rose-700 border border-rose-200 text-xs font-bold active:scale-95"
+                  onClick={() => {
+                    setPctText(String(pct));
+                    applyPercent(pct);
+                  }}
+                  className="flex-1 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-[11px] font-bold"
                 >
                   {pct}٪
                 </button>
               ))}
             </div>
+            {parsedNewBuy > 0 && parsedNewSell > 0 && (
+              <p className="text-[11px] text-slate-600 leading-5">
+                خرید {formatToman(parsedNewBuy)} · سود هر {product.unit}{' '}
+                <b className="font-mono text-emerald-700">
+                  {formatToman(grossProfit)} ({percent(parsedNewBuy > 0 ? (grossProfit / parsedNewBuy) * 100 : 0, 2)})
+                </b>
+              </p>
+            )}
           </div>
 
           <DualPriceInput

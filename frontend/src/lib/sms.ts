@@ -2,8 +2,8 @@ import type { Invoice } from '../services/invoices.service';
 import type { Proforma } from '../services/proformas.service';
 import type { Customer } from '../services/customers.service';
 import type { AppSettings, BankCard, SmsTemplateKey } from '../services/settings.service';
-import { dateToYmd, formatJalaliIso, formatJalaliNumeric, faNum } from './jalali';
-import { formatToman, num, weight } from './format';
+import { dateToYmd, formatJalaliIso, formatJalaliNumeric, faNum, ymdToJalali } from './jalali';
+import { formatToman, toman, weight } from './format';
 
 type Vars = Record<string, string>;
 
@@ -52,8 +52,33 @@ const shopVars = (s: AppSettings): Vars => ({
   footer: s.invoiceFooter || '',
 });
 
-const itemLines = (items: { productName: string; quantity: number; unit: string; unitPrice: number; totalPrice: number }[]) =>
-  items.map((it, i) => `${faNum(i + 1)}. ${it.productName}: ${num(it.quantity, 3)} ${it.unit} × ${formatToman(it.unitPrice)} = ${formatToman(it.totalPrice)}`).join('\n');
+const qtyText = (q: number) => {
+  const r = Math.round(q * 1000) / 1000;
+  return Number.isInteger(r) ? String(r) : String(r);
+};
+
+/** «۱۴۰۵/۶/۱۵» — no leading zero on month or day. */
+const slashDate = (iso: string | Date | undefined) => {
+  if (!iso) return '';
+  const j = ymdToJalali(dateToYmd(new Date(iso)));
+  return faNum(`${j.jy}/${j.jm}/${j.jd}`);
+};
+
+const toAsciiDigits = (s: string) =>
+  s.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+
+const spacedCard = (raw: string) => toAsciiDigits(raw).replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 ');
+
+const itemLines = (
+  items: { productName: string; quantity: number; unit: string; unitPrice: number; totalPrice: number; weightKg?: number }[],
+) =>
+  items
+    .map((it) => {
+      const perKg = it.weightKg && it.weightKg > 0 ? Math.round(it.totalPrice / it.weightKg / 100) * 100 : 0;
+      const rate = perKg > 0 ? `${toman(perKg)} تومان/کیلو` : `${toman(it.unitPrice)} تومان/${it.unit || 'عدد'}`;
+      return `• ${it.productName} · ${qtyText(it.quantity)} ${it.unit} · ${rate} = ${formatToman(it.totalPrice)}`;
+    })
+    .join('\n');
 
 const money = (n?: number) => (n && n > 0 ? formatToman(n) : '');
 
@@ -67,12 +92,26 @@ const paymentText = (inv: Pick<Invoice, 'paymentMethod' | 'splitDetails'>) => {
 };
 
 export function invoiceSms(inv: Invoice, s: AppSettings, customerBalance?: number): string {
+  const cards = cardVars(s);
+  const owed = inv.remainingDebt > 0;
+  const openCredit = owed && (inv.paymentMethod === 'credit' || inv.paymentMethod === 'split');
+  const cardNo = spacedCard(cards.card);
+  const cardLines = [
+    '💳 کارت مقصد برای واریز',
+    cards.holder ? `به نام: ${cards.holder}` : '',
+    cardNo ? `شماره کارت: ${cardNo}` : '',
+    `مبلغ: ${formatToman(inv.remainingDebt)}`,
+    'لطفاً پس از واریز رسید را ارسال کنید.',
+  ].filter(Boolean);
+  const cardBlock = owed && (cardNo || cards.holder) ? `\n${cardLines.join('\n')}` : '';
   return renderSms(s.smsTemplates.invoice, {
     ...shopVars(s),
-    ...cardVars(s),
+    ...cards,
+    card: cardNo,
     number: inv.invoiceNumber,
-    date: formatJalaliIso(inv.invoiceDate || inv.createdAt),
+    date: slashDate(inv.invoiceDate || inv.createdAt),
     customer: inv.customerName,
+    mobile: toAsciiDigits(inv.customerPhone || '').replace(/[^\d+]/g, ''),
     items: itemLines(inv.items),
     weight: inv.totalWeightKg ? weight(inv.totalWeightKg) : '',
     subtotal: formatToman(inv.totalAmount),
@@ -80,9 +119,11 @@ export function invoiceSms(inv: Invoice, s: AppSettings, customerBalance?: numbe
     shipping: inv.shippingPayer === 'customer' ? money(inv.shippingCost) : '',
     total: formatToman(inv.finalAmount),
     payment: paymentText(inv),
-    paid: money(inv.paidAmount),
-    remaining: money(inv.remainingDebt),
+    paid: formatToman(inv.paidAmount || 0),
+    remaining: formatToman(inv.remainingDebt || 0),
+    status: openCredit ? 'نسیه باز' : owed ? 'مانده‌دار' : 'تسویه شده',
     balance: customerBalance && customerBalance > 0 ? formatToman(customerBalance) : '',
+    cardBlock,
   });
 }
 
@@ -130,18 +171,28 @@ export function sampleSms(key: SmsTemplateKey, s: AppSettings, template: string)
   const base: Vars = {
     ...shopVars(s),
     ...cardVars(s),
-    number: key === 'proforma' ? 'PRE-050706-0001' : 'SAL-050706-0012',
-    date: formatJalaliIso(new Date()),
-    customer: 'سوپرمارکت نمونه',
-    items: `۱. نایلون ۵ کیلویی: ۲۰ بسته × ${formatToman(700000)} = ${formatToman(14000000)}\n۲. شکسته کارتن ۳ کیلویی: ۱۰ کارتن × ${formatToman(480000)} = ${formatToman(4800000)}`,
-    weight: weight(130),
-    subtotal: formatToman(18800000),
-    discount: formatToman(300000),
+    number: key === 'proforma' ? 'PRE-050706-0001' : 'SAL-260906-0010',
+    date: slashDate(new Date()),
+    customer: 'واحدی چهل متری',
+    items: `• نایلون ۵ کیلویی · 10 بسته · ${toman(143600)} تومان/کیلو = ${formatToman(7180000)}\n• نایلون ۳ کیلویی · 10 بسته · ${toman(144300)} تومان/کیلو = ${formatToman(4330000)}`,
+    mobile: '09358850879',
+    status: 'نسیه باز',
+    cardBlock: [
+      '',
+      '💳 کارت مقصد برای واریز',
+      `به نام: ${cardVars(s).holder || 'صاحب حساب'}`,
+      `شماره کارت: ${spacedCard(cardVars(s).card) || '6219 8619 1932 3252'}`,
+      `مبلغ: ${formatToman(11510000)}`,
+      'لطفاً پس از واریز رسید را ارسال کنید.',
+    ].join('\n'),
+    weight: weight(80),
+    subtotal: formatToman(11510000),
+    discount: '',
     shipping: '',
-    total: formatToman(18500000),
-    payment: `نقدی ${formatToman(5000000)}، نسیه ${formatToman(13500000)}`,
-    paid: formatToman(5000000),
-    remaining: formatToman(13500000),
+    total: formatToman(11510000),
+    payment: 'نسیه',
+    paid: formatToman(0),
+    remaining: formatToman(11510000),
     balance: formatToman(21000000),
     count: faNum(2),
     invoices: `- فاکتور SAL-050701-0003 (۱۴۰۵/۰۷/۰۱): مبلغ ${formatToman(7500000)}\n- فاکتور SAL-050706-0012 (۱۴۰۵/۰۷/۰۶): مبلغ ${formatToman(18500000)}، مانده ${formatToman(13500000)}`,

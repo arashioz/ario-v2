@@ -43,7 +43,14 @@ export const percent = (n: number | null | undefined, digits = 1) => `${fa(n ?? 
 
 export const num = (n: number | null | undefined, digits = 0) => fa(n ?? 0, digits);
 
-/** Typed quantity/weight (Persian digits, "٫" or "." as decimal point) → number. */
+/** Like parseDecimal, but a leading minus is kept. "۳٫۲" → 3.2, "-۵" → -5. */
+export const parseSignedDecimal = (s: string) => {
+  const latin = toEnDigits(s).trim();
+  const neg = latin.startsWith('-') || latin.startsWith('−');
+  const n = parseDecimal(latin);
+  return neg ? -n : n;
+};
+
 export const parseDecimal = (s: string) => {
   const latin = s
     .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))

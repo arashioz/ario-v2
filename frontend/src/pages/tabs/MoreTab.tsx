@@ -24,6 +24,7 @@ import {
   Info,
   ClipboardList,
   Settings,
+  DatabaseBackup,
   LineChart,
   Users,
   History,
@@ -148,6 +149,13 @@ const SHOP: Item[] = [
 ];
 
 const ADMIN: Item[] = [
+  {
+    path: '/settings?part=admin',
+    title: 'تنظیمات و پشتیبان',
+    desc: 'نام فروشگاه، کارت واریز، متن پیامک و نسخه پشتیبان',
+    icon: DatabaseBackup,
+    tone: 'bg-rose-100 text-rose-600',
+  },
   {
     path: '/users',
     title: 'کاربران و دسترسی',
@@ -320,7 +328,7 @@ export const MoreTab: React.FC = () => {
 
           <Group
             title="مدیریت و امنیت"
-            hint={isAdmin ? 'کاربران، لاگ همه رویدادها و رمز' : 'رمز حساب شما'}
+            hint={isAdmin ? 'تنظیمات، پشتیبان، کاربران و لاگ' : 'رمز حساب شما'}
             tone="text-rose-800"
             open={open.security}
             onToggle={() => setOpen((s) => ({ ...s, security: !s.security }))}

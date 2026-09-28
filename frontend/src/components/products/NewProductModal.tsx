@@ -67,12 +67,18 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [hasDualUnit, setHasDualUnit] = useState(false);
   const [secondaryUnit, setSecondaryUnit] = useState('کیلوگرم');
   const [unitRatio, setUnitRatio] = useState('3'); // e.g. 1 package = 3 kg
+  const [sellBy, setSellBy] = useState<'stock' | 'kg' | 'other'>('stock');
+  const [saleUnit, setSaleUnit] = useState('');
+  const [salePerStock, setSalePerStock] = useState('');
 
   // Prices
   const [buyPrice, setBuyPrice] = useState('');
   const [sellPrice, setSellPrice] = useState(''); // تکی
   const [priceSupermarket, setPriceSupermarket] = useState(''); // سوپرمارکت
   const [priceWholesale, setPriceWholesale] = useState(''); // عمده
+  const [pctRetail, setPctRetail] = useState('');
+  const [pctSuper, setPctSuper] = useState('');
+  const [pctWhole, setPctWhole] = useState('');
 
   const [stock, setStock] = useState('0');
   const [minStockAlert, setMinStockAlert] = useState('5');
@@ -102,6 +108,27 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       <span className="text-[10px] text-slate-400 block font-mono">هر کیلو {formatToman(Math.round(Number(v) / formKg))}</span>
     ) : null;
 
+  const [roundStep, setRoundStep] = useState(1000);
+  const roundMoney = (n: number, step = roundStep) => {
+    const s = step > 1 ? step : 1;
+    return Math.round(n / s) * s;
+  };
+  const marginOf = (buy: number, sell: number) =>
+    buy > 0 && sell > 0 ? String(Math.round(((sell - buy) / buy) * 10000) / 100) : '';
+  const priceFromPct = (buy: number, pct: string, step = roundStep) => {
+    const p = Number(pct);
+    if (!buy || pct === '' || pct === '.' || Number.isNaN(p)) return null;
+    return String(Math.max(0, roundMoney(buy * (1 + p / 100), step)));
+  };
+  const cleanPct = (raw: string) => {
+    const s = raw
+      .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+      .replace(/[٫,]/g, '.')
+      .replace(/[^0-9.]/g, '');
+    const [whole, frac] = s.split('.');
+    return frac !== undefined ? `${whole}.${frac.slice(0, 2)}` : whole;
+  };
+
   useEffect(() => {
     if (isOpen) {
       setPhoto(null);
@@ -117,10 +144,17 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setHasDualUnit(!!editProduct.hasDualUnit);
       setSecondaryUnit(editProduct.secondaryUnit || 'کیلوگرم');
       setUnitRatio(editProduct.unitRatio ? editProduct.unitRatio.toString() : '3');
+      setSellBy(editProduct.sellBy || 'stock');
+      setSaleUnit(editProduct.saleUnit || '');
+      setSalePerStock(editProduct.salePerStock ? String(editProduct.salePerStock) : '');
       setBuyPrice(editProduct.buyPrice ? editProduct.buyPrice.toString() : '');
       setSellPrice(editProduct.sellPrice.toString());
       setPriceSupermarket(editProduct.priceSupermarket ? editProduct.priceSupermarket.toString() : '');
       setPriceWholesale(editProduct.priceWholesale ? editProduct.priceWholesale.toString() : '');
+      setPctRetail(marginOf(editProduct.buyPrice || 0, editProduct.sellPrice || 0));
+      setPctSuper(marginOf(editProduct.buyPrice || 0, editProduct.priceSupermarket || editProduct.sellPrice || 0));
+      setPctWhole(marginOf(editProduct.buyPrice || 0, editProduct.priceWholesale || editProduct.sellPrice || 0));
+      setRoundStep(1000);
       setStock(editProduct.stock.toString());
       setMinStockAlert(editProduct.minStockAlert ? editProduct.minStockAlert.toString() : '5');
       setDescription(editProduct.description || '');
@@ -134,10 +168,17 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setHasDualUnit(false);
       setSecondaryUnit('کیلوگرم');
       setUnitRatio('3');
+      setSellBy('stock');
+      setSaleUnit('');
+      setSalePerStock('');
       setBuyPrice('');
       setSellPrice('');
       setPriceSupermarket('');
       setPriceWholesale('');
+      setPctRetail('');
+      setPctSuper('');
+      setPctWhole('');
+      setRoundStep(1000);
       setStock('0');
       setMinStockAlert('5');
       setDescription('');
@@ -181,6 +222,9 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       secondaryUnit: hasDualUnit ? secondaryUnit.trim() : undefined,
       unitRatio: hasDualUnit && unitRatio ? Number(unitRatio) : 1,
       weightPerUnitKg: hasDualUnit && secondaryUnit === 'کیلوگرم' ? Number(unitRatio) : (unit === 'کیلوگرم' ? 1 : 0),
+      sellBy,
+      saleUnit: sellBy === 'other' ? saleUnit.trim() : '',
+      salePerStock: sellBy === 'other' ? Number(salePerStock) || 0 : 0,
       buyPrice: buyPrice ? Number(buyPrice) : 0,
       sellPrice: Number(sellPrice),
       priceRetail: Number(sellPrice),
@@ -473,6 +517,50 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               )}
             </div>
 
+            <div className="space-y-1.5">
+              <span className="text-[11px] text-slate-500 block">نحوه فروش</span>
+              <div className="grid grid-cols-3 gap-1">
+                {(
+                  [
+                    ['stock', `با ${unit || 'واحد'}`],
+                    ['kg', 'کیلویی'],
+                    ['other', 'واحد دیگر'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSellBy(id)}
+                    className={`py-2 rounded-xl text-[11px] font-bold border ${
+                      sellBy === id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {sellBy === 'kg' && !hasDualUnit && unit !== 'کیلوگرم' && (
+                <p className="text-[10px] text-amber-700">برای فروش کیلویی، دو واحدی را روشن کن و وزن هر {unit || 'واحد'} را بگذار.</p>
+              )}
+              {sellBy === 'other' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={saleUnit}
+                    onChange={(e) => setSaleUnit(e.target.value)}
+                    placeholder="نام واحد، مثلاً مثقال"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none"
+                  />
+                  <input
+                    value={salePerStock}
+                    onChange={(e) => setSalePerStock(e.target.value.replace(/[^0-9۰-۹.٫]/g, ''))}
+                    inputMode="decimal"
+                    placeholder={`هر ${unit || 'واحد'} چند تا؟`}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono"
+                  />
+                </div>
+              )}
+            </div>
+
             {hasDualUnit && (
               <div className="p-2.5 rounded-xl bg-sky-50/70 border border-sky-200/60 flex items-center justify-between text-xs text-sky-900">
                 <span className="font-normal text-[11px]">ضریب تبدیل: هر ۱ {unit} برابر است با:</span>
@@ -494,60 +582,113 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
           <div className="bg-white p-3 rounded-2xl border border-sky-100 space-y-3">
             <div className="flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs font-medium text-slate-700">قیمت‌گذاری بنکداری (۳ رده قیمتی)</span>
+              <span className="text-xs font-medium text-slate-700">قیمت‌گذاری</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-5">
+              اول قیمت خرید را بزن. درصد سود اعشار هم می‌گیرد، مثل ۳٫۲. مبلغ را که خودت بنویسی همان عدد می‌ماند.
+            </p>
+            <div className="grid grid-cols-4 gap-1">
+              {(
+                [
+                  [1, 'دقیق'],
+                  [100, '۱۰۰'],
+                  [1000, '۱٬۰۰۰'],
+                  [10000, '۱۰٬۰۰۰'],
+                ] as const
+              ).map(([step, label]) => (
+                <button
+                  key={step}
+                  type="button"
+                  onClick={() => {
+                    setRoundStep(step);
+                    const buy = Number(buyPrice);
+                    if (!buy) return;
+                    const retail = priceFromPct(buy, pctRetail, step);
+                    const supermarket = priceFromPct(buy, pctSuper, step);
+                    const wholesale = priceFromPct(buy, pctWhole, step);
+                    if (retail !== null) setSellPrice(retail);
+                    if (supermarket !== null) setPriceSupermarket(supermarket);
+                    if (wholesale !== null) setPriceWholesale(wholesale);
+                  }}
+                  className={`py-1.5 rounded-xl text-[10px] font-bold border ${
+                    roundStep === step ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-500 border-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1 text-right">
-                <label className="text-[11px] text-slate-600 block">
-                  قیمت تکی <span className="text-rose-500">*</span>
+            <div className="space-y-1 text-right">
+              <label className="text-[11px] text-slate-500">قیمت خرید</label>
+              <MoneyTextInput
+                value={buyPrice}
+                onChange={(v) => {
+                  setBuyPrice(v);
+                  const buy = Number(v);
+                  if (!buy) return;
+                  const retail = priceFromPct(buy, pctRetail);
+                  const supermarket = priceFromPct(buy, pctSuper);
+                  const wholesale = priceFromPct(buy, pctWhole);
+                  if (retail !== null) setSellPrice(retail);
+                  else if (Number(sellPrice) > 0) setPctRetail(marginOf(buy, Number(sellPrice)));
+                  if (supermarket !== null) setPriceSupermarket(supermarket);
+                  else if (Number(priceSupermarket) > 0) setPctSuper(marginOf(buy, Number(priceSupermarket)));
+                  if (wholesale !== null) setPriceWholesale(wholesale);
+                  else if (Number(priceWholesale) > 0) setPctWhole(marginOf(buy, Number(priceWholesale)));
+                }}
+                placeholder="۰"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
+              />
+              {kgHint(buyPrice)}
+            </div>
+
+            {(
+              [
+                ['تکی', sellPrice, setSellPrice, pctRetail, setPctRetail, true],
+                ['سوپرمارکت', priceSupermarket, setPriceSupermarket, pctSuper, setPctSuper, false],
+                ['عمده', priceWholesale, setPriceWholesale, pctWhole, setPctWhole, false],
+              ] as const
+            ).map(([label, price, setPrice, pct, setPct, required]) => (
+              <div key={label} className="grid grid-cols-[4.5rem_1fr_1.4fr] gap-1.5 items-end">
+                <span className="text-[11px] font-bold text-slate-700 pb-2">
+                  {label}
+                  {required && <span className="text-rose-500"> *</span>}
+                </span>
+                <label className="space-y-1 text-right">
+                  <span className="text-[10px] text-slate-400 block">درصد سود</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={pct}
+                    onChange={(e) => {
+                      const next = cleanPct(e.target.value);
+                      setPct(next);
+                      const priced = priceFromPct(Number(buyPrice), next);
+                      if (priced !== null) setPrice(priced);
+                    }}
+                    placeholder="مثلاً ۶"
+                    className="w-full px-2 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800 text-center"
+                  />
                 </label>
-                <MoneyTextInput
-                  value={sellPrice}
-                  onChange={setSellPrice}
-                  placeholder="۰"
-                  className="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
-                />
-                {kgHint(sellPrice)}
+                <label className="space-y-1 text-right">
+                  <span className="text-[10px] text-slate-400 block">مبلغ (تومان)</span>
+                  <MoneyTextInput
+                    value={price}
+                    onChange={(v) => {
+                      setPrice(v);
+                      setPct(marginOf(Number(buyPrice), Number(v)));
+                    }}
+                    placeholder="۰"
+                    className="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
+                  />
+                </label>
+                <div className="col-span-3 -mt-1">{kgHint(price)}</div>
               </div>
+            ))}
 
-              <div className="space-y-1 text-right">
-                <label className="text-[11px] text-sky-700 block font-medium">سوپرمارکت</label>
-                <MoneyTextInput
-                  value={priceSupermarket}
-                  onChange={setPriceSupermarket}
-                  placeholder={sellPrice ? Number(sellPrice).toLocaleString('fa-IR') : '۰'}
-                  className="w-full px-2.5 py-2 text-xs rounded-xl bg-sky-50/50 border border-sky-200 outline-none font-mono text-slate-800"
-                />
-                {kgHint(priceSupermarket || sellPrice)}
-              </div>
-
-              <div className="space-y-1 text-right">
-                <label className="text-[11px] text-purple-700 block font-medium">عمده / بنکداری</label>
-                <MoneyTextInput
-                  value={priceWholesale}
-                  onChange={setPriceWholesale}
-                  placeholder={sellPrice ? Number(sellPrice).toLocaleString('fa-IR') : '۰'}
-                  className="w-full px-2.5 py-2 text-xs rounded-xl bg-purple-50/50 border border-purple-200 outline-none font-mono text-slate-800"
-                />
-                {kgHint(priceWholesale || sellPrice)}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1 text-right">
-                <label className="text-[11px] text-slate-500">قیمت خرید (سرمایه)</label>
-                <MoneyTextInput
-                  value={buyPrice}
-                  onChange={setBuyPrice}
-                  placeholder="۰"
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
-                />
-                {kgHint(buyPrice)}
-              </div>
-
-              <div className="space-y-1 text-right">
-                <label className="text-[11px] text-slate-500">موجودی انبار ({unit})</label>
+            <div className="space-y-1 text-right">
+              <label className="text-[11px] text-slate-500">موجودی انبار ({unit})</label>
                 <input
                   type="number"
                   value={stock}
@@ -558,7 +699,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 {formKg > 0 && formKg !== 1 && Number(stock) > 0 && (
                   <span className="text-[10px] text-slate-400 block">معادل {weight(Number(stock) * formKg)}</span>
                 )}
-              </div>
             </div>
           </div>
 

@@ -19,7 +19,7 @@ import { customersService } from '../services/customers.service';
 import type { Customer } from '../services/customers.service';
 import { useNotification } from '../context/NotificationContext';
 import { CustomerDetailModal } from '../components/customers/CustomerDetailModal';
-import { createMap, setMapStyle, customerPin } from '../lib/map';
+import { createMap, setMapStyle, customerPin, getCurrentPosition, geoErrorMessage } from '../lib/map';
 import type { MapStyle } from '../lib/map';
 import { formatToman } from '../lib/format';
 
@@ -129,17 +129,12 @@ export const CustomersMapPage: React.FC = () => {
     });
   }, [selectedCustomer, customers]);
 
-  const handleGetCurrentLocation = () => {
-    if (navigator.geolocation && mapInstanceRef.current) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          mapInstanceRef.current?.setView([latitude, longitude], 15);
-        },
-        (err) => {
-          console.warn('Geolocation failed', err);
-        },
-      );
+  const handleGetCurrentLocation = async () => {
+    try {
+      const { lat, lng } = await getCurrentPosition();
+      mapInstanceRef.current?.setView([lat, lng], 16);
+    } catch (err) {
+      showNotification({ title: 'لوکیشن', message: geoErrorMessage(err), type: 'warning' });
     }
   };
 

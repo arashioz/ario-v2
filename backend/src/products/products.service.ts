@@ -32,6 +32,95 @@ function imageExt(buf: Buffer): 'jpg' | 'png' | 'webp' | null {
   return null;
 }
 
+const shownPrice = (tier: number | undefined, fallback: number) => (tier && tier > 0 ? tier : fallback);
+
+const roundMoney = (n: number, step?: number) => {
+  const s = step && step > 1 ? step : 1;
+  return Math.round(n / s) * s;
+};
+
+export interface BulkPricePreview {
+  name: string;
+  unit: string;
+  buy: number;
+  stock: number;
+  before: number;
+  after: number;
+  beforeSupermarket: number;
+  afterSupermarket: number;
+  beforeWholesale: number;
+  afterWholesale: number;
+  /** Retail profit per stock unit, before and after the change. */
+  profitBefore: number;
+  profitAfter: number;
+  skipped?: string;
+}
+
+/** Prices the shop actually sells at (tiers), not the unused base field alone. */
+function quoteBulkPrices(prod: Product, dto: BulkPriceUpdateDto) {
+  const before = shownPrice(prod.priceRetail, prod.sellPrice);
+  const beforeSupermarket = shownPrice(prod.priceSupermarket, before);
+  const beforeWholesale = shownPrice(prod.priceWholesale, before);
+  const buy = prod.buyPrice || 0;
+  const stock = prod.stock || 0;
+  const step = dto.roundTo ?? 1000;
+  const profitBefore = before - buy;
+  const base = {
+    buy,
+    stock,
+    before,
+    after: before,
+    beforeSupermarket,
+    afterSupermarket: beforeSupermarket,
+    beforeWholesale,
+    afterWholesale: beforeWholesale,
+    profitBefore,
+    profitAfter: profitBefore,
+    changed: false,
+    skipped: undefined as string | undefined,
+    reason: '',
+  };
+
+  if (dto.type === 'profit') {
+    if (buy <= 0) return { ...base, skipped: 'قیمت خرید ندارد' };
+    const after = Math.max(roundMoney(buy * (1 + dto.value / 100), step), buy);
+    const superRatio = before > 0 ? beforeSupermarket / before : 1;
+    const wholeRatio = before > 0 ? beforeWholesale / before : 1;
+    const afterSupermarket = Math.max(roundMoney(after * superRatio, step), buy);
+    const afterWholesale = Math.max(roundMoney(after * wholeRatio, step), buy);
+    const changed = after !== before || afterSupermarket !== beforeSupermarket || afterWholesale !== beforeWholesale;
+    return {
+      ...base,
+      after,
+      afterSupermarket,
+      afterWholesale,
+      profitAfter: after - buy,
+      changed,
+      skipped: undefined,
+      reason: `سود ${dto.value}٪ روی قیمت خرید`,
+    };
+  }
+
+  const apply = (n: number) => {
+    const raw = dto.type === 'percentage' ? n * (1 + dto.value / 100) : n + dto.value;
+    return Math.max(0, roundMoney(raw, step));
+  };
+  const after = apply(before);
+  const afterSupermarket = apply(beforeSupermarket);
+  const afterWholesale = apply(beforeWholesale);
+  const changed = after !== before || afterSupermarket !== beforeSupermarket || afterWholesale !== beforeWholesale;
+  return {
+    ...base,
+    after,
+    afterSupermarket,
+    afterWholesale,
+    profitAfter: after - buy,
+    changed,
+    skipped: undefined,
+    reason: `تغییر گروهی قیمت (${dto.value}${dto.type === 'percentage' ? '%' : ' تومان'})`,
+  };
+}
+
 const kgPerUnit = (p: Pick<Product, 'weightPerUnitKg' | 'hasDualUnit' | 'secondaryUnit' | 'unitRatio' | 'unit'>) =>
   p.weightPerUnitKg ||
   (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio || 0 : 0) ||
@@ -288,7 +377,11 @@ export class ProductsService implements OnModuleInit {
     if (opts.level === 'subcategory') {
       const parent = (opts.parent || '').trim();
       if (!parent) throw new BadRequestException('سردسته مشخص نیست');
-      const res = await this.productModel.updateMany({ isActive: true, category: parent, subcategory: from }, { $set: { subcategory: to } }).exec();
+      const filter =
+        from === 'اصلی'
+          ? { isActive: true, category: parent, $or: [{ subcategory: '' }, { subcategory: 'اصلی' }, { subcategory: { $exists: false } }] }
+          : { isActive: true, category: parent, subcategory: from };
+      const res = await this.productModel.updateMany(filter, { $set: { subcategory: to === 'اصلی' ? '' : to } }).exec();
       return { modified: res.modifiedCount, from, to };
     }
 
@@ -448,47 +541,60 @@ export class ProductsService implements OnModuleInit {
   async bulkUpdatePrices(
     dto: BulkPriceUpdateDto,
     recordedByName: string,
-  ): Promise<{ modifiedCount: number; message: string }> {
+  ): Promise<
+    | { modifiedCount: number; message: string }
+    | { preview: true; items: BulkPricePreview[] }
+  > {
     const filterObj: any = { isActive: true };
     if (dto.category && dto.category !== 'all') {
       filterObj.category = dto.category;
     }
 
     const products = await this.productModel.find(filterObj).exec();
+    const items: BulkPricePreview[] = [];
     let modifiedCount = 0;
 
     for (const prod of products) {
-      const oldPrice = prod.sellPrice;
-      let newPrice = oldPrice;
+      const next = quoteBulkPrices(prod, dto);
+      items.push({
+        name: prod.name,
+        unit: prod.unit,
+        buy: next.buy,
+        stock: next.stock,
+        before: next.before,
+        after: next.after,
+        beforeSupermarket: next.beforeSupermarket,
+        afterSupermarket: next.afterSupermarket,
+        beforeWholesale: next.beforeWholesale,
+        afterWholesale: next.afterWholesale,
+        profitBefore: next.profitBefore,
+        profitAfter: next.profitAfter,
+        skipped: next.skipped,
+      });
+      if (dto.preview || next.skipped || !next.changed) continue;
 
-      if (dto.type === 'percentage') {
-        newPrice = Math.round(oldPrice * (1 + dto.value / 100));
-      } else {
-        newPrice = Math.max(0, oldPrice + dto.value);
-      }
-
-      // Round to neat thousands
-      newPrice = Math.round(newPrice / 1000) * 1000;
-
-      if (newPrice !== oldPrice) {
-        prod.sellPrice = newPrice;
-        prod.priceSetAt = new Date();
-        prod.priceCostBasisPerKg = undefined;
-        prod.priceHistory.unshift({
-          oldPrice,
-          newPrice,
-          reason: dto.reason || `تغییر گروهی قیمت (${dto.value}${dto.type === 'percentage' ? '%' : ' تومان'})`,
-          changedByName: recordedByName,
-          date: new Date(),
-        });
-        await prod.save();
-        modifiedCount++;
-      }
+      prod.sellPrice = next.after;
+      prod.priceRetail = next.after;
+      prod.priceSupermarket = next.afterSupermarket;
+      prod.priceWholesale = next.afterWholesale;
+      prod.priceSetAt = new Date();
+      prod.priceCostBasisPerKg = undefined;
+      prod.priceHistory.unshift({
+        oldPrice: next.before,
+        newPrice: next.after,
+        reason: dto.reason || next.reason,
+        changedByName: recordedByName,
+        date: new Date(),
+      });
+      await prod.save();
+      modifiedCount++;
     }
+
+    if (dto.preview) return { preview: true, items };
 
     return {
       modifiedCount,
-      message: `قیمت پایه ${modifiedCount} محصول با موفقیت به‌روزرسانی گردید.`,
+      message: `قیمت ${modifiedCount} محصول به‌روزرسانی شد.`,
     };
   }
 

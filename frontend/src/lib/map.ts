@@ -47,26 +47,37 @@ export const setMapStyle = (map: L.Map, style: MapStyle, current?: L.TileLayer |
 
 export type GeoResult = { lat: number; lng: number };
 
+const INSECURE =
+  'مرورگر روی آدرس http موقعیت خودکار نمی‌دهد. نقشه را بکشید تا پین روی محل باشد، بعد تأیید کنید.';
+
 export const geoErrorMessage = (err: unknown) => {
+  if (err instanceof Error && err.message && err.message !== 'unsupported') return err.message;
   const code = (err as GeolocationPositionError | undefined)?.code;
-  if (code === 1) return 'دسترسی به موقعیت مکانی رد شد. از تنظیمات مرورگر اجازه دهید.';
-  if (code === 3) return 'دریافت موقعیت طول کشید. دوباره تلاش کنید.';
-  if (!navigator.geolocation) return 'این دستگاه از موقعیت‌یابی پشتیبانی نمی‌کند.';
-  return 'موقعیت مکانی در دسترس نیست. GPS را روشن کنید.';
+  if (!window.isSecureContext) return INSECURE;
+  if (code === 1) return 'مرورگر اجازه موقعیت را نداده. کنار آدرس سایت، Location را Allow کنید. یا پین را خودتان روی نقشه بگذارید.';
+  if (code === 3) return 'دریافت موقعیت طول کشید. دوباره بزنید، یا پین را روی نقشه بگذارید.';
+  if (!navigator.geolocation) return 'این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.';
+  return 'موقعیت پیدا نشد. GPS را روشن کنید، یا پین را روی نقشه جابه‌جا کنید.';
 };
 
-export const getCurrentPosition = (): Promise<GeoResult> =>
-  new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('unsupported'));
-      return;
-    }
+const readPosition = (high: boolean) =>
+  new Promise<GeoResult>((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       reject,
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+      { enableHighAccuracy: high, timeout: high ? 12000 : 8000, maximumAge: 60000 },
     );
   });
+
+/** Must be called from a tap. Browsers reject a location request that opens by itself, and they refuse it entirely on http. */
+export const getCurrentPosition = (): Promise<GeoResult> => {
+  if (!navigator.geolocation) return Promise.reject(new Error('این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.'));
+  if (!window.isSecureContext) return Promise.reject(new Error(INSECURE));
+  return readPosition(true).catch((err: GeolocationPositionError) => {
+    if (err?.code === 1) return Promise.reject(err);
+    return readPosition(false);
+  });
+};
 
 export const directionsUrl = (lat: number, lng: number) =>
   `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;

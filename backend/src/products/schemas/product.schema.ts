@@ -57,6 +57,17 @@ export class Product {
   @Prop({ default: 0 })
   weightPerUnitKg?: number; // Weight in kg for 1 primary unit
 
+  /** stock = واحد انبار، kg = فقط کیلویی، other = واحد فروشی که خودشان تعیین می‌کنند. */
+  @Prop({ default: 'stock' })
+  sellBy?: 'stock' | 'kg' | 'other';
+
+  @Prop({ trim: true, default: '' })
+  saleUnit?: string;
+
+  /** How many sale units are in one stock unit. Used when sellBy is other. */
+  @Prop({ default: 0 })
+  salePerStock?: number;
+
   @Prop({ required: true, default: 0 })
   buyPrice: number;
 

@@ -77,21 +77,46 @@ export const bankCardTitle = (c: Pick<BankCard, 'label' | 'bankName' | 'cardNumb
 export type SmsTemplateKey = 'invoice' | 'proforma' | 'debt';
 export type SmsTemplates = Record<SmsTemplateKey, string>;
 
+const RULE = '────────────';
+
+/** Previous built-in invoice text. A shop that never edited it should pick up the new layout. */
+const LEGACY_INVOICE_SMS = [
+  '{shop}',
+  'فاکتور {number} - {date}',
+  'خریدار: {customer}',
+  '{items}',
+  'وزن کل: {weight}',
+  'تخفیف: {discount}',
+  'هزینه ارسال: {shipping}',
+  'مبلغ فاکتور: {total}',
+  'نحوه پرداخت: {payment}',
+  'مانده این فاکتور: {remaining}',
+  'مانده کل حساب شما: {balance}',
+  'شماره کارت جهت واریز: {card} به نام {holder}',
+  'با تشکر از خرید شما',
+].join('\n');
+
 export const DEFAULT_SMS_TEMPLATES: SmsTemplates = {
   invoice: [
+    'فاکتور فروش {number}',
     '{shop}',
-    'فاکتور {number} - {date}',
-    'خریدار: {customer}',
+    RULE,
+    'مشتری: {customer}',
+    'موبایل: {mobile}',
+    'تاریخ: {date}',
+    'پرداخت: {payment}',
+    RULE,
+    'اقلام:',
     '{items}',
-    'وزن کل: {weight}',
-    'تخفیف: {discount}',
-    'هزینه ارسال: {shipping}',
+    RULE,
+    'تناژ: {weight}',
     'مبلغ فاکتور: {total}',
-    'نحوه پرداخت: {payment}',
-    'مانده این فاکتور: {remaining}',
-    'مانده کل حساب شما: {balance}',
-    'شماره کارت جهت واریز: {card} به نام {holder}',
-    'با تشکر از خرید شما',
+    'پرداخت‌شده: {paid}',
+    'مانده نسیه: {remaining}',
+    'وضعیت: {status}',
+    RULE,
+    'با تشکر 🙏',
+    '{cardBlock}',
   ].join('\n'),
   proforma: [
     '{shop}',
@@ -129,7 +154,10 @@ export const SMS_PLACEHOLDERS: Record<SmsTemplateKey, [string, string][]> = {
     ['number', 'شماره فاکتور'],
     ['date', 'تاریخ'],
     ['customer', 'نام مشتری'],
+    ['mobile', 'موبایل مشتری'],
     ['items', 'ریز اقلام'],
+    ['status', 'وضعیت، مثل نسیه باز'],
+    ['cardBlock', 'کارت واریز، فقط وقتی مانده دارد'],
     ['weight', 'وزن کل'],
     ['subtotal', 'جمع اقلام'],
     ['discount', 'تخفیف'],
@@ -258,7 +286,11 @@ const publish = (s: AppSettings) => {
     bankCards: Array.isArray(s.bankCards) ? s.bankCards : [],
     // An empty template falls back to the built-in text.
     smsTemplates: Object.fromEntries(
-      (Object.keys(DEFAULT_SMS_TEMPLATES) as SmsTemplateKey[]).map((k) => [k, s.smsTemplates?.[k]?.trim() ? s.smsTemplates[k] : DEFAULT_SMS_TEMPLATES[k]]),
+      (Object.keys(DEFAULT_SMS_TEMPLATES) as SmsTemplateKey[]).map((k) => {
+        const saved = s.smsTemplates?.[k]?.trim() || '';
+        const untouched = !saved || (k === 'invoice' && saved === LEGACY_INVOICE_SMS);
+        return [k, untouched ? DEFAULT_SMS_TEMPLATES[k] : saved];
+      }),
     ) as SmsTemplates,
   };
   listeners.forEach((l) => l(cached!));

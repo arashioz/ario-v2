@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class UpdatePriceDto {
   @IsNumber({}, { message: 'قیمت فروش جدید باید عدد باشد' })
@@ -48,7 +48,8 @@ export class BulkPriceUpdateDto {
 
   @IsString()
   @IsNotEmpty()
-  type: 'percentage' | 'fixed'; // percentage (مثلا ۱۰٪ افزایش) یا fixed (مثلا ۵۰۰۰ تومان افزایش)
+  @IsIn(['percentage', 'fixed', 'profit'])
+  type: 'percentage' | 'fixed' | 'profit';
 
   @IsNumber()
   value: number; // مثلا 10 یا 5000 (یا منفی برای تخفیف)
@@ -56,4 +57,14 @@ export class BulkPriceUpdateDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  /** Return the old and new prices without saving. */
+  @IsOptional()
+  @IsBoolean()
+  preview?: boolean;
+
+  /** Round each new price to this many tomans. 1 keeps the exact toman. */
+  @IsOptional()
+  @IsIn([1, 10, 100, 1000, 10000])
+  roundTo?: number;
 }

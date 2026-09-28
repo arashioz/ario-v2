@@ -80,23 +80,30 @@ export const CustomerLocationPickerModal: React.FC<CustomerLocationPickerModalPr
         tileLayerRef.current = setMapStyle(map, styleRef.current);
 
         const marker = L.marker([initialLat, initialLng], {
-          draggable: true,
+          interactive: false,
+          keyboard: false,
           icon: locationPin(),
         }).addTo(map);
 
-        marker.on('dragend', () => {
-          const pos = marker.getLatLng();
-          setSelectedCoords({ lat: pos.lat, lng: pos.lng });
-        });
-
-        map.on('click', (e) => {
-          marker.setLatLng(e.latlng);
-          setSelectedCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
-        });
+        const place = (latlng: L.LatLng) => {
+          marker.setLatLng(latlng);
+          setSelectedCoords({ lat: latlng.lat, lng: latlng.lng });
+        };
+        map.on('move', () => marker.setLatLng(map.getCenter()));
+        map.on('moveend', () => place(map.getCenter()));
+        map.on('click', (e) => map.panTo(e.latlng));
 
         markerRef.current = marker;
         mapInstanceRef.current = map;
-        if (autoLocate) handleGetCurrentLocation();
+        // Only jump if the user already allowed location. A request on open is rejected by the browser.
+        if (autoLocate && window.isSecureContext && navigator.permissions) {
+          navigator.permissions
+            .query({ name: 'geolocation' })
+            .then((p) => {
+              if (p.state === 'granted') handleGetCurrentLocation();
+            })
+            .catch(() => undefined);
+        }
       }
     };
     timer = setTimeout(init, 0);
@@ -186,7 +193,7 @@ export const CustomerLocationPickerModal: React.FC<CustomerLocationPickerModalPr
           {/* Bottom Confirmation Bar */}
           <div className="p-3 bg-white/95 backdrop-blur-md border-t border-slate-100 flex items-center justify-between gap-3 shadow-lg z-10">
             <div className="text-right">
-              <span className="text-[11px] text-slate-400 block font-normal">مختصات ثبت شده:</span>
+              <span className="text-[11px] text-slate-500 block font-normal">نقشه را بکشید تا پین وسط روی محل باشد</span>
               <span className="text-xs font-medium text-slate-700 font-mono" dir="ltr">
                 {selectedCoords.lat.toFixed(5)}, {selectedCoords.lng.toFixed(5)}
               </span>

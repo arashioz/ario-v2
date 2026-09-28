@@ -15,8 +15,8 @@ export interface PricingOptions {
   holdDays: string;
 }
 
-const DEFAULT_OPTIONS: PricingOptions = { mode: 'list', markup: '8', basis: 'replacement', inflation: '', holdDays: '' };
-const STORAGE_KEY = 'pricing-options-v1';
+const DEFAULT_OPTIONS: PricingOptions = { mode: 'custom', markup: '6', basis: 'replacement', inflation: '', holdDays: '' };
+const STORAGE_KEY = 'pricing-options-v2';
 
 const MODES: { id: SuggestMode; label: string; hint: string }[] = [
   {
@@ -127,9 +127,9 @@ export const PricingOptionsPanel: React.FC<{ value: PricingOptions; onChange: (p
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 space-y-3">
       <div>
-        <h3 className="text-xs font-extrabold text-slate-800">قیمت فروش</h3>
+        <h3 className="text-xs font-extrabold text-slate-800">قیمت فروش روی آخرین خرید</h3>
         <p className="text-[11px] text-slate-500 leading-5 mt-1">
-          روی آخرین قیمت خرید این درصد سود می‌ماند. هیچ سطحی — تکی، سوپرمارکت، عمده — از قیمت خرید پایین‌تر نمی‌رود.
+          هر بار که خرید بعدی گران‌تر ثبت شود، پیشنهاد فروش هم بالا می‌رود: آخرین خرید به‌علاوه همین درصد سود. فروش از قیمت خرید پایین‌تر نمی‌رود تا پول خرید دوباره بماند.
         </p>
       </div>
       <NumField
@@ -185,6 +185,8 @@ export const PriceSuggestionCard: React.FC<{
   applied?: boolean;
 }> = ({ s, selected, onToggle, onApply, applying, applied }) => {
   const holdLabel = s.holdDaysMeasured === null && s.holdDays === 0 ? 'بدون سابقه فروش' : `${num(s.holdDays)} روز خواب`;
+  const each = s.byWeight === false ? `هر ${s.unit}` : 'هر کیلو';
+  const lift = s.suggested.perKg - s.current.perKg;
   return (
     <div className={`bg-white rounded-2xl border shadow-sm p-3 ${selected ? 'border-emerald-300 ring-2 ring-emerald-100' : 'border-slate-100'}`}>
       <div className="flex items-start justify-between gap-2">
@@ -201,7 +203,7 @@ export const PriceSuggestionCard: React.FC<{
           <div className="min-w-0">
             <h3 className="text-xs font-bold text-slate-800 truncate">{s.name}</h3>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              هر {s.unit} {num(s.weightPerUnitKg, 2)} کیلو
+              {s.byWeight === false ? `قیمت به ${s.unit}` : `هر ${s.unit} ${num(s.weightPerUnitKg, 2)} کیلو`}
               {s.lastPurchaseDate ? ` · آخرین خرید ${formatJalali(dateToYmd(new Date(s.lastPurchaseDate)))}` : ''}
             </p>
           </div>
@@ -243,9 +245,15 @@ export const PriceSuggestionCard: React.FC<{
         </div>
       </div>
 
+      <p className={`text-[11px] leading-5 mt-2 ${lift > 0 ? 'text-rose-800' : 'text-emerald-800'}`}>
+        {lift > 0
+          ? `آخرین خرید ${num(s.lastCostPerKg)} ${each}. برای اینکه خرید بعدی ضرر ندهد باید ${num(s.suggested.perKg)} ${each} بفروشید؛ ${num(lift)} بالاتر از قیمت فعلی.`
+          : `قیمت فعلی از آخرین خرید به‌علاوه سود بالاتر است و پول خرید دوباره را پوشش می‌دهد.`}
+      </p>
+
       <div className="flex items-center gap-2 mt-2 text-[11px]">
         <div className="flex-1 bg-slate-50 rounded-2xl px-2 py-2 text-center">
-          <div className="text-[10px] text-slate-500">فروش فعلی هر کیلو</div>
+          <div className="text-[10px] text-slate-500">فروش فعلی {each}</div>
           <div className="font-mono font-bold text-slate-700">{num(s.current.perKg)}</div>
           <div className={`text-[9px] font-mono ${s.current.profitPerKg < 0 ? 'text-rose-600' : 'text-slate-400'}`}>
             سود {num(s.current.profitPerKg)}
@@ -254,7 +262,7 @@ export const PriceSuggestionCard: React.FC<{
         </div>
         <ArrowLeft className="w-4 h-4 text-slate-300 shrink-0" />
         <div className="flex-1 bg-emerald-50 rounded-2xl px-2 py-2 text-center">
-          <div className="text-[10px] text-emerald-700">پیشنهادی هر کیلو</div>
+          <div className="text-[10px] text-emerald-700">پیشنهادی {each}</div>
           <div className="font-mono font-bold text-emerald-800">{num(s.suggested.perKg)}</div>
           <div className="text-[9px] font-mono text-emerald-600">
             سود {num(s.suggested.profitPerKg)} · {percent(s.markupUsed)}

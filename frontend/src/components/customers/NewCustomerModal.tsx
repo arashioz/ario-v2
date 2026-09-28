@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonContent } from '@ionic/react';
-import { X, UserPlus, Phone, MapPin, FileText, CheckCircle2, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, UserPlus, Phone, MapPin, FileText, CheckCircle2, Loader2, AlertCircle, RefreshCw, Navigation } from 'lucide-react';
 import { getCurrentPosition, geoErrorMessage } from '../../lib/map';
 import { customersService } from '../../services/customers.service';
 import type { Customer } from '../../services/customers.service';
@@ -56,25 +56,11 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    let cancelled = false;
-    setGeoError(null);
-    setLocating(true);
-    getCurrentPosition()
-      .then(({ lat, lng }) => {
-        if (cancelled) return;
-        setLatitude(lat);
-        setLongitude(lng);
-      })
-      .catch((err) => {
-        if (!cancelled) setGeoError(geoErrorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) setLocating(false);
-      });
     return () => {
-      cancelled = true;
       setLatitude(undefined);
       setLongitude(undefined);
+      setGeoError(null);
+      setLocating(false);
     };
   }, [isOpen]);
 
@@ -272,16 +258,25 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                   <span>آدرس و موقعیت مکانی</span>
                 </label>
 
-                <button
-                  type="button"
-                  onClick={() => setIsMapPickerOpen(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-xl transition active:scale-95 border border-sky-200/60"
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>
-                    {latitude != null ? 'تنظیم دقیق روی نقشه' : 'انتخاب روی نقشه'}
-                  </span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={requestLocation}
+                    disabled={locating}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-700 bg-white px-2.5 py-1 rounded-xl border border-sky-200 active:scale-95 disabled:opacity-50"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    لوکیشن من
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsMapPickerOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-xl transition active:scale-95 border border-sky-200/60"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>{latitude != null ? 'تنظیم روی نقشه' : 'انتخاب روی نقشه'}</span>
+                  </button>
+                </div>
               </div>
 
               {locating ? (

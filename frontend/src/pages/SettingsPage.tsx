@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent } from '@ionic/react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronLeft,
@@ -10,6 +11,7 @@ import {
   LayoutGrid,
   LayoutList,
   MessageSquareText,
+  Plus,
   Rows3,
   Save,
   Scale,
@@ -136,6 +138,8 @@ export const SettingsPage: React.FC = () => {
   const [shop, setShop] = useState({ shopName: '', shopPhone: '', shopAddress: '', invoiceFooter: '', supermarketMinKg: 0, wholesaleMinKg: 0 });
   const [saving, setSaving] = useState(false);
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newSubName, setNewSubName] = useState<Record<string, string>>({});
 
   const toggleSub = (key: string) => {
     setExpandedSubs((prev) => {
@@ -186,15 +190,25 @@ export const SettingsPage: React.FC = () => {
 
   const groups = useMemo(() => {
     const map = new Map<string, { count: number; subs: Map<string, Product[]> }>();
+    const ensure = (c: string) => {
+      const g = map.get(c) ?? { count: 0, subs: new Map<string, Product[]>() };
+      map.set(c, g);
+      return g;
+    };
+    for (const name of settings.categoryOrder || []) if (name) ensure(name);
+    for (const [cat, subs] of Object.entries(settings.subcategoryOrder || {})) {
+      const g = ensure(cat);
+      for (const s of subs || []) if (s && !g.subs.has(s)) g.subs.set(s, []);
+    }
     for (const p of catalog) {
       const c = p.category || 'سایر';
-      const g = map.get(c) ?? { count: 0, subs: new Map<string, Product[]>() };
+      const g = ensure(c);
       g.count += 1;
       const s = p.subcategory || 'اصلی';
       if (!g.subs.has(s)) g.subs.set(s, []);
       g.subs.get(s)!.push(p);
-      map.set(c, g);
     }
+    for (const g of map.values()) if (g.subs.size === 0) g.subs.set('اصلی', []);
     const known = [...map.keys()];
     const ordered = (settings.categoryOrder || []).filter((n) => known.includes(n));
     const rest = known.filter((n) => !ordered.includes(n)).sort((a, b) => a.localeCompare(b, 'fa'));
@@ -254,6 +268,66 @@ export const SettingsPage: React.FC = () => {
     save({ productOrder: [...existingOther, ...nextList] }, true);
   };
 
+  const addCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    if (groups.some((g) => g.name === name)) {
+      showNotification({ title: 'این دسته هست', message: `«${name}» از قبل وجود دارد.`, type: 'warning' });
+      return;
+    }
+    save({ categoryOrder: [...groups.map((g) => g.name), name] }, true);
+    setNewCategoryName('');
+  };
+
+  const addSubcategory = (catName: string) => {
+    const name = (newSubName[catName] || '').trim();
+    if (!name) return;
+    const cat = groups.find((g) => g.name === catName);
+    if (!cat) return;
+    if (cat.subs.some((s) => s.name === name)) {
+      showNotification({ title: 'این زیردسته هست', message: `«${name}» در «${catName}» هست.`, type: 'warning' });
+      return;
+    }
+    save(
+      { subcategoryOrder: { ...(settings.subcategoryOrder || {}), [catName]: [...cat.subs.map((s) => s.name), name] } },
+      true,
+    );
+    setNewSubName((d) => ({ ...d, [catName]: '' }));
+  };
+
+  const removeCategory = (name: string) => {
+    const sub = { ...(settings.subcategoryOrder || {}) };
+    delete sub[name];
+    save({ categoryOrder: groups.map((g) => g.name).filter((n) => n !== name), subcategoryOrder: sub }, true);
+  };
+
+  const removeSubcategory = (catName: string, subName: string) => {
+    const cat = groups.find((g) => g.name === catName);
+    if (!cat) return;
+    save(
+      {
+        subcategoryOrder: {
+          ...(settings.subcategoryOrder || {}),
+          [catName]: cat.subs.map((s) => s.name).filter((n) => n !== subName),
+        },
+      },
+      true,
+    );
+  };
+
+  const moveProductTo = async (p: Product, target: string) => {
+    const [category, sub] = target.split('\t');
+    if (!category) return;
+    const subcategory = !sub || sub === 'اصلی' ? '' : sub;
+    if ((p.category || 'سایر') === category && (p.subcategory || '') === subcategory) return;
+    try {
+      const updated = await productsService.update(p._id, { category, subcategory });
+      setCatalog((list) => list.map((x) => (x._id === p._id ? { ...x, ...updated } : x)));
+    } catch (err) {
+      showNotification({ title: 'جابه‌جا نشد', message: apiErrorMessage(err, 'خطا در تغییر دسته'), type: 'error' });
+    }
+  };
+
   const rename = async (from: string, parent?: string) => {
     const key = parent ? `${parent}::${from}` : from;
     const to = (draft[key] ?? from).trim();
@@ -276,6 +350,8 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const [params] = useSearchParams();
+  const adminPart = params.get('part') === 'admin';
   const pos = settings.posView;
   const preview = useMemo(() => new Map<string, number>(sample[0] ? [[sample[0]._id, 2]] : []), [sample]);
   const row = { open, setOpen };
@@ -283,10 +359,13 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <IonPage>
-      <ReportHeader title="تنظیمات" subtitle={isAdmin ? settings.shopName : 'فقط مدیر می‌تواند تغییر دهد'} />
+      <ReportHeader
+        title={adminPart ? 'تنظیمات و پشتیبان' : 'چیدمان فروش'}
+        subtitle={isAdmin ? settings.shopName : 'فقط مدیر می‌تواند تغییر دهد'}
+      />
       <IonContent fullscreen className="bg-slate-50">
         <div className="p-3 space-y-4 max-w-md mx-auto pb-8">
-          <Group title="صفحه فروش">
+          {!adminPart && <Group title="صفحه فروش">
             <Row id="layout" title="نمایش کالاها" hint={LAYOUTS.find((l) => l.id === pos.layout)?.label} icon={LayoutGrid} tone="sky" {...row}>
               <div className="space-y-2.5">
                 <div className="grid grid-cols-3 gap-1.5">
@@ -342,8 +421,26 @@ export const SettingsPage: React.FC = () => {
             <Row id="categories" title="دسته‌ها و کالاها" hint={`${num(groups.length)} دسته`} icon={Tags} tone="amber" {...row}>
               <div className="space-y-2">
                 <p className="text-[11px] text-slate-400 leading-relaxed px-0.5">
-                  ترتیب دسته‌ها، زیردسته‌ها و محصولات را به دلخواه با فلش‌ها جابه‌جا کنید تا در صفحه فروش به همین ترتیب نمایش داده شوند.
+                  دسته و زیردستهٔ جدید بسازید، کالا را به زیردستهٔ دیگری ببرید، و با فلش‌ها ترتیب نمایش در صفحه فروش را عوض کنید.
                 </p>
+                {isAdmin && (
+                  <div className="flex gap-1.5">
+                    <input
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="نام دسته جدید"
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-sky-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCategory}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-600 text-white text-[10px] font-bold shrink-0 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      دسته جدید
+                    </button>
+                  </div>
+                )}
                 {groups.length === 0 ? (
                   <p className="text-[11px] text-slate-400">دسته‌ای ثبت نشده.</p>
                 ) : (
@@ -383,6 +480,15 @@ export const SettingsPage: React.FC = () => {
                           >
                             <ChevronDown className="w-3.5 h-3.5" />
                           </button>
+                          {isAdmin && g.count === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => removeCategory(g.name)}
+                              className="text-[10px] font-bold text-rose-600 shrink-0"
+                            >
+                              حذف
+                            </button>
+                          )}
                         </div>
 
                         {/* Subcategories list */}
@@ -433,6 +539,15 @@ export const SettingsPage: React.FC = () => {
                                   >
                                     <ChevronDown className="w-3 h-3" />
                                   </button>
+                                  {isAdmin && sub.products.length === 0 && !(sub.name === 'اصلی' && g.subs.length === 1) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeSubcategory(g.name, sub.name)}
+                                      className="text-[10px] font-bold text-rose-600 shrink-0"
+                                    >
+                                      حذف
+                                    </button>
+                                  )}
                                 </div>
 
                                 {/* Products inside this subcategory */}
@@ -452,6 +567,21 @@ export const SettingsPage: React.FC = () => {
                                             {p.unit} · موجودی: {num(p.stock)}
                                           </span>
                                         </div>
+                                        <select
+                                          disabled={!isAdmin}
+                                          value={`${p.category || 'سایر'}\t${p.subcategory || 'اصلی'}`}
+                                          onChange={(e) => moveProductTo(p, e.target.value)}
+                                          className="max-w-[48%] text-[10px] rounded-lg border border-slate-200 bg-white px-1 py-1 text-slate-700"
+                                          aria-label="انتقال به دسته"
+                                        >
+                                          {groups.flatMap((cat) =>
+                                            cat.subs.map((s) => (
+                                              <option key={`${cat.name}\t${s.name}`} value={`${cat.name}\t${s.name}`}>
+                                                {cat.name} · {s.name}
+                                              </option>
+                                            )),
+                                          )}
+                                        </select>
                                         <div className="flex items-center gap-1 shrink-0">
                                           <button
                                             disabled={!isAdmin || pi === 0}
@@ -477,6 +607,23 @@ export const SettingsPage: React.FC = () => {
                               </div>
                             );
                           })}
+                          {isAdmin && (
+                            <div className="flex gap-1.5">
+                              <input
+                                value={newSubName[g.name] || ''}
+                                onChange={(e) => setNewSubName((d) => ({ ...d, [g.name]: e.target.value }))}
+                                placeholder="زیردسته جدید"
+                                className="flex-1 min-w-0 px-2.5 py-1 rounded-lg border border-slate-200 text-[11px] focus:outline-none focus:border-sky-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => addSubcategory(g.name)}
+                                className="px-2 py-1 rounded-lg bg-sky-600 text-white text-[10px] font-bold shrink-0"
+                              >
+                                افزودن
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -526,9 +673,9 @@ export const SettingsPage: React.FC = () => {
                 )}
               </div>
             </Row>
-          </Group>
+          </Group>}
 
-          <Group title="فروشگاه">
+          {adminPart && <Group title="فروشگاه">
             <Row id="shop" title="مشخصات" hint={settings.shopName} icon={Store} tone="sky" {...row}>
               <div className="space-y-2">
                 <Field label="نام">
@@ -568,9 +715,9 @@ export const SettingsPage: React.FC = () => {
             <Row id="sms" title="متن پیامک‌ها" icon={MessageSquareText} tone="teal" {...row}>
               <SmsTemplatesSettings settings={settings} isAdmin={isAdmin} />
             </Row>
-          </Group>
+          </Group>}
 
-          <Group title="اطلاعات">
+          {adminPart && <Group title="پشتیبان">
             <Row
               id="backup"
               title="پشتیبان و خروجی"
@@ -581,7 +728,7 @@ export const SettingsPage: React.FC = () => {
             >
               <BackupSettings prefs={settings.backup} isAdmin={isAdmin} />
             </Row>
-          </Group>
+          </Group>}
         </div>
       </IonContent>
     </IonPage>

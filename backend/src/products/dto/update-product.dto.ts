@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, Min } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsNumber, Min } from 'class-validator';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -39,6 +39,19 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   weightPerUnitKg?: number;
+
+  @IsOptional()
+  @IsIn(['stock', 'kg', 'other'])
+  sellBy?: 'stock' | 'kg' | 'other';
+
+  @IsOptional()
+  @IsString()
+  saleUnit?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  salePerStock?: number;
 
   @IsOptional()
   @IsNumber()

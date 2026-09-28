@@ -14,7 +14,8 @@ import Toman from '../components/ui/Toman';
 import { dateToYmd, formatJalali, ymdToJalali, JALALI_MONTHS, faNum } from '../lib/jalali';
 import { formatToman, num, percent, profitColor, weight } from '../lib/format';
 
-type View = 'prices' | 'product' | 'changes' | 'month';
+type View = 'prices' | 'avg' | 'product' | 'changes' | 'month';
+type AvgWindow = 'period' | '7' | '30' | '90';
 
 const jDate = (iso: string) => formatJalali(dateToYmd(new Date(iso)));
 const signedPct = (n: number) => `${n > 0 ? '+' : ''}${percent(n)}`;
@@ -130,12 +131,82 @@ const PriceTrend: React.FC<{ days: InflationReport['byDay'] }> = ({ days }) => {
   );
 };
 
+const AVG_WINDOWS: { id: AvgWindow; label: string }[] = [
+  { id: 'period', label: 'این بازه' },
+  { id: '7', label: '۷ روز' },
+  { id: '30', label: '۳۰ روز' },
+  { id: '90', label: '۹۰ روز' },
+];
+
+const avgOf = (p: InflationReport['products'][number], w: AvgWindow) => {
+  if (w === '7') return p.sellAvg7;
+  if (w === '30') return p.sellAvg30;
+  if (w === '90') return p.sellAvg90;
+  return p.kg > 0 ? p.avgSellPerKg : null;
+};
+
+const AvgSellReport: React.FC<{
+  products: InflationReport['products'];
+  window: AvgWindow;
+  onWindow: (w: AvgWindow) => void;
+  periodLabel: string;
+}> = ({ products, window, onWindow, periodLabel }) => {
+  const rows = products
+    .map((p) => ({ p, avg: avgOf(p, window) }))
+    .filter((r) => r.avg != null || r.p.purchasedKg > 0 || r.p.kg > 0);
+  if (!products.length) return <Empty>در این بازه خرید و فروشی ثبت نشده.</Empty>;
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 p-1 bg-slate-200/70 rounded-2xl">
+        {AVG_WINDOWS.map((w) => (
+          <button
+            key={w.id}
+            type="button"
+            onClick={() => onWindow(w.id)}
+            className={`flex-1 py-2 rounded-xl text-[11px] font-bold ${window === w.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+          >
+            {w.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-slate-400 leading-5 px-1">
+        میانگین قیمت فروش هر کیلو. «این بازه» همان فیلتر بالای صفحه است ({periodLabel}). ۷، ۳۰ و ۹۰ روز همیشه تا امروز حساب می‌شوند.
+      </p>
+      {rows.map(({ p, avg }) => (
+        <div key={p.productId} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-xs font-bold text-slate-800">{p.name}</h3>
+            <div className="text-left">
+              <div className="text-[10px] text-slate-400">میانگین فروش</div>
+              <div className="font-mono font-extrabold text-sm text-slate-800">{avg != null ? formatToman(avg) : '—'}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 mt-2 text-[10px] text-slate-500">
+            <span>۷ روز <b className="font-mono text-slate-700">{p.sellAvg7 != null ? num(p.sellAvg7) : '—'}</b></span>
+            <span>۳۰ روز <b className="font-mono text-slate-700">{p.sellAvg30 != null ? num(p.sellAvg30) : '—'}</b></span>
+            <span>۹۰ روز <b className="font-mono text-slate-700">{p.sellAvg90 != null ? num(p.sellAvg90) : '—'}</b></span>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1.5">
+            میانگین خرید این بازه <b className="font-mono text-slate-700">{p.avgBuyPerKg ? formatToman(p.avgBuyPerKg) : '—'}</b>
+            <span className="mx-1">·</span>
+            آخرین خرید <b className="font-mono text-slate-700">{p.lastCost ? formatToman(p.lastCost) : '—'}</b>
+          </p>
+          {avg != null && p.lastCost > 0 && avg < p.lastCost && (
+            <p className="text-[11px] text-rose-700 mt-1">این میانگین از آخرین خرید کمتر است. فروش بعدی باید حداقل به اندازه خرید جدید باشد.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const InflationPage: React.FC = () => {
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
   const [general, setGeneral] = useState('');
   const [data, setData] = useState<InflationReport | null>(null);
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('prices');
+  const [avgWindow, setAvgWindow] = useState<AvgWindow>('period');
 
   const [pricing, setPricing] = usePricingOptions();
   const [suggestions, setSuggestions] = useState<PriceSuggestion[] | null>(null);
@@ -218,7 +289,7 @@ export const InflationPage: React.FC = () => {
     <IonPage>
       <ReportHeader
         title="سود تورمی"
-        subtitle="چقدر از سود از خرید و فروش آمد و چقدر از گران شدن بار"
+        subtitle="چقدر خریدیم، چقدر فروختیم، و فروش بعدی چقدر باید بالاتر باشد"
         right={<PeriodPicker value={period} onChange={setPeriod} />}
       />
 
@@ -273,6 +344,23 @@ export const InflationPage: React.FC = () => {
               مثال: ۵ تن ۱۳۳ خریدید، ۳ تن ۱۵۵ فروختید (سود تجاری ۶۶ میلیون)، بعد ۲ تن ۱۴۲ خریدید و ۲ تن باقی‌مانده را ۱۵۵ فروختید؛ این ۲ تن در واقع ۱۳۳ خریده شده
               بود، پس ۲۶ میلیون سود تجاری و ۱۸ میلیون سود تورمی است.
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <StatCard
+              icon={<Package className="w-4 h-4" />}
+              tone="rose"
+              title="خرید این بازه"
+              main={formatToman(s?.purchasedAmount)}
+              sub={s ? `${weight(s.purchasedKg)} · میانگین ${formatToman(s.avgBuyPerKg)} هر کیلو` : ''}
+            />
+            <StatCard
+              icon={<Tag className="w-4 h-4" />}
+              tone="sky"
+              title="فروش این بازه"
+              main={formatToman(s?.revenue)}
+              sub={s ? `${weight(s.kg)} · میانگین ${formatToman(s.avgSellPerKg)} هر کیلو` : ''}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -354,8 +442,9 @@ export const InflationPage: React.FC = () => {
             onChange={setView}
             items={[
               ['prices', 'قیمت پیشنهادی'],
+              ['avg', 'میانگین فروش'],
               ['product', 'کالا'],
-              ['changes', `تغییر قیمت خرید (${num(data?.priceChanges.length ?? 0)})`],
+              ['changes', `خریدها (${num(data?.priceChanges.length ?? 0)})`],
               ['month', 'ماهانه'],
             ]}
           />
@@ -397,6 +486,8 @@ export const InflationPage: React.FC = () => {
                 </div>
               )}
             </div>
+          ) : view === 'avg' ? (
+            <AvgSellReport products={data?.products ?? []} window={avgWindow} onWindow={setAvgWindow} periodLabel={period.label} />
           ) : !data ? null : view === 'product' ? (
             <div className="space-y-2.5">
               {data.products.length === 0 ? (
@@ -408,7 +499,7 @@ export const InflationPage: React.FC = () => {
                       <div className="min-w-0">
                         <h3 className="text-xs font-bold text-slate-800 truncate">{p.name}</h3>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          فروش {weight(p.kg)} · سود کل <span className={`font-mono ${profitColor(p.profit)}`}>{formatToman(p.profit)}</span>
+                          خرید {formatToman(p.purchasedAmount)} · فروش {formatToman(p.revenue)}
                         </p>
                       </div>
                       <span
@@ -420,6 +511,23 @@ export const InflationPage: React.FC = () => {
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5 mt-3">
+                      <Mini
+                        label="میانگین خرید این بازه"
+                        value={p.avgBuyPerKg ? formatToman(p.avgBuyPerKg) : '—'}
+                        sub={p.purchasedKg ? weight(p.purchasedKg) : 'خریدی نبود'}
+                      />
+                      <Mini
+                        label="میانگین فروش این بازه"
+                        value={p.kg ? formatToman(p.avgSellPerKg) : '—'}
+                        sub={p.kg ? weight(p.kg) : 'فروشی نبود'}
+                      />
+                    </div>
+                    {p.lastCost > 0 && p.kg > 0 && p.avgSellPerKg < p.lastCost && (
+                      <p className="text-[11px] text-rose-700 mt-2 leading-5">
+                        میانگین فروش از آخرین خرید ({formatToman(p.lastCost)} هر کیلو) کمتر است. برای خرید دوباره باید بالاتر بفروشید.
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-1.5 mt-1.5">
                       <Mini label="سود تجاری" value={formatToman(p.tradingProfit)} sub={`کیلویی ${formatToman(p.tradingPerKg)}`} valueClass={profitColor(p.tradingProfit)} />
                       <Mini label="سود تورمی" value={formatToman(p.inflationProfit)} sub={`کیلویی ${formatToman(p.inflationPerKg)}`} valueClass={profitColor(p.inflationProfit)} />
                     </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonContent } from '@ionic/react';
 import {
   X,
@@ -19,6 +19,7 @@ import {
   PhoneCall,
   Navigation,
   Pencil,
+  MessageSquare,
 } from 'lucide-react';
 import { CustomerLocationMap } from '../map/CustomerLocationMap';
 import { CustomerLocationPickerModal } from '../map/CustomerLocationPickerModal';
@@ -38,8 +39,9 @@ import { FollowUpSheet } from '../followups/FollowUpSheet';
 import type { FollowUpTarget } from '../followups/FollowUpSheet';
 import { useSettings } from '../../services/settings.service';
 import { accountTitle } from '../ui/AccountPicker';
-import { debtSms, openSms } from '../../lib/sms';
+import { debtSms, invoiceSms, openSms } from '../../lib/sms';
 import { formatToman } from '../../lib/format';
+import { dateToYmd, ymdToJalali, JALALI_MONTHS } from '../../lib/jalali';
 
 interface CustomerDetailModalProps {
   isOpen: boolean;
@@ -151,6 +153,33 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     showNotification({ title: 'گزارش حساب کپی شد', message: 'متن همراه با فاکتورهای باز آماده است؛ پیامک گوشی باز می‌شود.', type: 'success' });
     await openSms(customer.phoneNumber, debtSms(customer, invoices, settings));
   };
+
+  const sendInvoiceSms = async (inv: Invoice) => {
+    if (!customer) return;
+    showNotification({ title: 'گزارش فاکتور کپی شد', message: 'متن همین فاکتور آماده است؛ پیامک گوشی باز می‌شود.', type: 'success' });
+    await openSms(customer.phoneNumber || inv.customerPhone, invoiceSms(inv, settings, customer.balance));
+  };
+
+  const salesChart = useMemo(() => {
+    const now = ymdToJalali(dateToYmd());
+    const cur = now.jy * 12 + (now.jm - 1);
+    const buckets = Array.from({ length: 6 }, (_, i) => {
+      const k = cur - (5 - i);
+      const jm = (k % 12) + 1;
+      return { key: k, label: JALALI_MONTHS[jm - 1], amount: 0, kg: 0 };
+    });
+    const index = new Map(buckets.map((b, i) => [b.key, i]));
+    for (const inv of invoices) {
+      if (inv.type !== 'sale') continue;
+      const j = ymdToJalali(dateToYmd(new Date(inv.invoiceDate || inv.createdAt)));
+      const slot = index.get(j.jy * 12 + (j.jm - 1));
+      if (slot == null) continue;
+      buckets[slot].amount += inv.finalAmount || 0;
+      buckets[slot].kg += inv.totalWeightKg || 0;
+    }
+    const max = Math.max(1, ...buckets.map((b) => b.amount));
+    return { buckets, max };
+  }, [invoices]);
 
   const handleSaveLocation = async (latitude: number, longitude: number) => {
     if (!customer) return;
@@ -309,6 +338,28 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                 </div>
               )}
+
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2">
+                <span className="text-[10px] font-bold text-slate-500">فروش شش ماه اخیر</span>
+                <div className="mt-2 flex items-end gap-1 h-14">
+                  {salesChart.buckets.map((b) => (
+                    <div key={b.key} className="flex-1 h-full flex items-end">
+                      <div
+                        className="w-full rounded-md bg-sky-500"
+                        style={{ height: `${Math.max(b.amount > 0 ? 8 : 2, (b.amount / salesChart.max) * 100)}%` }}
+                        title={`${b.label}: ${formatToman(b.amount)}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex gap-1">
+                  {salesChart.buckets.map((b) => (
+                    <span key={b.key} className="flex-1 text-center text-[8px] leading-tight text-slate-400 truncate">
+                      {b.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
 
               {/* Details & Address */}
               <div className="space-y-2 text-xs text-slate-600 empty:hidden">
@@ -521,17 +572,31 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         </div>
                       </div>
 
-                      {inv.type === 'sale' && inv.remainingDebt > 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPayInvoice(inv);
-                          }}
-                          className="w-full py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
-                        >
-                          <Wallet className="w-3.5 h-3.5" />
-                          ثبت پرداخت این فاکتور
-                        </button>
+                      {inv.type === 'sale' && (
+                        <div className={`grid gap-2 ${inv.remainingDebt > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {inv.remainingDebt > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPayInvoice(inv);
+                              }}
+                              className="w-full py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+                            >
+                              <Wallet className="w-3.5 h-3.5" />
+                              ثبت پرداخت این فاکتور
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void sendInvoiceSms(inv);
+                            }}
+                            className="w-full py-2 rounded-xl bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            گزارش پیامکی
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))
@@ -618,6 +683,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             </span>
                             {tx.recordedByName && <span>• ثبت توسط: {tx.recordedByName}</span>}
                           </div>
+                          {Array.from(
+                            new Set([tx.invoiceId, ...(tx.allocations?.map((a) => a.invoiceId) ?? [])].filter(Boolean)),
+                          ).map((id) => {
+                            const linked = invoices.find((i) => i._id === id);
+                            if (!linked || linked.type !== 'sale') return null;
+                            return (
+                              <button
+                                key={id}
+                                onClick={() => void sendInvoiceSms(linked)}
+                                className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-100 text-[10px] font-bold"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                گزارش پیامکی
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 

@@ -52,6 +52,9 @@ export interface Product {
   secondaryUnit?: string;
   unitRatio?: number;
   weightPerUnitKg?: number;
+  sellBy?: 'stock' | 'kg' | 'other';
+  saleUnit?: string;
+  salePerStock?: number;
   buyPrice: number;
   sellPrice: number;
   priceRetail?: number;
@@ -89,6 +92,9 @@ export interface CreateProductInput {
   secondaryUnit?: string;
   unitRatio?: number;
   weightPerUnitKg?: number;
+  sellBy?: 'stock' | 'kg' | 'other';
+  saleUnit?: string;
+  salePerStock?: number;
   buyPrice?: number;
   sellPrice: number;
   priceRetail?: number;
@@ -114,9 +120,28 @@ export interface UpdateStockInput {
 
 export interface BulkPriceUpdateInput {
   category?: string;
-  type: 'percentage' | 'fixed';
+  type: 'percentage' | 'fixed' | 'profit';
   value: number;
   reason?: string;
+  preview?: boolean;
+  /** 1 = exact toman, otherwise round to 10 / 100 / 1000 / 10000. */
+  roundTo?: 1 | 10 | 100 | 1000 | 10000;
+}
+
+export interface BulkPricePreviewItem {
+  name: string;
+  unit: string;
+  buy: number;
+  stock: number;
+  before: number;
+  after: number;
+  beforeSupermarket: number;
+  afterSupermarket: number;
+  beforeWholesale: number;
+  afterWholesale: number;
+  profitBefore: number;
+  profitAfter: number;
+  skipped?: string;
 }
 
 export const productsService = {
@@ -182,6 +207,11 @@ export const productsService = {
   async bulkUpdatePrices(data: BulkPriceUpdateInput): Promise<{ modifiedCount: number; message: string }> {
     const res = await api.post('/products/bulk-price', data);
     return res.data;
+  },
+
+  async previewBulkPrices(data: BulkPriceUpdateInput): Promise<BulkPricePreviewItem[]> {
+    const res = await api.post('/products/bulk-price', { ...data, preview: true });
+    return res.data.items ?? [];
   },
 
   async renameCategory(from: string, to: string, level: 'category' | 'subcategory' = 'category', parent?: string): Promise<{ modified: number }> {

@@ -134,6 +134,13 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
 
     const gzip = createGzip({ level: 6 });
     const out = createWriteStream(tmp);
+    // Listen before end(). A small backup finishes inside gzip.end(), and attaching
+    // the listener afterwards waits forever.
+    const done = new Promise<void>((resolve, reject) => {
+      out.on('finish', () => resolve());
+      out.on('error', reject);
+      gzip.on('error', reject);
+    });
     gzip.pipe(out);
     const write = async (line: string) => {
       if (!gzip.write(line + '\n')) await once(gzip, 'drain');
@@ -151,12 +158,13 @@ export class BackupService implements OnModuleInit, OnModuleDestroy {
       }
       await write(JSON.stringify({ end: true, counts }));
       gzip.end();
-      await once(out, 'finish');
+      await done;
       await fs.rename(tmp, join(this.dailyDir, name));
-    } catch (e) {
+    } catch (e: any) {
       gzip.destroy();
       out.destroy();
       await fs.rm(tmp, { force: true });
+      this.lastError = e?.message || String(e);
       throw e;
     }
 

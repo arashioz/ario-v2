@@ -239,6 +239,13 @@ export interface InflationProduct extends InflationSplit {
   sellStart: number | null;
   sellEnd: number | null;
   sellChangePercent: number;
+  purchasedKg: number;
+  purchasedAmount: number;
+  avgBuyPerKg: number | null;
+  /** Average sell per kg over the last 7 / 30 / 90 days, independent of the report period. */
+  sellAvg7: number | null;
+  sellAvg30: number | null;
+  sellAvg90: number | null;
   priceChanges: number;
   holdingGain: number;
   stockKg: number;
@@ -264,10 +271,13 @@ export interface InflationReport {
     invoices: number;
     holdingGain: number;
     priceChanges: number;
-    costInflationPercent: number;
-    sellChangePercent: number;
-    generalInflationAnnual: number;
-  };
+  costInflationPercent: number;
+  sellChangePercent: number;
+  generalInflationAnnual: number;
+  purchasedKg: number;
+  purchasedAmount: number;
+  avgBuyPerKg: number;
+};
   stock: { kg: number; fifoValue: number; replacementValue: number; unrealizedGain: number };
   products: InflationProduct[];
   priceChanges: PriceChangeRow[];
@@ -293,6 +303,8 @@ export interface PriceSuggestion {
   name: string;
   unit: string;
   weightPerUnitKg: number;
+  /** False when the product has no kilo weight; prices are then per stock unit. */
+  byWeight?: boolean;
   stockUnits: number;
   stockKg: number;
   /** Landed cost of the latest purchase (invoice price + freight share). */
