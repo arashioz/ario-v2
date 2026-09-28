@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.DS_Store
+**/*.log
+.git
+
+# Business data and secrets never go into the image; the seed script mounts the backup at run time.
+backend/src/static
+backend/backups
+backups
+backend/uploads
+**/.env
+**/.env.*
+!**/.env.example

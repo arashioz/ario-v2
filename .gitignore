@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Production builds
+dist/
+**/dist/
+dist-ssr/
+build/
+.output/
+
+# Environment files and credentials
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Database dumps, archives & backups
+backups/
+**/backups/
+!**/backups/.gitkeep
+*.archive.gz
+*.dump
+
+# Local static database dumps (sensitive business data)
+backend/src/static/*
+!backend/src/static/.gitkeep
+
+# Runtime uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# macOS & OS metadata
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# IDE and Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-project
+*.sublime-workspace

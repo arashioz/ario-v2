@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "short_name": "آریو",
+  "name": "آریو — مدیریت فروشگاه",
+  "description": "مدیریت فروش، مشتریان، بدهی‌ها و انبار فروشگاه آریو",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "start_url": "/tabs/home",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone"],
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["business", "finance", "productivity"]
+}

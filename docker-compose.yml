@@ -1,0 +1,55 @@
+name: ario-application
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ario_mongodb
+    restart: always
+    # Only reachable from the server itself (and the app over the compose network).
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27019}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ario_db
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  app:
+    build: .
+    image: ario-app:latest
+    container_name: ario_app
+    restart: always
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      TZ: ${TZ:-Asia/Tehran}
+      MONGODB_URI: mongodb://mongodb:27017/ario_db
+      STATIC_DIR: /app/public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (see .env.example)}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      ADMIN_DEFAULT_USERNAME: ${ADMIN_DEFAULT_USERNAME:-admin}
+      ADMIN_DEFAULT_PASSWORD: ${ADMIN_DEFAULT_PASSWORD:?Set ADMIN_DEFAULT_PASSWORD in .env}
+      ADMIN_DEFAULT_NAME: ${ADMIN_DEFAULT_NAME:-مدیر سیستم}
+      MARKETER_DEFAULT_USERNAME: ${MARKETER_DEFAULT_USERNAME:-marketer}
+      MARKETER_DEFAULT_PASSWORD: ${MARKETER_DEFAULT_PASSWORD:?Set MARKETER_DEFAULT_PASSWORD in .env}
+      MARKETER_DEFAULT_NAME: ${MARKETER_DEFAULT_NAME:-بازاریاب آریو}
+    volumes:
+      - uploads:/app/uploads
+      - backups:/app/backups
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+    name: ario_mongo_data
+  uploads:
+    name: ario_uploads
+  backups:
+    name: ario_backups

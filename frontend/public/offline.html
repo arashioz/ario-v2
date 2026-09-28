@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8fafc" />
+    <title>آریو — آفلاین</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        background: #f8fafc; color: #0f172a;
+        font-family: 'Vazirmatn Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .box { text-align: center; padding: 24px; max-width: 320px; }
+      img { width: 88px; height: 88px; border-radius: 22px; box-shadow: 0 12px 30px -10px rgba(2,132,199,.45); }
+      h1 { font-size: 17px; font-weight: 700; margin: 20px 0 8px; }
+      p { font-size: 13px; color: #64748b; line-height: 1.9; margin: 0 0 22px; }
+      button {
+        border: 0; border-radius: 14px; padding: 12px 22px;
+        background: #0284c7; color: #fff; font: inherit; font-size: 14px; font-weight: 600;
+      }
+      button:active { transform: scale(.96); }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <img src="/icons/icon-192.png" alt="آریو" />
+      <h1>اتصال اینترنت برقرار نیست</h1>
+      <p>به محض برقراری اتصال، اپ به‌صورت خودکار دوباره بارگذاری می‌شود.</p>
+      <button onclick="location.reload()">تلاش دوباره</button>
+    </div>
+    <script>
+      window.addEventListener('online', function () { location.reload(); });
+    </script>
+  </body>
+</html>
