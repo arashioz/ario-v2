@@ -33,10 +33,6 @@ backups/
 *.archive.gz
 *.dump
 
-# Local static database dumps (sensitive business data)
-backend/src/static/*
-!backend/src/static/.gitkeep
-
 # Runtime uploads
 backend/uploads/*
 !backend/uploads/.gitkeep
