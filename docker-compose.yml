@@ -2,7 +2,8 @@ name: ario-application
 
 services:
   mongodb:
-    image: mongo:7
+    # 4.4 is the newest MongoDB that runs on CPUs without AVX (mongo:5+ exits with code 132 there).
+    image: mongo:4.4
     container_name: ario_mongodb
     restart: always
     # Only reachable from the server itself (and the app over the compose network).
@@ -13,7 +14,7 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 10
