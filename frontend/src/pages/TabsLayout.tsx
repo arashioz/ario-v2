@@ -23,6 +23,7 @@ import { SettingsPage } from './SettingsPage';
 import { PriceChartPage } from './PriceChartPage';
 import { LogsPage } from './LogsPage';
 import { UsersPage } from './UsersPage';
+import { CashboxPage } from './CashboxPage';
 
 const TABS = [
   { tab: 'home', href: '/tabs/home', label: 'خانه', icon: homeOutline },
@@ -48,6 +49,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/customers-map" element={<CustomersMapPage />} />
           <Route path="/cheques" element={<ChequesPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/cashbox" element={<CashboxPage />} />
           <Route path="/follow-ups" element={<FollowUpsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/profit" element={<ProfitPage />} />

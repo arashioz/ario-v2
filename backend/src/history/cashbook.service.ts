@@ -88,7 +88,7 @@ export class CashbookService {
       const direction = inv.type === 'sale' ? 'in' : 'out';
       const kind: Kind = inv.type === 'sale' ? 'sale' : 'purchase_spot';
       const title = `${inv.type === 'sale' ? 'فاکتور فروش' : 'فاکتور خرید'} ${inv.invoiceNumber}`;
-      const accountOf = (m: string) => (m === 'pos' || m === 'transfer' ? (inv.depositAccounts as any)?.[m] || undefined : undefined);
+      const accountOf = (m: string) => (m === 'transfer' ? (inv.depositAccounts as any)?.transfer || undefined : undefined);
       if (inv.paymentMethod === 'split' && inv.splitDetails) {
         for (const m of ['pos', 'cash', 'transfer', 'cheque'] as const) {
           const amount = (inv.splitDetails as any)[m] || 0;
@@ -162,9 +162,16 @@ export class CashbookService {
       return { channel: c, in: inflow, out: outflow, net: inflow - outflow };
     });
 
+    const byMethod = (['pos', 'cash', 'transfer', 'cheque'] as const).map((m) => {
+      const list = entries.filter((e) => e.method === m);
+      const inflow = list.filter((e) => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
+      const outflow = list.filter((e) => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
+      return { method: m, in: inflow, out: outflow, net: inflow - outflow };
+    });
+
     const accounts = new Map<string, { accountId: string; in: number; count: number }>();
     for (const e of entries) {
-      if (e.direction !== 'in' || e.channel !== 'bank') continue;
+      if (e.direction !== 'in' || e.method !== 'transfer') continue;
       const id = e.accountId || '';
       const row = accounts.get(id) ?? { accountId: id, in: 0, count: 0 };
       row.in += e.amount;
@@ -185,7 +192,8 @@ export class CashbookService {
       summary: { in: totalIn, out: totalOut, net: totalIn - totalOut, count: entries.length },
       byKind,
       byChannel,
-      /** Card money received per shop account; accountId '' = not recorded. */
+      byMethod,
+      /** کارت‌به‌کارت received per shop account. کارتخوان is not tied to a card. */
       byAccount: [...accounts.values()].sort((a, b) => b.in - a.in),
       byDay: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)),
       entries: entries.slice(0, 600),

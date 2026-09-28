@@ -573,20 +573,34 @@ export class ProductsService implements OnModuleInit {
       });
       if (dto.preview || next.skipped || !next.changed) continue;
 
-      prod.sellPrice = next.after;
-      prod.priceRetail = next.after;
-      prod.priceSupermarket = next.afterSupermarket;
-      prod.priceWholesale = next.afterWholesale;
-      prod.priceSetAt = new Date();
-      prod.priceCostBasisPerKg = undefined;
-      prod.priceHistory.unshift({
-        oldPrice: next.before,
-        newPrice: next.after,
-        reason: dto.reason || next.reason,
-        changedByName: recordedByName,
-        date: new Date(),
-      });
-      await prod.save();
+      await this.productModel.updateOne(
+        { _id: prod._id },
+        {
+          $set: {
+            sellPrice: next.after,
+            priceRetail: next.after,
+            priceSupermarket: next.afterSupermarket,
+            priceWholesale: next.afterWholesale,
+            priceSetAt: new Date(),
+          },
+          $unset: { priceCostBasisPerKg: 1 },
+          $push: {
+            priceHistory: {
+              $each: [
+                {
+                  oldPrice: next.before,
+                  newPrice: next.after,
+                  reason: dto.reason || next.reason,
+                  changedByName: recordedByName,
+                  date: new Date(),
+                },
+              ],
+              $position: 0,
+              $slice: 40,
+            },
+          },
+        },
+      );
       modifiedCount++;
     }
 

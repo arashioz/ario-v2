@@ -339,7 +339,7 @@ export class InvoicesService {
     body: { amount: number; paymentMethod?: any; description?: string; date?: string; accountId?: string },
     recordedByName: string,
   ) {
-    const accountId = ['pos', 'transfer'].includes(body.paymentMethod) ? String(body.accountId || '') : '';
+    const accountId = body.paymentMethod === 'transfer' ? String(body.accountId || '') : '';
     const invoice = await this.findById(id);
     if (invoice.type === 'purchase') {
       if (!body.amount || body.amount <= 0) throw new BadRequestException('مبلغ نامعتبر است');

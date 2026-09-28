@@ -197,62 +197,14 @@ export const ExpensesPage: React.FC = () => {
       {/* Top Header */}
       <IonHeader className="ion-no-border">
         <IonToolbar className="bg-white/85 backdrop-blur-xl px-4 py-2 border-b border-sky-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate(-1)}
-                className="p-2 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition active:scale-95"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </button>
-              <div>
-                <h1 className="text-sm font-black text-slate-800">
-                  سود مغازه و برداشت شخصی مدیر
-                </h1>
-                <p className="text-[10px] text-slate-400">
-                  آنالیز سود واقعی، تفکیک هزینه‌های جاری و دخل و برداشت‌ها
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isUnlocked ? (
-                <button
-                  onClick={handleLock}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition active:scale-95"
-                  title="قفل کردن بخش سود و برداشت"
-                >
-                  <Unlock className="w-3.5 h-3.5 text-purple-600" />
-                  <span className="text-[11px]">قفل مجدد</span>
-                </button>
-              ) : (
-                <div
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-2xl bg-slate-100 text-slate-500 text-[11px] font-bold"
-                  title="بخش سود و برداشت قفل است"
-                >
-                  <Lock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>محافظت‌شده</span>
-                </div>
-              )}
-              <button
-                onClick={loadData}
-                disabled={loading}
-                className="p-2 rounded-2xl bg-sky-50 text-sky-600 hover:bg-sky-100 transition active:scale-95 disabled:opacity-50"
-                title="به‌روزرسانی"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={() => {
-                  setDefaultIsWithdrawal(false);
-                  setIsNewModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs shadow-md shadow-sky-600/25 transition active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>ثبت هزینه</span>
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition active:scale-95"
+            >
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <h1 className="text-sm font-black text-slate-800">خرج و برداشت</h1>
           </div>
         </IonToolbar>
       </IonHeader>
@@ -268,6 +220,40 @@ export const ExpensesPage: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3 space-y-3 max-w-lg mx-auto pb-8" dir="rtl">
+          <div className="flex items-center gap-2">
+            {isUnlocked ? (
+              <button
+                onClick={handleLock}
+                className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-purple-50 text-purple-700 text-[11px] font-bold border border-purple-100 active:scale-95"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                قفل
+              </button>
+            ) : (
+              <span className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-slate-100 text-slate-500 text-[11px] font-bold">
+                <Lock className="w-3.5 h-3.5" />
+                قفل است
+              </span>
+            )}
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="p-2 rounded-2xl bg-white border border-slate-200 text-sky-600 active:scale-95 disabled:opacity-50"
+              title="به‌روزرسانی"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => {
+                setDefaultIsWithdrawal(false);
+                setIsNewModalOpen(true);
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-sky-600 text-white font-bold text-xs active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              ثبت هزینه
+            </button>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-slate-500">بازه گزارش</span>
             <PeriodPicker value={period} onChange={setPeriod} />

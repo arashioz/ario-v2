@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Banknote, Clock, CreditCard, FileCheck, ArrowRightLeft, Sparkles, Truck } from 'lucide-react';
 import { AmountInput } from '../ui/AmountInput';
 import { AccountPicker, defaultAccountId } from '../ui/AccountPicker';
@@ -42,31 +42,36 @@ export const paidNow = (t: PaymentTerms) => t.split.pos + t.split.cash + t.split
 export const termsCredit = (final: number, t: PaymentTerms) =>
   t.paymentMethod === 'credit' ? Math.max(0, final - paidNow(t)) : t.paymentMethod === 'split' ? Math.min(final, t.split.credit) : 0;
 
-/** Card methods that carry money under these terms. */
-export const cardMethodsUsed = (t: PaymentTerms): CardMethod[] =>
-  (['pos', 'transfer'] as CardMethod[]).filter((m) =>
-    t.paymentMethod === m || ((t.paymentMethod === 'split' || t.paymentMethod === 'credit') && t.split[m] > 0),
+/** Only کارت‌به‌کارت is tied to a shop bank account. کارتخوان is the POS drawer, not a card. */
+export const accountMethodsUsed = (t: PaymentTerms): CardMethod[] =>
+  (['transfer'] as CardMethod[]).filter(
+    (m) => t.paymentMethod === m || ((t.paymentMethod === 'split' || t.paymentMethod === 'credit') && t.split[m] > 0),
   );
+
+const paidParts = (s: Required<SplitDetails>) => s.pos + s.cash + s.transfer + s.cheque;
+
+/** Unpaid remainder of a split invoice sits on نسیه, never on cash. */
+export const splitWithRemainder = (s: Required<SplitDetails>, final: number, hasCustomer: boolean): Required<SplitDetails> => ({
+  ...s,
+  credit: hasCustomer ? Math.max(0, final - paidParts(s)) : 0,
+});
 
 const CARD_LABELS: Record<CardMethod, string> = { pos: 'کارتخوان', transfer: 'کارت‌به‌کارت' };
 
 export const termsError = (final: number, t: PaymentTerms, hasCustomer: boolean, cards: BankCard[] = []): string | null => {
-  if (t.paymentMethod === 'split' && splitSum(t) !== final) return `جمع مبالغ ترکیبی (${formatToman(splitSum(t))}) با مبلغ نهایی برابر نیست`;
+  if (t.paymentMethod === 'split' && paidNow(t) > final) return 'جمع پرداخت‌ها از مبلغ فاکتور بیشتر است';
+  if (t.paymentMethod === 'split' && !hasCustomer && paidNow(t) !== final) return 'بدون مشتری، کل مبلغ باید همین‌جا پرداخت شود';
   if (t.paymentMethod === 'credit' && paidNow(t) > final) return 'پرداخت فعلی از مبلغ فاکتور بیشتر است';
   if (termsCredit(final, t) > 0 && !hasCustomer) return 'برای فروش نسیه، مشتری را انتخاب کنید';
   if (t.shippingPayer !== 'none' && t.shippingCost <= 0) return 'هزینه ارسال را وارد کنید';
-  if (cards.length) {
-    const missing = cardMethodsUsed(t).find((m) => !t.accounts[m]);
-    if (missing) return `حساب واریز ${CARD_LABELS[missing]} را انتخاب کنید`;
-  }
+  if (cards.length && accountMethodsUsed(t).length && !t.accounts.transfer) return 'حساب واریز کارت‌به‌کارت را انتخاب کنید';
   return null;
 };
 
 /** Fields the API expects, derived from the form. A credit invoice with money paid now is sent as split. */
 export const termsPayload = (final: number, t: PaymentTerms) => {
   const credit = termsCredit(final, t);
-  const used = cardMethodsUsed(t);
-  const depositAccounts = { pos: used.includes('pos') ? t.accounts.pos : '', transfer: used.includes('transfer') ? t.accounts.transfer : '' };
+  const depositAccounts = { pos: '', transfer: accountMethodsUsed(t).includes('transfer') ? t.accounts.transfer : '' };
   const shipping = {
     discount: t.discount,
     shippingPayer: t.shippingPayer !== 'none' && t.shippingCost > 0 ? t.shippingPayer : ('none' as ShippingPayer),
@@ -132,19 +137,6 @@ const SPLIT_FIELDS: { key: SplitKey; label: string }[] = [
   { key: 'credit', label: 'مانده نسیه' },
 ];
 const PAID_FIELDS = SPLIT_FIELDS.filter((f) => f.key !== 'credit');
-const SPLIT_ORDER: SplitKey[] = ['pos', 'cash', 'transfer', 'cheque', 'credit'];
-
-/** The field that absorbs the remainder: نسیه when there is a customer, otherwise the first one not typed into. */
-const balancingField = (edited: Set<SplitKey>, hasCustomer: boolean): SplitKey | null => {
-  if (hasCustomer && !edited.has('credit')) return 'credit';
-  return SPLIT_ORDER.find((k) => !edited.has(k) && k !== 'credit') ?? null;
-};
-
-const rebalance = (split: Required<SplitDetails>, final: number, auto: SplitKey | null): Required<SplitDetails> => {
-  if (!auto) return split;
-  const others = SPLIT_ORDER.filter((k) => k !== auto).reduce((s, k) => s + (split[k] || 0), 0);
-  return { ...split, [auto]: Math.max(0, final - others) };
-};
 
 interface Props {
   terms: PaymentTerms;
@@ -160,29 +152,26 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
   const final = termsFinal(subtotal, terms);
   const credit = termsCredit(final, terms);
   const splitLeft = final - splitSum(terms);
-  const [edited, setEdited] = useState<Set<SplitKey>>(new Set());
-  const auto = balancingField(edited, hasCustomer);
-  const used = cardMethodsUsed(terms);
+  const used = accountMethodsUsed(terms);
 
   const editSplit = (key: SplitKey, value: number) => {
-    const nextEdited = new Set(edited).add(key);
-    setEdited(nextEdited);
-    onChange({ split: rebalance({ ...terms.split, [key]: value }, final, balancingField(nextEdited, hasCustomer)) });
+    if (key === 'credit') return;
+    onChange({ split: splitWithRemainder({ ...terms.split, [key]: value }, final, hasCustomer) });
   };
 
   const editPaid = (key: SplitKey, value: number) => onChange({ split: { ...terms.split, [key]: value, credit: 0 } });
 
   const setAccount = (m: CardMethod, id: string) => onChange({ accounts: { ...terms.accounts, [m]: id } });
 
-  // Keep the split summing to the total when the discount or shipping changes it.
-  const lastFinal = useRef(final);
+  // Discount or a newly chosen customer moves the unpaid part onto نسیه.
+  const splitKey = `${final}:${hasCustomer}:${terms.split.pos}:${terms.split.cash}:${terms.split.transfer}:${terms.split.cheque}`;
   useEffect(() => {
-    if (lastFinal.current === final) return;
-    lastFinal.current = final;
-    if (terms.paymentMethod === 'split') onChange({ split: rebalance(terms.split, final, auto) });
-  }, [final]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (terms.paymentMethod !== 'split') return;
+    const next = splitWithRemainder(terms.split, final, hasCustomer);
+    if (next.credit !== terms.split.credit) onChange({ split: next });
+  }, [splitKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pre-select the default account for any card method that just came into use.
+  // Pre-select the default account when کارت‌به‌کارت is used.
   const usedKey = used.join(',');
   useEffect(() => {
     const def = defaultAccountId(bankCards);
@@ -197,9 +186,8 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
 
   const pickMethod = (id: PayMethod) => {
     if (id === terms.paymentMethod) return;
-    setEdited(new Set());
     if (id === 'split') {
-      onChange({ paymentMethod: id, split: hasCustomer ? { pos: 0, cash: 0, transfer: 0, cheque: 0, credit: final } : { pos: final, cash: 0, transfer: 0, cheque: 0, credit: 0 } });
+      onChange({ paymentMethod: id, split: splitWithRemainder({ pos: 0, cash: 0, transfer: 0, cheque: 0, credit: 0 }, final, hasCustomer) });
     } else if (id === 'credit') {
       onChange({ paymentMethod: id, split: { pos: 0, cash: 0, transfer: 0, cheque: 0, credit: 0 } });
     } else onChange({ paymentMethod: id });
@@ -268,8 +256,8 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
         </div>
       </div>
 
-      {(terms.paymentMethod === 'pos' || terms.paymentMethod === 'transfer') && (
-        <div className="rounded-2xl bg-sky-50/60 border border-sky-100 p-3">{picker(terms.paymentMethod)}</div>
+      {terms.paymentMethod === 'transfer' && (
+        <div className="rounded-2xl bg-sky-50/60 border border-sky-100 p-3">{picker('transfer')}</div>
       )}
 
       {terms.paymentMethod === 'credit' && (
@@ -284,7 +272,7 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
                 <span className="w-20 text-[11px] font-bold text-slate-600">{f.label}</span>
                 <AmountInput className="flex-1" value={terms.split[f.key] || 0} onChange={(v) => editPaid(f.key, v)} />
               </div>
-              {(f.key === 'pos' || f.key === 'transfer') && terms.split[f.key] > 0 && <div className="pr-[88px]">{picker(f.key)}</div>}
+              {f.key === 'transfer' && terms.split.transfer > 0 && <div className="pr-[88px]">{picker('transfer')}</div>}
             </div>
           ))}
           <div className="flex items-center justify-between pt-2 border-t border-rose-200 text-xs">
@@ -308,36 +296,22 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
       {terms.paymentMethod === 'split' && (
         <div className="rounded-2xl bg-purple-50/60 border border-purple-200 p-3 space-y-2">
           <p className="text-[10px] text-purple-700 leading-5">
-            {hasCustomer ? 'هر مبلغی بزنید، باقی‌مانده خودکار در «مانده نسیه» می‌نشیند.' : 'هر مبلغی بزنید، باقی‌مانده خودکار در ردیف «خودکار» می‌نشیند.'}
+            {hasCustomer
+              ? 'هر چه همین‌جا پرداخت نشود، از مانده کم می‌شود و به‌صورت نسیه روی حساب مشتری می‌نشیند.'
+              : 'بدون مشتری باید کل مبلغ همین‌جا پرداخت شود.'}
           </p>
-          {SPLIT_FIELDS.filter((f) => f.key !== 'credit' || hasCustomer).map((f) => (
+          {PAID_FIELDS.map((f) => (
             <div key={f.key} className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className={`w-20 text-[11px] font-bold ${f.key === 'credit' ? 'text-rose-700' : 'text-slate-600'}`}>
-                  {f.label}
-                  {auto === f.key && <span className="block text-[9px] font-normal text-purple-600">خودکار</span>}
-                </span>
-                <AmountInput
-                  className={`flex-1 ${auto === f.key ? 'opacity-80' : ''}`}
-                  value={terms.split[f.key] || 0}
-                  onChange={(v) => editSplit(f.key, v)}
-                />
+                <span className="w-20 text-[11px] font-bold text-slate-600">{f.label}</span>
+                <AmountInput className="flex-1" value={terms.split[f.key] || 0} onChange={(v) => editSplit(f.key, v)} />
               </div>
-              {(f.key === 'pos' || f.key === 'transfer') && terms.split[f.key] > 0 && <div className="pr-[88px]">{picker(f.key)}</div>}
+              {f.key === 'transfer' && terms.split.transfer > 0 && <div className="pr-[88px]">{picker('transfer')}</div>}
             </div>
           ))}
-          <div className="flex items-center justify-between text-[11px]">
-            <span className={splitLeft === 0 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
-              {splitLeft === 0 ? 'جمع مبالغ درست است' : splitLeft > 0 ? `باقی‌مانده: ${formatToman(splitLeft)}` : `اضافه: ${formatToman(-splitLeft)}`}
-            </span>
-            {splitLeft > 0 && hasCustomer && (
-              <button
-                onClick={() => onChange({ split: { ...terms.split, credit: terms.split.credit + splitLeft } })}
-                className="text-purple-700 font-bold"
-              >
-                بقیه نسیه شود
-              </button>
-            )}
+          <div className="flex items-center justify-between pt-2 border-t border-purple-200 text-xs">
+            <span className="font-bold text-rose-800">مانده نسیه</span>
+            <span className="font-mono font-extrabold text-rose-700">{formatToman(hasCustomer ? credit : Math.max(0, splitLeft))}</span>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierPaymentDto, UpdateSupplierPaymentDto } from './dto/supplier-payment.dto';
-import { CreateSupplierCompanyDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
+import { CreateSupplierCompanyDto, ReassignProductsDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('suppliers')
@@ -35,6 +35,12 @@ export class SuppliersController {
       'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
     });
     return csv;
+  }
+
+  /** Move products (and their purchase invoices) from one company to another. */
+  @Post('products/reassign')
+  reassignProducts(@Body() dto: ReassignProductsDto) {
+    return this.suppliers.reassignProducts(dto.from, dto.productIds || [], dto.to);
   }
 
   @Post('companies')

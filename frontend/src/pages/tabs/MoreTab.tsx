@@ -88,6 +88,13 @@ const REPORTS: Item[] = [
     tone: 'bg-violet-100 text-violet-600',
   },
   {
+    path: '/cashbox',
+    title: 'صندوق',
+    desc: 'چقدر کارتخوان، چقدر نقد، و واریز به هر کارت',
+    icon: Wallet,
+    tone: 'bg-emerald-100 text-emerald-700',
+  },
+  {
     path: '/inflation',
     title: 'گرانی بار',
     desc: 'سود خرید و فروش، جدا از گران شدن کالا',

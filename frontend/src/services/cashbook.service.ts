@@ -25,7 +25,8 @@ export interface Cashbook {
   summary: { in: number; out: number; net: number; count: number };
   byKind: { kind: string; label: string; direction: 'in' | 'out'; amount: number; count: number }[];
   byChannel: { channel: CashChannel; in: number; out: number; net: number }[];
-  /** Card money received per shop account; accountId '' = not recorded. */
+  byMethod: { method: string; in: number; out: number; net: number }[];
+  /** کارت‌به‌کارت received per shop account; accountId '' = not recorded. */
   byAccount: { accountId: string; in: number; count: number }[];
   byDay: { date: string; in: number; out: number }[];
   entries: CashEntry[];

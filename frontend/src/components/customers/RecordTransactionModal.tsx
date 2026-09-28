@@ -52,7 +52,7 @@ export const RecordTransactionModal: React.FC<RecordTransactionModalProps> = ({
 
   const isPayment = type === 'payment';
   const projected = customer.balance + (isPayment ? -amount : amount);
-  const isCard = isPayment && (method === 'pos' || method === 'transfer');
+  const isCard = isPayment && method === 'transfer';
   const needsAccount = isCard && bankCards.length > 0 && !accountId;
 
   const submit = async () => {

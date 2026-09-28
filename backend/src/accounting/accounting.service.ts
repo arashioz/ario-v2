@@ -817,8 +817,9 @@ export class AccountingService {
           (p.unit === 'کیلوگرم' ? 1 : 0);
         const byWeight = wpu > 0;
         const scale = byWeight ? wpu : 1;
-        const last = f.lastCost.get(pid);
-        if (!last) return null;
+        const lastFromLots = f.lastCost.get(pid);
+        const last = lastFromLots && lastFromLots > 0 ? lastFromLots : p.buyPrice > 0 ? (byWeight ? p.buyPrice / scale : p.buyPrice) : 0;
+        if (!(last > 0)) return null;
 
         const lots = f.lotsByProduct.get(pid) ?? [];
         const lastLot = lots[lots.length - 1];

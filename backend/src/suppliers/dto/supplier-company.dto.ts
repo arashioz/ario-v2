@@ -24,6 +24,20 @@ export class UpdateSupplierCompanyDto {
   accounts?: SupplierBankAccountDto[];
 }
 
+export class ReassignProductsDto {
+  @IsArray()
+  @IsString({ each: true })
+  productIds: string[];
+
+  @IsString()
+  @IsNotEmpty({ message: 'نام شرکت مقصد الزامی است' })
+  to: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+}
+
 export class CreateSupplierCompanyDto {
   @IsString() @IsNotEmpty({ message: 'نام شرکت الزامی است' }) name: string;
   @IsOptional() @IsString() phone?: string;

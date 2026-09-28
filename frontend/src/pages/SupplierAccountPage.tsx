@@ -49,6 +49,12 @@ export const SupplierAccountPage: React.FC = () => {
   const [newCompany, setNewCompany] = useState(false);
   const [others, setOthers] = useState<SupplierListItem[] | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [target, setTarget] = useState('');
+  const [destName, setDestName] = useState('');
+  const [companies, setCompanies] = useState<SupplierListItem[]>([]);
+  const [moveSaving, setMoveSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +90,41 @@ export const SupplierAccountPage: React.FC = () => {
       });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const startMove = async () => {
+    setMoving(true);
+    setPicked([]);
+    setTarget('');
+    setDestName('');
+    try {
+      setCompanies(await suppliersService.list());
+    } catch {
+      setCompanies([]);
+    }
+  };
+
+  const moveProducts = async () => {
+    const to = (target === '__new__' ? destName : target).trim();
+    if (!picked.length || !to) {
+      showNotification({ title: 'جابه‌جایی', message: 'کالا و شرکت مقصد را انتخاب کنید.', type: 'warning' });
+      return;
+    }
+    try {
+      setMoveSaving(true);
+      const res = await suppliersService.reassignProducts({ productIds: picked, to, from: data?.supplier });
+      showNotification({
+        title: 'کالاها منتقل شد',
+        message: `${res.products.toLocaleString('fa-IR')} کالا به ${res.to}. ${res.movedInvoices.toLocaleString('fa-IR')} فاکتور کامل و ${res.splitInvoices.toLocaleString('fa-IR')} فاکتور مشترک جدا شد.`,
+        type: 'success',
+      });
+      setMoving(false);
+      await load();
+    } catch {
+      showNotification({ title: 'انتقال نشد', message: 'جابه‌جایی کالاها انجام نشد.', type: 'error' });
+    } finally {
+      setMoveSaving(false);
     }
   };
 
@@ -468,12 +509,66 @@ export const SupplierAccountPage: React.FC = () => {
             </div>
           ) : view === 'products' ? (
             <div className="space-y-2.5">
+              {!!profile?.products.length && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-3 space-y-2">
+                  {!moving ? (
+                    <button onClick={startMove} className="w-full py-2.5 rounded-xl bg-sky-50 text-sky-800 text-xs font-bold border border-sky-100">
+                      جابه‌جایی به شرکت دیگر
+                    </button>
+                  ) : (
+                    <>
+                      <p className="text-[11px] text-slate-500 leading-5">کالاهایی که اشتباه زیر این شرکت آمده‌اند را انتخاب کنید. اگر شرکت مقصد هنوز نیست، نامش را بنویسید تا ساخته شود.</p>
+                      <select value={target} onChange={(e) => setTarget(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs">
+                        <option value="">شرکت مقصد</option>
+                        {companies
+                          .filter((c) => c.name !== data?.supplier)
+                          .map((c) => (
+                            <option key={c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        <option value="__new__">شرکت جدید…</option>
+                      </select>
+                      {target === '__new__' && (
+                        <input
+                          value={destName}
+                          onChange={(e) => setDestName(e.target.value)}
+                          placeholder="نام شرکت جدید"
+                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs"
+                        />
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={() => setMoving(false)} className="flex-1 py-2 rounded-xl border border-slate-200 text-xs text-slate-600">
+                          انصراف
+                        </button>
+                        <button
+                          onClick={moveProducts}
+                          disabled={moveSaving || !picked.length}
+                          className="flex-1 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold disabled:opacity-40"
+                        >
+                          {moveSaving ? 'در حال انتقال…' : `انتقال ${picked.length.toLocaleString('fa-IR')} کالا`}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               {!profile?.products.length ? (
                 <Empty>محصولی از این شرکت خریداری یا به آن متصل نشده.</Empty>
               ) : (
                 profile.products.map((p) => (
                   <div key={p.productId} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
                     <div className="flex items-start justify-between gap-2">
+                      {moving && (
+                        <input
+                          type="checkbox"
+                          checked={picked.includes(p.productId)}
+                          onChange={() =>
+                            setPicked((prev) => (prev.includes(p.productId) ? prev.filter((id) => id !== p.productId) : [...prev, p.productId]))
+                          }
+                          className="mt-1"
+                        />
+                      )}
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                           <Package className="w-3.5 h-3.5 text-slate-400" />

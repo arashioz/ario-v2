@@ -91,7 +91,7 @@ export const PeriodPicker: React.FC<Props> = ({ value, onChange }) => {
             onClick={applyCustom}
             className="w-full py-3 rounded-2xl bg-sky-600 disabled:bg-slate-300 text-white text-sm font-bold"
           >
-            اعمال بازه دلخواه
+            اعمال بازه تاریخی
           </button>
         }
       >

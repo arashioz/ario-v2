@@ -157,6 +157,9 @@ export const suppliersService = {
   async profile(name?: string): Promise<SupplierProfile> {
     return (await api.get('/suppliers/profile', { params: { name } })).data;
   },
+  async reassignProducts(input: { productIds: string[]; to: string; from?: string }): Promise<{ products: number; movedInvoices: number; splitInvoices: number; to: string }> {
+    return (await api.post('/suppliers/products/reassign', input)).data;
+  },
   async createCompany(input: SupplierCompanyInput): Promise<SupplierCompany> {
     return (await api.post('/suppliers/companies', input)).data;
   },

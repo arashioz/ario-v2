@@ -36,7 +36,7 @@ export const InvoicePaymentSheet: React.FC<Props> = ({ invoice, onClose, onPaid 
 
   if (!invoice) return null;
 
-  const isCard = method === 'pos' || method === 'transfer';
+  const isCard = method === 'transfer';
   const needsAccount = isCard && bankCards.length > 0 && !accountId;
 
   const submit = async () => {

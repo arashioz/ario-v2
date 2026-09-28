@@ -474,6 +474,99 @@ export class SuppliersService implements OnApplicationBootstrap {
    * خروجی صورت‌حساب و مغایرت‌گیری اکسل (CSV با فرمت UTF-8 BOM مخصوص اکسل)
    * شامل ریز فاکتورها، پرداختی‌ها، اقلام بار، شرح سند و مانده تجمعی حساب
    */
+  /**
+   * Products booked on the wrong company: point them at `to`, and move the purchase
+   * invoices that contain them. A mixed invoice is split so the other goods stay put.
+   */
+  async reassignProducts(fromName: string | undefined, productIds: string[], toName: string) {
+    const ids = [...new Set((productIds || []).filter((id) => Types.ObjectId.isValid(id)))];
+    if (!ids.length) throw new BadRequestException('کالایی انتخاب نشده');
+    const toClean = clean(toName);
+    if (!toClean) throw new BadRequestException('نام شرکت مقصد الزامی است');
+    if (!(await this.companyModel.exists({ name: toClean }))) {
+      await this.companyModel.create({ name: toClean, accounts: [], notes: '' });
+      await this.refreshRegistered();
+    }
+    const to = canonicalSupplier(toClean);
+    const from = canonicalSupplier(fromName || PARENT_COMPANY);
+    if (from === to) throw new BadRequestException('مقصد با شرکت فعلی یکی است');
+
+    await this.productModel.updateMany({ _id: { $in: ids } }, { $set: { supplierName: to } });
+    const idSet = new Set(ids);
+    const invoices = await this.invoiceModel.find({ type: 'purchase' }).exec();
+    let movedInvoices = 0;
+    let splitInvoices = 0;
+
+    for (const inv of invoices) {
+      if (canonicalSupplier(inv.customerName) !== from) continue;
+      const items = [...(inv.items || [])];
+      const moving = items.filter((it) => idSet.has(String(it.productId)));
+      if (!moving.length) continue;
+
+      if (moving.length === items.length) {
+        inv.customerName = to;
+        await inv.save();
+        movedInvoices++;
+        continue;
+      }
+
+      const lineSum = items.reduce((s, it) => s + (it.totalPrice || 0), 0);
+      const movedSum = moving.reduce((s, it) => s + (it.totalPrice || 0), 0);
+      const share = lineSum > 0 ? movedSum / lineSum : moving.length / items.length;
+      const origFinal = inv.finalAmount || 0;
+      const origCredit = inv.creditAmount || 0;
+      const origWeight = inv.totalWeightKg || 0;
+      const origTotal = inv.totalAmount || 0;
+      const origDiscount = inv.discount || 0;
+      const movedFinal = Math.round(origFinal * share);
+      const movedCredit = Math.min(movedFinal, Math.round(origCredit * share));
+      const movedWeight = Math.round(moving.reduce((s, it) => s + (it.weightKg || 0), 0) * 10) / 10;
+
+      inv.items = items.filter((it) => !idSet.has(String(it.productId))) as any;
+      inv.totalAmount = Math.max(0, Math.round(origTotal * (1 - share)));
+      inv.discount = Math.max(0, Math.round(origDiscount * (1 - share)));
+      inv.finalAmount = Math.max(0, origFinal - movedFinal);
+      inv.totalWeightKg = Math.max(0, Math.round((origWeight - movedWeight) * 10) / 10);
+      inv.creditAmount = Math.max(0, origCredit - movedCredit);
+      inv.paidAmount = Math.max(0, inv.finalAmount - inv.creditAmount);
+      inv.remainingDebt = inv.creditAmount;
+      inv.isPaid = inv.creditAmount <= 0;
+      await inv.save();
+
+      let number = `${inv.invoiceNumber}-2`;
+      let n = 2;
+      while (await this.invoiceModel.exists({ invoiceNumber: number })) {
+        n += 1;
+        number = `${inv.invoiceNumber}-${n}`;
+      }
+      await this.invoiceModel.create({
+        invoiceNumber: number,
+        type: 'purchase',
+        saleType: inv.saleType || 'retail',
+        customerName: to,
+        customerPhone: inv.customerPhone || '',
+        invoiceDate: inv.invoiceDate,
+        items: moving,
+        totalAmount: Math.max(0, Math.round(origTotal * share)),
+        discount: Math.max(0, Math.round(origDiscount * share)),
+        finalAmount: movedFinal,
+        totalWeightKg: movedWeight,
+        paymentMethod: movedCredit > 0 ? 'credit' : 'cash',
+        creditAmount: movedCredit,
+        paidAmount: Math.max(0, movedFinal - movedCredit),
+        remainingDebt: movedCredit,
+        isPaid: movedCredit <= 0,
+        notes: `انتقال کالا از ${from}، فاکتور ${inv.invoiceNumber}`,
+        createdByName: inv.createdByName || '',
+      });
+      splitInvoices++;
+    }
+
+    await this.sync(from);
+    await this.sync(to);
+    return { products: ids.length, movedInvoices, splitInvoices, to };
+  }
+
   async exportReconciliationCsv(supplierName?: string): Promise<{ csv: string; filename: string }> {
     const supplier = canonicalSupplier(supplierName || PARENT_COMPANY);
     const isParent = supplier === PARENT_COMPANY;

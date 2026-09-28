@@ -39,7 +39,7 @@ export const Sheet: React.FC<SheetProps> = ({ open, title, subtitle, onClose, ch
       <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
       <div
         className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col animate-slide-up"
-        style={{ paddingBottom: 'var(--safe-bottom)' }}
+        style={{ paddingBottom: 'var(--tabbar-offset)' }}
       >
         <div className="flex items-center justify-between px-4 pt-3 pb-2.5 border-b border-slate-100">
           <div>

@@ -131,7 +131,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   if (!invoice) return null;
   const isSale = invoice.type === 'sale';
   const canCredit = isSale && !!invoice.customerId;
-  const isCard = isSale && (payMode === 'pos' || payMode === 'transfer');
+  const isCard = isSale && payMode === 'transfer';
 
   const updateRow = (i: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
