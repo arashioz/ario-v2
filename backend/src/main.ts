@@ -1,4 +1,8 @@
+import { setDefaultResultOrder } from 'node:dns';
 import { NestFactory } from '@nestjs/core';
+
+// Docker's DNS often fails Node's IPv6 lookup with EAI_AGAIN. Prefer IPv4.
+setDefaultResultOrder('ipv4first');
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';

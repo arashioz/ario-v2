@@ -34,6 +34,7 @@ import { BackupModule } from './backup/backup.module';
         uri:
           configService.get<string>('MONGODB_URI') ||
           'mongodb://localhost:27019/ario_db',
+        family: 4,
       }),
     }),
     AuditModule,
