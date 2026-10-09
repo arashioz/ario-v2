@@ -17,6 +17,8 @@ export interface Customer {
   longitude?: number;
   notes?: string;
   balance: number; // >0: بدهکار, =0: تسویه, <0: بستانکار
+  overdueAmount?: number;
+  overdueCount?: number;
   creditLimit: number;
   isActive: boolean;
   lastTransactionDate: string;

@@ -2,7 +2,7 @@ import { api } from './api';
 
 export interface ExpenseItem {
   _id: string;
-  type: 'withdrawal' | 'shipping' | 'salary' | 'utilities' | 'rent' | 'other';
+  type: 'withdrawal' | 'deposit' | 'shipping' | 'salary' | 'utilities' | 'rent' | 'other';
   categoryId?: string;
   categoryName: string;
   amount: number;
@@ -32,6 +32,8 @@ export interface ProfitLossReport {
   expensesSummary: {
     operatingExpenses: number;
     managerWithdrawals: number;
+    managerDeposits?: number;
+    managerDebt?: number;
     totalAllOutflows: number;
     byType: Record<string, { count: number; total: number; label: string }>;
   };
@@ -39,8 +41,11 @@ export interface ProfitLossReport {
     netStoreProfit: number; // سود واقعی مغازه (قبل از برداشت مدیر)
     netProfitMarginPercent: number;
     managerWithdrawals: number; // مجموع برداشت‌های شخصی مدیر
-    retainedProfit: number; // سود پس از کسر برداشت‌های شخصی
+    managerDeposits?: number;
+    managerDebt?: number;
+    retainedProfit: number; // سود پس از کسر مانده برداشت مدیر
   };
+  recentSales?: { id: string; invoiceNumber: string; date: string; customerName: string; sellAmount: number; profit: number }[];
   recentWithdrawals: ExpenseItem[];
   recentStoreExpenses: ExpenseItem[];
 }

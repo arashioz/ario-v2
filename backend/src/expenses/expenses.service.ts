@@ -59,16 +59,21 @@ export class ExpensesService {
   }
 
   async create(dto: CreateExpenseDto, recordedByName = 'مدیر سیستم'): Promise<ExpenseDocument> {
+    const isDeposit = dto.type === 'deposit';
     const isWithdrawal =
-      dto.isPersonalWithdrawal !== undefined
+      !isDeposit &&
+      (dto.isPersonalWithdrawal !== undefined
         ? dto.isPersonalWithdrawal
-        : dto.type === 'withdrawal' || (dto.description && dto.description.includes('برداشت'));
+        : dto.type === 'withdrawal' || (dto.description && dto.description.includes('برداشت')));
 
     let categoryName = dto.categoryName;
     if (!categoryName) {
       switch (dto.type) {
         case 'withdrawal':
           categoryName = 'برداشت شخصی مدیر';
+          break;
+        case 'deposit':
+          categoryName = 'واریز به حساب مدیر';
           break;
         case 'shipping':
           categoryName = 'ارسال بار و کرایه';
@@ -104,9 +109,8 @@ export class ExpensesService {
 
   async update(id: string, dto: Partial<CreateExpenseDto>): Promise<ExpenseDocument> {
     const updateData: any = { ...dto };
-    if (dto.type === 'withdrawal') {
-      updateData.isPersonalWithdrawal = true;
-    }
+    if (dto.type === 'withdrawal') updateData.isPersonalWithdrawal = true;
+    if (dto.type === 'deposit') updateData.isPersonalWithdrawal = false;
     if (dto.date) {
       updateData.date = new Date(dto.date);
     }
@@ -172,9 +176,11 @@ export class ExpensesService {
 
     let operatingExpenses = 0; // هزینه‌های جاری مغازه
     let managerWithdrawals = 0; // برداشت‌های شخصی مدیر
+    let managerDeposits = 0; // واریز مدیر و درآمدهای دیگر
     let capitalizedFreight = 0; // کرایه حمل خرید که در بهای تمام‌شده کالا آمده
     const expensesByType: Record<string, { count: number; total: number; label: string }> = {
       withdrawal: { count: 0, total: 0, label: 'برداشت شخصی مدیر' },
+      deposit: { count: 0, total: 0, label: 'واریز مدیر' },
       shipping: { count: 0, total: 0, label: 'ارسال بار و کرایه' },
       salary: { count: 0, total: 0, label: 'حقوق و دستمزد' },
       utilities: { count: 0, total: 0, label: 'قبوض و انرژی' },
@@ -197,7 +203,10 @@ export class ExpensesService {
       expensesByType[typeKey].count++;
       expensesByType[typeKey].total += exp.amount || 0;
 
-      if (exp.isPersonalWithdrawal || exp.type === 'withdrawal') {
+      if (exp.type === 'deposit') {
+        managerDeposits += exp.amount || 0;
+        withdrawalsList.push(exp);
+      } else if (exp.isPersonalWithdrawal || exp.type === 'withdrawal') {
         managerWithdrawals += exp.amount || 0;
         withdrawalsList.push(exp);
       } else {
@@ -208,9 +217,23 @@ export class ExpensesService {
 
     // سود خالص مغازه قبل از برداشت مدیر
     const netStoreProfit = grossProfit - operatingExpenses;
+    // بدهی مدیر = برداشت‌ها منهای واریزها (درآمد دیگر یا بازگشت پول)
+    const managerDebt = managerWithdrawals - managerDeposits;
 
-    // سود نهایی پس از کسر برداشت‌های شخصی مدیر
-    const retainedProfit = netStoreProfit - managerWithdrawals;
+    // سود نهایی پس از کسر مانده برداشت مدیر
+    const retainedProfit = netStoreProfit - managerDebt;
+
+    const fifo = await this.accounting.fifo();
+    const recentSales = fifo.invoices
+      .filter((inv) => inv.type === 'sale')
+      .filter((inv) => {
+        const day = inv.invoiceDate;
+        if (query?.startDate && day < new Date(`${query.startDate.slice(0, 10)}T00:00:00+03:30`)) return false;
+        if (query?.endDate && day > new Date(`${query.endDate.slice(0, 10)}T23:59:59.999+03:30`)) return false;
+        return true;
+      })
+      .sort((a, b) => +new Date(b.invoiceDate) - +new Date(a.invoiceDate))
+      .slice(0, 20);
 
     return {
       period: {
@@ -230,6 +253,8 @@ export class ExpensesService {
       expensesSummary: {
         operatingExpenses, // هزینه‌های عملیاتی مغازه
         managerWithdrawals, // مجموع برداشت‌های شخصی مدیر
+        managerDeposits,
+        managerDebt,
         totalAllOutflows: operatingExpenses + managerWithdrawals,
         capitalizedFreight,
         byType: expensesByType,
@@ -239,12 +264,22 @@ export class ExpensesService {
         netStoreProfit,
         netProfitMarginPercent: totalSales > 0 ? Math.round((netStoreProfit / totalSales) * 1000) / 10 : 0,
 
-        // ۲. چقدر مدیر برداشته
+        // ۲. چقدر مدیر برداشته و چقدر واریز کرده
         managerWithdrawals,
+        managerDeposits,
+        managerDebt,
 
-        // ۳. سود پس از کسر برداشت شخصی مدیر
+        // ۳. سود پس از کسر مانده برداشت شخصی مدیر
         retainedProfit,
       },
+      recentSales: recentSales.map((inv) => ({
+        id: String(inv._id),
+        invoiceNumber: inv.invoiceNumber,
+        date: inv.invoiceDate,
+        customerName: inv.customerName,
+        sellAmount: inv.finalAmount || 0,
+        profit: Math.round(fifo.invoiceProfit.get(String(inv._id))?.profit || 0),
+      })),
       recentWithdrawals: withdrawalsList.slice(0, 20),
       recentStoreExpenses: storeExpensesList.slice(0, 20),
     };

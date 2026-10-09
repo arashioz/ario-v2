@@ -55,6 +55,12 @@ export interface Invoice {
   paidAmount: number;
   remainingDebt: number;
   creditAmount?: number;
+  /** Earlier customer credit applied to this invoice, without new money coming in. */
+  creditApplied?: number;
+  dueDate?: string;
+  dueDays?: number;
+  /** shop stock, or goods that left the factory and never touched the shop. */
+  fulfillment?: 'shop' | 'factory';
   customerPrevBalance: number;
   customerNewBalance: number;
   shippingPayer?: ShippingPayer;
@@ -87,7 +93,21 @@ export interface CreateInvoiceInput {
   shippingPayer?: ShippingPayer;
   shippingCost?: number;
   depositAccounts?: DepositAccounts;
+  dueDays?: number;
+  fulfillment?: 'shop' | 'factory';
 }
+
+export const invoiceDueDate = (inv: Pick<Invoice, 'type' | 'remainingDebt' | 'dueDate' | 'dueDays' | 'invoiceDate' | 'createdAt'>): Date | null => {
+  if (inv.type !== 'sale' || !(inv.remainingDebt > 0)) return null;
+  if (inv.dueDate) return new Date(inv.dueDate);
+  const base = new Date(inv.invoiceDate || inv.createdAt);
+  return new Date(base.getTime() + (inv.dueDays ?? 15) * 86400000);
+};
+
+export const isOverdue = (inv: Invoice): boolean => {
+  const due = invoiceDueDate(inv);
+  return !!due && due.getTime() < Date.now();
+};
 
 export interface InvoiceStats {
   todaySalesAmount: number;
@@ -141,6 +161,11 @@ export const invoicesService = {
 
   remove: async (id: string, password: string): Promise<{ message: string }> => {
     const response = await api.post(`/invoices/${id}/delete`, { password });
+    return response.data;
+  },
+
+  setDueDays: async (id: string, dueDays: number): Promise<Invoice> => {
+    const response = await api.post<Invoice>(`/invoices/${id}/due`, { dueDays });
     return response.data;
   },
 

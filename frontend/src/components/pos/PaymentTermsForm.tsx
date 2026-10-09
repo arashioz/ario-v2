@@ -21,6 +21,8 @@ export interface PaymentTerms {
   shippingCost: number;
   /** Shop bank account each card method was deposited to. */
   accounts: Record<CardMethod, string>;
+  /** Days after the invoice date that the credit portion is due. */
+  dueDays: number;
 }
 
 export const emptyTerms = (method: PayMethod = 'pos'): PaymentTerms => ({
@@ -30,6 +32,7 @@ export const emptyTerms = (method: PayMethod = 'pos'): PaymentTerms => ({
   shippingPayer: 'none',
   shippingCost: 0,
   accounts: { pos: '', transfer: '' },
+  dueDays: 15,
 });
 
 export const shippingCharge = (t: PaymentTerms) => (t.shippingPayer === 'customer' ? t.shippingCost : 0);
@@ -91,6 +94,7 @@ export const termsPayload = (final: number, t: PaymentTerms) => {
     splitDetails: t.paymentMethod === 'split' ? { ...t.split } : undefined,
     paidAmount: final - credit,
     depositAccounts,
+    dueDays: t.dueDays ?? 15,
     ...shipping,
   };
 };
@@ -313,6 +317,29 @@ export const PaymentTermsForm: React.FC<Props> = ({ terms, onChange, subtotal, s
             <span className="font-bold text-rose-800">مانده نسیه</span>
             <span className="font-mono font-extrabold text-rose-700">{formatToman(hasCustomer ? credit : Math.max(0, splitLeft))}</span>
           </div>
+        </div>
+      )}
+
+      {credit > 0 && (
+        <div className="rounded-2xl border border-rose-200 bg-white p-3 space-y-2">
+          <div className="text-[11px] font-bold text-slate-700">مهلت پرداخت</div>
+          <div className="flex flex-wrap gap-1.5">
+            {[7, 15, 30, 45, 60].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onChange({ dueDays: d })}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border ${
+                  (terms.dueDays ?? 15) === d ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 text-rose-700 border-rose-100'
+                }`}
+              >
+                {d.toLocaleString('fa-IR')} روز
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-500 leading-5">
+            سررسید {(terms.dueDays ?? 15).toLocaleString('fa-IR')} روز بعد از تاریخ فاکتور است. اگر تا آن روز تسویه نشود، وضعیت «تاخیر در پرداخت» می‌گیرد.
+          </p>
         </div>
       )}
     </div>

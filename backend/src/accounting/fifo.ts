@@ -38,6 +38,8 @@ export interface FifoInvoice {
   remainingDebt?: number;
   shippingPayer?: string;
   shippingCost?: number;
+  /** factory sales are not taken from shop lots. */
+  fulfillment?: string;
   legacyPayments?: { date: Date; amount: number; method?: string }[];
   items: {
     productId: string;
@@ -265,6 +267,9 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       });
       continue;
     }
+
+    // Shipped from the factory: the shop never held these goods, so they must not consume its lots.
+    if (inv.fulfillment === 'factory') continue;
 
     // Revenue is the money actually received for the goods, spread over the lines by their price.
     // Delivery charged to the customer passes through to the carrier; it is not sales revenue.

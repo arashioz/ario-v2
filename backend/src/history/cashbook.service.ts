@@ -8,7 +8,7 @@ import { SupplierPayment, SupplierPaymentDocument } from '../suppliers/schemas/s
 import { CashTransaction, CashTransactionDocument } from './schemas/cash-transaction.schema';
 
 type Channel = 'cash' | 'bank' | 'cheque';
-type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'supplier_payment' | 'purchase_spot';
+type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'manager_deposit' | 'supplier_payment' | 'purchase_spot';
 
 export interface CashEntry {
   date: Date;
@@ -29,6 +29,7 @@ const KIND_LABELS: Record<Kind, string> = {
   walkin_payment: 'وصول نسیه مشتری حضوری',
   expense: 'هزینه فروشگاه',
   withdrawal: 'برداشت شخصی',
+  manager_deposit: 'واریز مدیر',
   supplier_payment: 'پرداخت به شرکت',
   purchase_spot: 'پرداخت نقدی خرید',
 };
@@ -119,11 +120,12 @@ export class CashbookService {
       });
     }
     for (const e of expenses) {
-      const withdrawal = e.isPersonalWithdrawal || e.type === 'withdrawal';
+      const deposit = e.type === 'deposit';
+      const withdrawal = !deposit && (e.isPersonalWithdrawal || e.type === 'withdrawal');
       entries.push({
         date: e.date,
-        direction: 'out',
-        kind: withdrawal ? 'withdrawal' : 'expense',
+        direction: deposit ? 'in' : 'out',
+        kind: deposit ? 'manager_deposit' : withdrawal ? 'withdrawal' : 'expense',
         channel: channelOf(e.paymentMethod),
         method: e.paymentMethod || 'cash',
         amount: e.amount,

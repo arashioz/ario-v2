@@ -149,6 +149,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
       <IonContent className="bg-slate-50">
         <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0">
+          {invoice.fulfillment === 'factory' && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">
+              این فاکتور از کارخانه ارسال شده است. از موجودی دفتر کم نشده و در سود و موجودی انبار دفتر حساب نمی‌شود.
+            </div>
+          )}
+          {isSale && invoice.remainingDebt > 0 && invoice.dueDate && (
+            <div className={`rounded-2xl px-3 py-2 text-[11px] leading-5 border ${new Date(invoice.dueDate).getTime() < Date.now() ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+              سررسید {new Date(invoice.dueDate).toLocaleDateString('fa-IR')}
+              {new Date(invoice.dueDate).getTime() < Date.now() ? ' — تاخیر در پرداخت' : ''}
+              {(invoice.creditApplied || 0) > 0 ? ` · بستانکاری قبلی ${formatToman(invoice.creditApplied || 0)} روی همین فاکتور اعمال شده` : ''}
+            </div>
+          )}
           {isSale && invoice.remainingDebt > 0 && (
             <button
               onClick={() => setSheet('pay')}

@@ -95,7 +95,8 @@ export class CustomersService implements OnModuleInit {
     search?: string;
     filter?: 'all' | 'debtors' | 'settled' | 'creditors';
     kind?: string;
-  }): Promise<CustomerDocument[]> {
+  }) {
+    await this.ensureReconciled();
     const filterObj: any = { isActive: true };
     // Customers created before walk-ins existed have no kind and are shops.
     if (query?.kind === 'walkin') filterObj.kind = 'walkin';
@@ -118,16 +119,37 @@ export class CustomersService implements OnModuleInit {
       filterObj.balance = { $lt: 0 };
     }
 
-    return this.customerModel
-      .find(filterObj)
-      .sort({ balance: -1, updatedAt: -1 })
+    const customers = await this.customerModel.find(filterObj).sort({ balance: -1, updatedAt: -1 }).exec();
+    const now = Date.now();
+    const open = await this.invoiceModel
+      .find({ type: 'sale', remainingDebt: { $gt: 0 }, customerId: { $in: customers.map((c) => c._id) } })
+      .select('customerId remainingDebt invoiceDate dueDate dueDays')
+      .lean()
       .exec();
+    const late = new Map<string, { amount: number; count: number }>();
+    for (const inv of open) {
+      const days = inv.dueDays || 15;
+      const due = inv.dueDate
+        ? new Date(inv.dueDate).getTime()
+        : new Date(inv.invoiceDate || 0).getTime() + days * 86400000;
+      if (due >= now) continue;
+      const id = String(inv.customerId);
+      const row = late.get(id) || { amount: 0, count: 0 };
+      row.amount += inv.remainingDebt || 0;
+      row.count += 1;
+      late.set(id, row);
+    }
+    return customers.map((c) => {
+      const row = late.get(String(c._id));
+      return { ...c.toObject(), overdueAmount: row?.amount || 0, overdueCount: row?.count || 0 };
+    });
   }
 
   async findOne(id: string): Promise<CustomerDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('شناسه مشتری نامعتبر است');
     }
+    await this.ensureReconciled();
     const customer = await this.customerModel.findById(id).exec();
     if (!customer || !customer.isActive) {
       throw new NotFoundException('مشتری مورد نظر یافت نشد');
@@ -136,12 +158,21 @@ export class CustomersService implements OnModuleInit {
   }
 
   async update(id: string, updateDto: UpdateCustomerDto): Promise<CustomerDocument> {
+    const previous = await this.findOne(id);
     const customer = await this.customerModel
       .findByIdAndUpdate(id, { $set: updateDto }, { new: true })
       .exec();
 
     if (!customer) {
       throw new NotFoundException('مشتری یافت نشد');
+    }
+    if (customer.name !== previous.name || (customer.phoneNumber || '') !== (previous.phoneNumber || '')) {
+      await this.invoiceModel
+        .updateMany(
+          { customerId: customer._id },
+          { $set: { customerName: customer.name, customerPhone: customer.phoneNumber || '' } },
+        )
+        .exec();
     }
     return customer;
   }
@@ -190,11 +221,116 @@ export class CustomersService implements OnModuleInit {
   async syncInvoicePayment(invoice: InvoiceDocument): Promise<InvoiceDocument> {
     const paidLater = await this.getPaidLater(invoice._id as Types.ObjectId);
     const credit = invoice.creditAmount || 0;
+    const applied = invoice.creditApplied || 0;
     const upfront = Math.max(0, (invoice.finalAmount || 0) - credit);
-    invoice.remainingDebt = Math.max(0, credit - paidLater);
-    invoice.paidAmount = Math.min(invoice.finalAmount || 0, upfront + paidLater);
+    invoice.remainingDebt = Math.max(0, credit - paidLater - applied);
+    invoice.paidAmount = Math.min(invoice.finalAmount || 0, upfront + paidLater + applied);
     invoice.isPaid = invoice.remainingDebt <= 0;
     return invoice.save();
+  }
+
+  private reconcilePromise: Promise<void> | null = null;
+
+  /**
+   * Invoice remaining must be that invoice's own credit, minus payments and any earlier
+   * customer credit. A payment or بستانکاری must not leave the full amount sitting on the invoice,
+   * and it must not be copied onto the customer's other invoices.
+   * Runs once per process, then again for a customer after their ledger changes.
+   */
+  async ensureReconciled(): Promise<void> {
+    if (!this.reconcilePromise) {
+      this.reconcilePromise = this.runReconcile().catch((err) => {
+        this.reconcilePromise = null;
+        throw err;
+      });
+    }
+    await this.reconcilePromise;
+  }
+
+  private async runReconcile(): Promise<void> {
+    const customers = await this.customerModel.find({ isActive: true }).select('_id balance').lean().exec();
+    const grouped = await this.invoiceModel
+      .aggregate([
+        { $match: { type: 'sale', creditAmount: { $gt: 0 }, customerId: { $exists: true } } },
+        {
+          $group: {
+            _id: '$customerId',
+            sumRem: { $sum: '$remainingDebt' },
+            missingDue: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $gt: ['$remainingDebt', 0] }, { $eq: [{ $ifNull: ['$dueDate', null] }, null] }] },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+    const byId = new Map(grouped.map((g) => [String(g._id), g]));
+    for (const c of customers) {
+      const row = byId.get(String(c._id));
+      if (!row) continue;
+      if ((row.sumRem || 0) > Math.max(0, c.balance || 0) + 1 || row.missingDue > 0) {
+        await this.alignInvoiceDebts(String(c._id));
+      }
+    }
+  }
+
+  /**
+   * Spread account credit that is not backed by a later payment onto the newest open invoices.
+   * Never unwinds an application that is already there (a later manual debt stays on the account).
+   */
+  async alignInvoiceDebts(customerId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(customerId)) return;
+    const customer = await this.customerModel.findById(customerId).exec();
+    if (!customer) return;
+    const invoices = await this.invoiceModel
+      .find({ customerId: customer._id, type: 'sale', creditAmount: { $gt: 0 } })
+      .sort({ invoiceDate: -1, createdAt: -1 })
+      .exec();
+    const rows: { inv: InvoiceDocument; paidLater: number; base: number }[] = [];
+    let sumBase = 0;
+    let currentApplied = 0;
+    for (const inv of invoices) {
+      const paidLater = await this.getPaidLater(inv._id as Types.ObjectId);
+      const base = Math.max(0, (inv.creditAmount || 0) - paidLater);
+      rows.push({ inv, paidLater, base });
+      sumBase += base;
+      currentApplied += Math.min(inv.creditApplied || 0, base);
+    }
+    const desired = Math.max(currentApplied, Math.max(0, sumBase - Math.max(0, customer.balance || 0)));
+    let left = desired;
+    for (const row of rows) {
+      const apply = Math.min(row.base, Math.max(0, left));
+      left -= apply;
+      const remaining = Math.max(0, row.base - apply);
+      const upfront = Math.max(0, (row.inv.finalAmount || 0) - (row.inv.creditAmount || 0));
+      const paidAmount = Math.min(row.inv.finalAmount || 0, upfront + row.paidLater + apply);
+      const isPaid = remaining <= 0;
+      const days = row.inv.dueDays || 15;
+      const needsDue = remaining > 0 && !row.inv.dueDate;
+      const dueDate = needsDue
+        ? new Date(new Date(row.inv.invoiceDate || Date.now()).getTime() + days * 86400000)
+        : row.inv.dueDate;
+      const same =
+        (row.inv.creditApplied || 0) === apply &&
+        (row.inv.remainingDebt || 0) === remaining &&
+        !!row.inv.isPaid === isPaid &&
+        !needsDue;
+      if (same) continue;
+      row.inv.creditApplied = apply;
+      row.inv.remainingDebt = remaining;
+      row.inv.paidAmount = paidAmount;
+      row.inv.isPaid = isPaid;
+      if (needsDue && dueDate) {
+        row.inv.dueDate = dueDate;
+        row.inv.dueDays = days;
+      }
+      await row.inv.save();
+    }
   }
 
   /** Put the credit portion of a sale invoice on the customer's account. */
@@ -356,6 +492,7 @@ export class CustomersService implements OnModuleInit {
         await this.syncInvoicePayment(inv);
       }
     }
+    await this.alignInvoiceDebts(customerId);
 
     return { customer: await this.findOne(customerId), transaction };
   }
@@ -381,6 +518,7 @@ export class CustomersService implements OnModuleInit {
       const inv = await this.invoiceModel.findById(a.invoiceId).exec();
       if (inv) await this.syncInvoicePayment(inv);
     }
+    await this.alignInvoiceDebts(String(tx.customer));
     return { message: 'تراکنش حذف شد' };
   }
 

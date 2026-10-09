@@ -136,7 +136,7 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma }: CheckoutResult) => {
+  const submit = async ({ customer, terms, asProforma, fulfillment }: CheckoutResult) => {
     const final = termsFinal(subtotal, terms);
     const input = {
       type: 'sale' as const,
@@ -150,6 +150,7 @@ export const PosTab: React.FC = () => {
       finalAmount: final,
       totalWeightKg: Math.round(totalKg * 10) / 10,
       ...termsPayload(final, terms),
+      fulfillment: asProforma ? 'shop' as const : fulfillment,
     };
     try {
       setSubmitting(true);

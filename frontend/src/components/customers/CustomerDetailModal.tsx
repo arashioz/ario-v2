@@ -79,6 +79,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [loading, setLoading] = useState(false);
   const settings = useSettings();
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -133,6 +137,41 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       afterChange();
     } catch (err) {
       showNotification({ title: 'حذف نشد', message: apiErrorMessage(err, 'خطا در حذف تراکنش'), type: 'error' });
+    }
+  };
+
+  const startEditProfile = () => {
+    if (!customer) return;
+    setEditName(customer.name);
+    setEditPhone(customer.phoneNumber || '');
+    setEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!customer || !editName.trim()) return;
+    setSavingProfile(true);
+    try {
+      const updated = await customersService.updateCustomer(customer._id, {
+        name: editName.trim(),
+        phoneNumber: editPhone.trim(),
+      });
+      setCustomer(updated);
+      setEditingProfile(false);
+      showNotification({ title: 'ذخیره شد', message: 'نام و شماره مشتری روی پرونده و فاکتورها به‌روز شد.', type: 'success' });
+      onChanged?.();
+    } catch (err) {
+      showNotification({ title: 'ذخیره نشد', message: apiErrorMessage(err, 'خطا در ویرایش مشتری'), type: 'error' });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const changeDue = async (inv: Invoice, dueDays: number) => {
+    try {
+      const updated = await invoicesService.setDueDays(inv._id, dueDays);
+      setInvoices((list) => list.map((i) => (i._id === inv._id ? updated : i)));
+    } catch (err) {
+      showNotification({ title: 'سررسید عوض نشد', message: apiErrorMessage(err, 'خطا'), type: 'error' });
     }
   };
 
@@ -278,19 +317,59 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div>
                     <h3 className="text-base font-black text-slate-800">{customer.name}</h3>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-mono" dir="ltr">
-                      <span>{customer.phoneNumber}</span>
+                      <span>{customer.phoneNumber || 'بدون شماره'}</span>
                     </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleDelete}
-                  className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
-                  title="حذف مشتری"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={startEditProfile}
+                    className="p-2 rounded-xl text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition"
+                    title="ویرایش نام و شماره"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="p-2 rounded-xl text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
+                    title="حذف مشتری"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {editingProfile && (
+                <div className="space-y-2 rounded-xl border border-sky-100 bg-sky-50/40 p-2.5">
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="نام مشتری"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
+                  />
+                  <input
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="شماره همراه"
+                    inputMode="tel"
+                    dir="ltr"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-mono text-left bg-white"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => void saveProfile()}
+                      disabled={savingProfile || !editName.trim()}
+                      className="flex-1 py-2 rounded-xl bg-sky-600 text-white text-[11px] font-bold disabled:opacity-40"
+                    >
+                      {savingProfile ? 'در حال ذخیره…' : 'ذخیره نام و شماره'}
+                    </button>
+                    <button onClick={() => setEditingProfile(false)} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-500">
+                      انصراف
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Balance Box */}
               <div
@@ -535,7 +614,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
-                            {inv.isPaid ? 'تسویه شده' : `نسیه: ${formatToman(inv.remainingDebt)}`}
+                            {inv.isPaid ? 'تسویه شده' : `نسیه همین فاکتور: ${formatToman(inv.remainingDebt)}`}
+                            {!inv.isPaid && inv.dueDate && new Date(inv.dueDate).getTime() < Date.now() ? ' · تاخیر' : ''}
                           </span>
                           <ChevronLeft className="w-4 h-4 text-slate-400" />
                         </div>
@@ -596,6 +676,24 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             <MessageSquare className="w-3.5 h-3.5" />
                             گزارش پیامکی
                           </button>
+                        </div>
+                      )}
+                      {inv.type === 'sale' && inv.remainingDebt > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-slate-400">
+                            سررسید {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('fa-IR') : '۱۵ روز'}
+                          </span>
+                          {[7, 15, 30, 45, 60].map((d) => (
+                            <button
+                              key={d}
+                              onClick={() => void changeDue(inv, d)}
+                              className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold border ${
+                                (inv.dueDays ?? 15) === d ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-500 border-slate-200'
+                              }`}
+                            >
+                              {d.toLocaleString('fa-IR')}
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>

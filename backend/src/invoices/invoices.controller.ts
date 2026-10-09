@@ -51,6 +51,11 @@ export class InvoicesController {
     return this.invoicesService.update(id, dto, actorName(req));
   }
 
+  @Post(':id/due')
+  setDue(@Param('id') id: string, @Body() body: { dueDays?: number }) {
+    return this.invoicesService.setDueDays(id, body?.dueDays ?? 15);
+  }
+
   /** POST instead of DELETE so the confirmation password travels in the body reliably. */
   @Post(':id/delete')
   remove(@Param('id') id: string, @Body() body: { password?: string }, @Request() req: any) {

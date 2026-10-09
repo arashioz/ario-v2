@@ -21,6 +21,7 @@ export interface CheckoutResult {
   customer: Customer | null;
   terms: PaymentTerms;
   asProforma: boolean;
+  fulfillment: 'shop' | 'factory';
 }
 
 interface Props {
@@ -58,6 +59,7 @@ export const CheckoutSheet: React.FC<Props> = ({
 }) => {
   const { showNotification } = useNotification();
   const bulk = saleType !== 'retail';
+  const highTonnage = totalKg >= (settings.wholesaleMinKg || 0);
   const [step, setStep] = useState<'customer' | 'payment'>('customer');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [walkIn, setWalkIn] = useState(false);
@@ -71,6 +73,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [terms, setTerms] = useState<PaymentTerms>(emptyTerms());
   const [asProforma, setAsProforma] = useState(false);
+  const [fulfillment, setFulfillment] = useState<'shop' | 'factory'>('shop');
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -84,6 +87,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setWalkPhone('');
     setTerms(emptyTerms(bulk ? 'credit' : 'pos'));
     setAsProforma(bulk && settings.proformaForBulk);
+    setFulfillment('shop');
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -167,7 +171,13 @@ export const CheckoutSheet: React.FC<Props> = ({
         setSaving(false);
       }
     }
-    onSubmit({ customer: buyer, terms, asProforma: bulk && asProforma && !!buyer });
+    const shipFrom = highTonnage ? fulfillment : 'shop';
+    onSubmit({
+      customer: buyer,
+      terms,
+      asProforma: shipFrom === 'shop' && bulk && asProforma && !!buyer,
+      fulfillment: shipFrom,
+    });
   };
 
   const header = (
@@ -416,6 +426,27 @@ export const CheckoutSheet: React.FC<Props> = ({
           <span>مبلغ نهایی</span>
           <span className="font-mono text-sky-700">{formatToman(final)}</span>
         </div>
+        {highTonnage && (
+          <button
+            type="button"
+            onClick={() =>
+              setFulfillment((f) => {
+                const next = f === 'shop' ? 'factory' : 'shop';
+                if (next === 'factory') setAsProforma(false);
+                return next;
+              })
+            }
+            className="w-full flex items-center justify-between pt-1.5 text-[11px] text-slate-500"
+          >
+            <span>ارسال این بار</span>
+            <span className={`font-bold ${fulfillment === 'factory' ? 'text-amber-700' : 'text-slate-700'}`}>
+              {fulfillment === 'factory' ? 'از کارخانه' : 'از دفتر'}
+            </span>
+          </button>
+        )}
+        {highTonnage && fulfillment === 'factory' && (
+          <p className="text-[10px] text-amber-700 leading-5">از موجودی دفتر کم نمی‌شود.</p>
+        )}
         {credit > 0 && customer && (
           <div className="flex justify-between text-rose-700">
             <span>مانده مشتری بعد از این فاکتور</span>

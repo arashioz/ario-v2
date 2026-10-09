@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Wallet,
+  ArrowDownLeft,
   TrendingDown,
   Truck,
   Users,
@@ -16,22 +17,24 @@ import { todayYmd } from '../../lib/jalali';
 import { useNotification } from '../../context/NotificationContext';
 import { formatToman, parseToman } from '../../lib/format';
 
+type EntryKind = 'store' | 'withdrawal' | 'deposit';
+
 interface NewExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  defaultIsWithdrawal?: boolean;
+  defaultKind?: EntryKind;
 }
 
 export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  defaultIsWithdrawal = false,
+  defaultKind = 'store',
 }) => {
   const { showNotification } = useNotification();
 
-  const [isWithdrawal, setIsWithdrawal] = useState<boolean>(defaultIsWithdrawal);
+  const [kind, setKind] = useState<EntryKind>(defaultKind);
   const [expenseType, setExpenseType] = useState<
     'shipping' | 'salary' | 'utilities' | 'rent' | 'other'
   >('shipping');
@@ -41,7 +44,19 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer' | 'cash'>('card');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setKind(defaultKind);
+    setAmountStr('');
+    setDescription('');
+    setDate(todayYmd());
+  }, [isOpen, defaultKind]);
+
   if (!isOpen) return null;
+
+  const isWithdrawal = kind === 'withdrawal';
+  const isDeposit = kind === 'deposit';
+  const personal = isWithdrawal || isDeposit;
 
   const rawAmount = parseInt(amountStr.replace(/[^0-9]/g, ''), 10) || 0;
 
@@ -53,6 +68,20 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
     'پیش‌پرداخت شخصی',
     'خرید وسایل و پوشاک',
   ];
+  const quickDepositTags = ['واریز درآمد دیگر', 'بازگشت برداشت', 'تسویه بدهی مدیر'];
+
+  const unlockPersonal = () => {
+    if (sessionStorage.getItem('ario_profit_unlocked') === '1') return true;
+    const pass = window.prompt('برای حساب مدیر، رمز عبور را وارد کنید:');
+    if (pass !== 'arash5Gs200') {
+      if (pass !== null) {
+        showNotification({ title: 'رمز اشتباه', message: 'رمز عبور وارد شده نادرست است.', type: 'error' });
+      }
+      return false;
+    }
+    sessionStorage.setItem('ario_profit_unlocked', '1');
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +97,7 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
     try {
       setLoading(true);
       await expensesService.create({
-        type: isWithdrawal ? 'withdrawal' : expenseType,
+        type: isDeposit ? 'deposit' : isWithdrawal ? 'withdrawal' : expenseType,
         amount: rawAmount,
         description: description.trim(),
         date,
@@ -78,9 +107,11 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
 
       showNotification({
         title: 'ثبت موفق',
-        message: isWithdrawal
-          ? 'برداشت شخصی مدیر با موفقیت ثبت گردید.'
-          : 'هزینه فروشگاه با موفقیت در سیستم ثبت شد.',
+        message: isDeposit
+          ? 'واریز ثبت شد و از بدهی برداشت مدیر کم می‌شود.'
+          : isWithdrawal
+            ? 'برداشت شخصی مدیر با موفقیت ثبت گردید.'
+            : 'هزینه فروشگاه با موفقیت در سیستم ثبت شد.',
         type: 'success',
       });
 
@@ -108,21 +139,21 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
           <div className="flex items-center gap-3">
             <div
               className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                isWithdrawal
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-rose-100 text-rose-700'
+                isDeposit ? 'bg-emerald-100 text-emerald-700' : isWithdrawal ? 'bg-purple-100 text-purple-700' : 'bg-rose-100 text-rose-700'
               }`}
             >
-              {isWithdrawal ? <Wallet className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+              {isDeposit ? <ArrowDownLeft className="w-5 h-5" /> : isWithdrawal ? <Wallet className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-800">
-                {isWithdrawal ? 'ثبت برداشت شخصی مدیر' : 'ثبت هزینه جاری مغازه'}
+                {isDeposit ? 'ثبت واریز' : isWithdrawal ? 'ثبت برداشت شخصی مدیر' : 'ثبت هزینه جاری مغازه'}
               </h2>
               <p className="text-[11px] text-slate-400">
-                {isWithdrawal
-                  ? 'برداشت‌های مدیر از دخل یا حساب (به‌صورت جدا از سود مغازه گزارش می‌شود)'
-                  : 'هزینه‌های عملیاتی جهت کسر از سود ناخالص فروشگاه'}
+                {isDeposit
+                  ? 'درآمد دیگر یا پولی که برمی‌گردد؛ از بدهی برداشت مدیر کم می‌شود'
+                  : isWithdrawal
+                    ? 'برداشت مدیر از دخل یا حساب'
+                    : 'هزینه‌های عملیاتی جهت کسر از سود ناخالص فروشگاه'}
               </p>
             </div>
           </div>
@@ -135,53 +166,42 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         </div>
 
         {/* Switcher: Withdrawal vs Store Expense */}
-        <div className="mt-3 p-1.5 bg-slate-100 rounded-2xl flex items-center gap-1">
+        <div className="mt-3 p-1.5 bg-slate-100 rounded-2xl grid grid-cols-3 gap-1">
           <button
             type="button"
-            onClick={() => setIsWithdrawal(false)}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
-              !isWithdrawal
-                ? 'bg-white text-rose-600 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+            onClick={() => setKind('store')}
+            className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+              kind === 'store' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'
             }`}
           >
-            <TrendingDown className="w-4 h-4" />
-            <span>هزینه جاری مغازه</span>
+            <TrendingDown className="w-3.5 h-3.5" />
+            هزینه
           </button>
           <button
             type="button"
-            onClick={() => {
-              const isAuth = sessionStorage.getItem('ario_profit_unlocked') === '1';
-              if (!isAuth) {
-                const pass = window.prompt('برای ثبت برداشت شخصی مدیر، رمز عبور را وارد کنید:');
-                if (pass !== 'arash5Gs200') {
-                  if (pass !== null) {
-                    showNotification({
-                      title: 'رمز اشتباه',
-                      message: 'رمز عبور وارد شده نادرست است.',
-                      type: 'error',
-                    });
-                  }
-                  return;
-                }
-                sessionStorage.setItem('ario_profit_unlocked', '1');
-              }
-              setIsWithdrawal(true);
-            }}
-            className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
-              isWithdrawal
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-500 hover:text-slate-700'
+            onClick={() => unlockPersonal() && setKind('withdrawal')}
+            className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+              kind === 'withdrawal' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500'
             }`}
           >
-            <Wallet className="w-4 h-4" />
-            <span>برداشت شخصی مدیر</span>
+            <Wallet className="w-3.5 h-3.5" />
+            برداشت
+          </button>
+          <button
+            type="button"
+            onClick={() => unlockPersonal() && setKind('deposit')}
+            className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+              kind === 'deposit' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            <ArrowDownLeft className="w-3.5 h-3.5" />
+            واریز
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-3 space-y-3">
           {/* Store Expense Categories Selector */}
-          {!isWithdrawal && (
+          {kind === 'store' && (
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">دسته‌بندی هزینه</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -215,18 +235,20 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
           )}
 
           {/* Manager Quick Tags */}
-          {isWithdrawal && (
+          {personal && (
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">
-                برچسب‌های پرتکرار برداشت مدیر
+                {isDeposit ? 'بابت واریز' : 'برچسب‌های پرتکرار برداشت مدیر'}
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {quickWithdrawalTags.map((tag) => (
+                {(isDeposit ? quickDepositTags : quickWithdrawalTags).map((tag) => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => setDescription(tag)}
-                    className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition active:scale-95"
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition active:scale-95 ${
+                      isDeposit ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'
+                    }`}
                   >
                     + {tag}
                   </button>
@@ -269,7 +291,7 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
               <JalaliDateField value={date} onChange={setDate} title="تاریخ هزینه" max={todayYmd()} />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">محل پرداخت</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">{isDeposit ? 'واریز به' : 'محل پرداخت'}</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
@@ -285,16 +307,18 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
           {/* Description */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              شرح دقیق {isWithdrawal ? 'برداشت' : 'هزینه'}
+              شرح دقیق {isDeposit ? 'واریز' : isWithdrawal ? 'برداشت' : 'هزینه'}
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={
-                isWithdrawal
-                  ? 'مثلاً: برداشت ارش بابت قسط وام، هزینه خرید برای خانه...'
-                  : 'مثلاً: کرایه اسنپ باربری به مقصد طبس...'
+                isDeposit
+                  ? 'مثلاً: درآمد دیگر، یا پولی که بابت برداشت قبلی برگشته'
+                  : isWithdrawal
+                    ? 'مثلاً: برداشت ارش بابت قسط وام، هزینه خرید برای خانه...'
+                    : 'مثلاً: کرایه اسنپ باربری به مقصد طبس...'
               }
               className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-sky-500"
             />
@@ -305,9 +329,7 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
             type="submit"
             disabled={loading || rawAmount <= 0}
             className={`w-full py-3.5 rounded-2xl font-extrabold text-sm text-white shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${
-              isWithdrawal
-                ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/30'
-                : 'bg-sky-600 hover:bg-sky-700 shadow-sky-600/30'
+              isDeposit ? 'bg-emerald-600 shadow-emerald-600/30' : isWithdrawal ? 'bg-purple-600 shadow-purple-600/30' : 'bg-sky-600 shadow-sky-600/30'
             }`}
           >
             <CheckCircle2 className="w-5 h-5" />

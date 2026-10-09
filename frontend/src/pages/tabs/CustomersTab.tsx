@@ -415,6 +415,11 @@ export const CustomersTab: React.FC = () => {
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-slate-800">{customer.name}</h3>
+                      {(customer.overdueCount || 0) > 0 && (
+                        <span className="mt-1 inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600 text-white">
+                          تاخیر در پرداخت · {formatToman(customer.overdueAmount || 0)}
+                        </span>
+                      )}
                       <span className="text-xs text-slate-400 font-mono mt-0.5 block" dir="ltr">
                         {customer.phoneNumber}
                       </span>

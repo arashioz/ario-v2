@@ -13,6 +13,7 @@ export interface InvoiceFilters {
   min: number;
   max: number;
   sort: 'new' | 'old' | 'amount';
+  source: 'all' | 'shop' | 'factory';
 }
 
 export const DEFAULT_INVOICE_FILTERS: InvoiceFilters = {
@@ -23,6 +24,7 @@ export const DEFAULT_INVOICE_FILTERS: InvoiceFilters = {
   min: 0,
   max: 0,
   sort: 'new',
+  source: 'all',
 };
 
 const TYPE_OPTS = [
@@ -71,6 +73,8 @@ const paidWith = (inv: Invoice, m: string) =>
 
 export function applyInvoiceFilters(list: Invoice[], f: InvoiceFilters): Invoice[] {
   const out = list.filter((inv) => {
+    if (f.source === 'factory' && inv.fulfillment !== 'factory') return false;
+    if (f.source === 'shop' && inv.fulfillment === 'factory') return false;
     if (f.type !== 'all' && inv.type !== f.type) return false;
     if (f.saleType !== 'all' && (inv.type !== 'sale' || inv.saleType !== f.saleType)) return false;
     if (f.status === 'credit' && !isCredit(inv)) return false;
@@ -93,6 +97,7 @@ export function activeInvoiceFilters(f: InvoiceFilters): { key: keyof InvoiceFil
   for (const key of ['type', 'saleType', 'status', 'method', 'sort'] as const) {
     if (f[key] !== DEFAULT_INVOICE_FILTERS[key]) chips.push({ key, label: LABELS[key][f[key]], reset: { [key]: DEFAULT_INVOICE_FILTERS[key] } });
   }
+  if (f.source !== 'all') chips.push({ key: 'source', label: f.source === 'factory' ? 'از کارخانه' : 'از دفتر', reset: { source: 'all' } });
   if (f.min || f.max) {
     const fmt = (n: number) => n.toLocaleString('fa-IR');
     const label = f.min && f.max ? `${fmt(f.min)} تا ${fmt(f.max)}` : f.min ? `از ${fmt(f.min)}` : `تا ${fmt(f.max)}`;

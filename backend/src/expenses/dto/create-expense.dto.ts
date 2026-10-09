@@ -9,7 +9,7 @@ import {
 import { ExpenseType } from '../schemas/expense.schema';
 
 export class CreateExpenseDto {
-  @IsEnum(['withdrawal', 'shipping', 'salary', 'utilities', 'rent', 'other'], {
+  @IsEnum(['withdrawal', 'deposit', 'shipping', 'salary', 'utilities', 'rent', 'other'], {
     message: 'نوع هزینه نامعتبر است',
   })
   type: ExpenseType;

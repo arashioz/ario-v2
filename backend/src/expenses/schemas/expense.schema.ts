@@ -5,6 +5,7 @@ export type ExpenseDocument = Expense & Document;
 
 export type ExpenseType =
   | 'withdrawal' // برداشت شخصی مدیر
+  | 'deposit'    // واریز مدیر یا درآمد دیگر؛ از بدهی برداشت کم می‌شود
   | 'shipping'   // ارسال بار و کرایه
   | 'salary'     // حقوق و دستمزد پرسنل
   | 'utilities'  // قبوض و انرژی و نرم‌افزار
@@ -15,7 +16,7 @@ export type ExpenseType =
 export class Expense {
   @Prop({
     type: String,
-    enum: ['withdrawal', 'shipping', 'salary', 'utilities', 'rent', 'other'],
+    enum: ['withdrawal', 'deposit', 'shipping', 'salary', 'utilities', 'rent', 'other'],
     default: 'other',
     required: true,
     index: true,

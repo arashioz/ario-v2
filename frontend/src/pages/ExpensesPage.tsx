@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   Wallet,
+  ArrowDownLeft,
   TrendingUp,
   Truck,
   Users,
@@ -84,7 +85,7 @@ export const ExpensesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'withdrawals' | 'shipping' | 'salary' | 'store'>('all');
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
-  const [defaultIsWithdrawal, setDefaultIsWithdrawal] = useState(false);
+  const [entryKind, setEntryKind] = useState<'store' | 'withdrawal' | 'deposit'>('store');
 
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
 
@@ -138,7 +139,8 @@ export const ExpensesPage: React.FC = () => {
 
   // Filter list
   const filteredExpenses = expenses.filter((e) => {
-    if (activeTab === 'withdrawals' && !e.isPersonalWithdrawal && e.type !== 'withdrawal') {
+    const personal = e.type === 'deposit' || e.type === 'withdrawal' || e.isPersonalWithdrawal;
+    if (activeTab === 'withdrawals' && !personal) {
       return false;
     }
     if (activeTab === 'shipping' && e.type !== 'shipping') {
@@ -147,7 +149,7 @@ export const ExpensesPage: React.FC = () => {
     if (activeTab === 'salary' && e.type !== 'salary') {
       return false;
     }
-    if (activeTab === 'store' && (e.isPersonalWithdrawal || e.type === 'withdrawal')) {
+    if (activeTab === 'store' && personal) {
       return false;
     }
     if (search.trim()) {
@@ -175,6 +177,7 @@ export const ExpensesPage: React.FC = () => {
   };
 
   const getCategoryIcon = (type: string, isWithdrawal: boolean) => {
+    if (type === 'deposit') return <ArrowDownLeft className="w-4 h-4 text-emerald-600" />;
     if (isWithdrawal || type === 'withdrawal') {
       return <Wallet className="w-4 h-4 text-purple-600" />;
     }
@@ -245,7 +248,7 @@ export const ExpensesPage: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                setDefaultIsWithdrawal(false);
+                setEntryKind('store');
                 setIsNewModalOpen(true);
               }}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-sky-600 text-white font-bold text-xs active:scale-[0.98]"
@@ -346,28 +349,45 @@ export const ExpensesPage: React.FC = () => {
                           <Wallet className="w-3.5 h-3.5 text-purple-200" />
                           <span>مجموع برداشت‌های شخصی مدیر</span>
                         </div>
-                        <button
-                          onClick={() => {
-                            setDefaultIsWithdrawal(true);
-                            setIsNewModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>برداشت جدید</span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEntryKind('deposit');
+                              setIsNewModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center gap-1"
+                          >
+                            <ArrowDownLeft className="w-3 h-3" />
+                            واریز
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEntryKind('withdrawal');
+                              setIsNewModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" />
+                            برداشت
+                          </button>
+                        </div>
                       </div>
 
-                      <h2 className="text-2xl font-black font-mono tracking-tight text-white">
-                        {(report?.profitAnalysis?.managerWithdrawals || 0).toLocaleString('fa-IR')}
-                        <span className="text-xs font-normal text-purple-200 mr-1.5">تومان</span>
-                      </h2>
-                      <div className="flex items-center justify-between text-[11px] text-purple-100/90 mt-1">
-                        <span>«ببینم چقدر برداشت کردم»: مجموع برداشت‌ها از دخل و حساب</span>
-                        <span className="font-mono bg-purple-900/40 px-2 py-0.5 rounded-lg border border-purple-400/20">
-                          {(report?.expensesSummary?.byType?.withdrawal?.count ?? 0).toLocaleString('fa-IR')} فقره برداشت
-                        </span>
+                      <div className="grid grid-cols-3 gap-2 mt-1">
+                        <div>
+                          <div className="text-[10px] text-purple-200">برداشت</div>
+                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerWithdrawals || 0).toLocaleString('fa-IR')}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-purple-200">واریز</div>
+                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerDeposits || 0).toLocaleString('fa-IR')}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-purple-200">مانده بدهی</div>
+                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerDebt || 0).toLocaleString('fa-IR')}</div>
+                        </div>
                       </div>
+                      <p className="text-[11px] text-purple-100/90 mt-2">واریز و درآمد دیگر از بدهی برداشت کم می‌شود.</p>
                     </div>
                   </div>
                 </div>
@@ -376,10 +396,10 @@ export const ExpensesPage: React.FC = () => {
                 <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex items-center justify-between">
                   <div>
                     <span className="text-[11px] font-bold text-slate-500">
-                      سود انباشته پس از کسر برداشت‌های شخصی مدیر:
+                      سود انباشته پس از کسر مانده بدهی مدیر:
                     </span>
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      سود مغازه منهای مجموع برداشت‌های شخصی
+                      سود مغازه منهای برداشت، به‌اضافه واریزها
                     </p>
                   </div>
                   <div className="text-left font-mono">
@@ -432,7 +452,7 @@ export const ExpensesPage: React.FC = () => {
 
                   <div className="p-3 bg-emerald-50/60 rounded-2xl border border-emerald-100">
                     <span className="text-[10px] text-emerald-700 font-bold block mb-1">
-                      سود ناخالص فروش
+                      جمع سود فاکتورها
                     </span>
                     <span className="font-mono font-black text-emerald-700">
                       {(report?.salesSummary?.grossProfit || 0).toLocaleString('fa-IR')}
@@ -466,6 +486,25 @@ export const ExpensesPage: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <div className="text-xs font-extrabold text-slate-800">۲۰ فاکتور آخر — قیمت فروش</div>
+                  {(report?.recentSales || []).length === 0 ? (
+                    <p className="text-[11px] text-slate-400">فاکتور فروشی در این بازه نیست.</p>
+                  ) : (
+                    report!.recentSales!.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between gap-2 text-[11px]">
+                        <div className="min-w-0">
+                          <span className="font-mono font-bold text-slate-700" dir="ltr">{inv.invoiceNumber}</span>
+                          <span className="text-slate-400 mr-1.5">{inv.customerName}</span>
+                        </div>
+                        <div className="text-left shrink-0">
+                          <div className="font-mono font-bold text-slate-800">{formatToman(inv.sellAmount)}</div>
+                          <div className="text-[10px] text-emerald-700">سود {formatToman(inv.profit)}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
                 <button
                   onClick={() => navigate('/profit')}
                   className="w-full text-right text-[10px] text-slate-500 bg-sky-50/60 rounded-2xl p-2.5 leading-5"
@@ -481,7 +520,7 @@ export const ExpensesPage: React.FC = () => {
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {[
               { id: 'all', label: 'همه هزینه‌ها' },
-              { id: 'withdrawals', label: 'برداشت‌های مدیر' },
+              { id: 'withdrawals', label: 'برداشت و واریز مدیر' },
               { id: 'store', label: 'هزینه‌های جاری مغازه' },
               { id: 'shipping', label: 'ارسال بار' },
               { id: 'salary', label: 'حقوق پرسنل' },
@@ -547,23 +586,20 @@ export const ExpensesPage: React.FC = () => {
               </div>
             ) : (
               filteredExpenses.map((exp) => {
-                const isWithdrawal = exp.isPersonalWithdrawal || exp.type === 'withdrawal';
+                const isDeposit = exp.type === 'deposit';
+                const isWithdrawal = !isDeposit && (exp.isPersonalWithdrawal || exp.type === 'withdrawal');
                 return (
                   <div
                     key={exp._id}
                     className={`bg-white rounded-2xl p-3 border transition hover:shadow-md ${
-                      isWithdrawal
-                        ? 'border-purple-200/80 bg-purple-50/20'
-                        : 'border-slate-100 hover:border-sky-200'
+                      isDeposit ? 'border-emerald-200 bg-emerald-50/30' : isWithdrawal ? 'border-purple-200/80 bg-purple-50/20' : 'border-slate-100 hover:border-sky-200'
                     }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
                         <div
                           className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 ${
-                            isWithdrawal
-                              ? 'bg-purple-100 text-purple-700'
-                              : 'bg-slate-100 text-slate-600'
+                            isDeposit ? 'bg-emerald-100 text-emerald-700' : isWithdrawal ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
                           }`}
                         >
                           {getCategoryIcon(exp.type, isWithdrawal)}
@@ -574,6 +610,11 @@ export const ExpensesPage: React.FC = () => {
                             <span className="text-xs font-black text-slate-800">
                               {exp.categoryName || 'هزینه'}
                             </span>
+                            {isDeposit && (
+                              <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                واریز
+                              </span>
+                            )}
                             {isWithdrawal && (
                               <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
                                 برداشت مدیر
@@ -582,7 +623,7 @@ export const ExpensesPage: React.FC = () => {
                           </div>
 
                           <p className="text-[11px] text-slate-600 font-medium mt-1">
-                            {isWithdrawal && !isUnlocked ? 'برداشت شخصی مدیر (محافظت‌شده)' : (exp.description || 'بدون شرح')}
+                            {(isWithdrawal || isDeposit) && !isUnlocked ? 'حساب مدیر (محافظت‌شده)' : (exp.description || 'بدون شرح')}
                           </p>
 
                           <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-2 font-mono">
@@ -599,13 +640,14 @@ export const ExpensesPage: React.FC = () => {
                       <div className="text-left shrink-0">
                         <div
                           className={`font-mono font-black text-sm ${
-                            isWithdrawal ? 'text-purple-700' : 'text-slate-800'
+                            isDeposit ? 'text-emerald-700' : isWithdrawal ? 'text-purple-700' : 'text-slate-800'
                           }`}
                         >
-                          {isWithdrawal && !isUnlocked ? (
+                          {(isWithdrawal || isDeposit) && !isUnlocked ? (
                             <span className="text-purple-400 font-mono text-xs tracking-widest">••••••••</span>
                           ) : (
                             <>
+                              {isDeposit ? '+' : isWithdrawal ? '−' : ''}
                               {exp.amount.toLocaleString('fa-IR')}
                               <span className="text-[10px] font-normal text-slate-400 mr-1">تومان</span>
                             </>
@@ -634,7 +676,7 @@ export const ExpensesPage: React.FC = () => {
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
         onSuccess={loadData}
-        defaultIsWithdrawal={defaultIsWithdrawal}
+        defaultKind={entryKind}
       />
     </IonPage>
   );

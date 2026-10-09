@@ -156,4 +156,15 @@ export class CreateInvoiceDto {
   @IsNumber()
   @Min(0)
   shippingCost?: number;
+
+  /** Days until the credit portion is due. Used when the invoice leaves a balance. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  dueDays?: number;
+
+  /** Where the goods ship from. factory does not reduce shop stock. */
+  @IsOptional()
+  @IsEnum(['shop', 'factory'])
+  fulfillment?: string;
 }

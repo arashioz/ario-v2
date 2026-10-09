@@ -188,7 +188,8 @@ export class InvoicesService {
     extra: { proformaNumber?: string; shippedAt?: Date } = {},
   ): Promise<InvoiceDocument> {
     const isSale = (dto.type || 'sale') === 'sale';
-    const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale);
+    const fromFactory = isSale && dto.fulfillment === 'factory';
+    const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory);
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     // Purchases on credit go on the supplier's account (see SuppliersService).
     const credit = this.creditPortion(dto);
@@ -197,9 +198,9 @@ export class InvoicesService {
       throw new BadRequestException('برای فروش نسیه، مشتری را انتخاب کنید');
     }
 
-    if (isSale) {
+    if (isSale && !fromFactory) {
       await this.shiftStock(items, -1);
-    } else {
+    } else if (!isSale) {
       await this.shiftStock(items, 1);
       for (const item of items) {
         if (item.unitPrice > 0) {
@@ -209,6 +210,8 @@ export class InvoicesService {
     }
 
     const customerPrevBalance = customer?.balance || 0;
+    const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : new Date();
+    const dueDays = credit > 0 ? Math.min(365, Math.max(0, Math.round(dto.dueDays ?? 15))) : 15;
     const invoice = new this.invoiceModel({
       invoiceNumber: await this.nextInvoiceNumber(isSale),
       type: dto.type || 'sale',
@@ -216,7 +219,7 @@ export class InvoicesService {
       customerId: customer ? customer._id : undefined,
       customerName: customer?.name || (isSale ? dto.customerName : canonicalSupplier(dto.customerName)),
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
-      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : new Date(),
+      invoiceDate,
       items,
       totalAmount: dto.totalAmount,
       discount: dto.discount || 0,
@@ -226,6 +229,10 @@ export class InvoicesService {
       splitDetails: dto.splitDetails || {},
       depositAccounts: this.depositAccounts(dto),
       creditAmount: credit,
+      creditApplied: 0,
+      dueDays,
+      dueDate: credit > 0 ? new Date(invoiceDate.getTime() + dueDays * 86400000) : undefined,
+      fulfillment: fromFactory ? 'factory' : 'shop',
       paidAmount: dto.finalAmount - credit,
       remainingDebt: credit,
       isPaid: credit === 0,
@@ -240,9 +247,11 @@ export class InvoicesService {
     await invoice.save();
     await this.syncShippingExpense(invoice, recordedByName);
 
-    if (isSale && credit > 0) {
+    if (isSale && credit > 0 && customer) {
       invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
       await invoice.save();
+      await this.customersService.alignInvoiceDebts(String(customer._id));
+      return this.findById(String(invoice._id));
     }
     if (!isSale) {
       await this.suppliersService.sync(invoice.customerName);
@@ -254,23 +263,29 @@ export class InvoicesService {
   async update(id: string, dto: CreateInvoiceDto, recordedByName: string): Promise<InvoiceDocument> {
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
+    const wasShop = isSale && invoice.fulfillment !== 'factory';
+    const willFactory = isSale && (dto.fulfillment ?? invoice.fulfillment) === 'factory';
 
     // Undo the old effects, then apply the new ones; restore on validation failure.
-    await this.shiftStock(invoice.items as any, isSale ? 1 : -1);
+    if (wasShop) await this.shiftStock(invoice.items as any, 1);
+    else if (!isSale) await this.shiftStock(invoice.items as any, -1);
     let prepared: Awaited<ReturnType<InvoicesService['prepareItems']>>;
     try {
-      prepared = await this.prepareItems(dto.items, isSale);
+      prepared = await this.prepareItems(dto.items, isSale && !willFactory);
     } catch (err) {
-      await this.shiftStock(invoice.items as any, isSale ? -1 : 1);
+      if (wasShop) await this.shiftStock(invoice.items as any, -1);
+      else if (!isSale) await this.shiftStock(invoice.items as any, 1);
       throw err;
     }
-    await this.shiftStock(prepared.items, isSale ? -1 : 1);
+    if (!willFactory && isSale) await this.shiftStock(prepared.items, -1);
+    else if (!isSale) await this.shiftStock(prepared.items, 1);
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const credit = this.creditPortion(dto);
     if (isSale && credit > 0 && !customer) {
-      await this.shiftStock(prepared.items, isSale ? 1 : -1);
-      await this.shiftStock(invoice.items as any, isSale ? -1 : 1);
+      if (!willFactory) await this.shiftStock(prepared.items, 1);
+      if (wasShop) await this.shiftStock(invoice.items as any, -1);
+      else if (!isSale) await this.shiftStock(invoice.items as any, 1);
       throw new BadRequestException('برای فروش نسیه، مشتری را انتخاب کنید');
     }
 
@@ -280,12 +295,17 @@ export class InvoicesService {
     }
 
     const previousSupplier = invoice.customerName;
+    const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : invoice.invoiceDate;
+    const dueDays = credit > 0 ? Math.min(365, Math.max(0, Math.round(dto.dueDays ?? invoice.dueDays ?? 15))) : invoice.dueDays;
     invoice.set({
       saleType: dto.saleType || invoice.saleType,
       customerId: customer ? customer._id : undefined,
       customerName: customer?.name || (isSale ? dto.customerName : dto.customerName && canonicalSupplier(dto.customerName)) || invoice.customerName,
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
-      invoiceDate: dto.invoiceDate ? new Date(dto.invoiceDate) : invoice.invoiceDate,
+      invoiceDate,
+      fulfillment: dto.fulfillment ?? invoice.fulfillment ?? 'shop',
+      dueDays,
+      ...(credit > 0 ? { dueDate: new Date(new Date(invoiceDate).getTime() + dueDays * 86400000) } : { dueDate: undefined }),
       items: prepared.items,
       totalAmount: dto.totalAmount,
       discount: dto.discount || 0,
@@ -310,24 +330,29 @@ export class InvoicesService {
       }
       return this.findById(id);
     }
-    if (credit > 0) {
+    if (credit > 0 && customer) {
       invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
+      await invoice.save();
     }
-    return this.customersService.syncInvoicePayment(invoice);
+    if (customer) await this.customersService.alignInvoiceDebts(String(customer._id));
+    return this.findById(id);
   }
 
   async remove(id: string, user: ActingUser, password?: string): Promise<{ message: string }> {
     await this.verifyPassword(user, password);
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
+    const fromFactory = isSale && invoice.fulfillment === 'factory';
 
-    await this.shiftStock(invoice.items as any, isSale ? 1 : -1);
+    if (isSale && !fromFactory) await this.shiftStock(invoice.items as any, 1);
+    else if (!isSale) await this.shiftStock(invoice.items as any, -1);
     if (invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)) {
       await this.expenseModel.deleteOne({ _id: invoice.shippingExpenseId }).exec();
     }
     await invoice.deleteOne();
     if (isSale) {
       await this.customersService.removeInvoiceDebt(invoice, true);
+      if (invoice.customerId) await this.customersService.alignInvoiceDebts(String(invoice.customerId));
     } else {
       await this.suppliersService.sync(invoice.customerName);
     }
@@ -396,6 +421,18 @@ export class InvoicesService {
     return this.findById(id);
   }
 
+  async setDueDays(id: string, days: number): Promise<InvoiceDocument> {
+    const invoice = await this.findById(id);
+    if (invoice.type !== 'sale' || !(invoice.creditAmount > 0)) {
+      throw new BadRequestException('سررسید فقط برای فاکتور نسیه است');
+    }
+    const dueDays = Math.min(365, Math.max(0, Math.round(Number(days) || 0)));
+    invoice.dueDays = dueDays;
+    invoice.dueDate = new Date(new Date(invoice.invoiceDate || Date.now()).getTime() + dueDays * 86400000);
+    await invoice.save();
+    return invoice;
+  }
+
   async findAll(query?: {
     type?: string;
     saleType?: string;
@@ -403,6 +440,7 @@ export class InvoicesService {
     search?: string;
     isPaid?: string;
   }): Promise<InvoiceDocument[]> {
+    await this.customersService.ensureReconciled();
     const filter: any = {};
 
     if (query?.type) filter.type = query.type;

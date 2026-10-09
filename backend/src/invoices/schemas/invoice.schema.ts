@@ -136,6 +136,24 @@ export class Invoice {
   @Prop({ default: 0 })
   creditAmount: number;
 
+  /**
+   * Earlier credit on the customer's account (بستانکاری) applied to this invoice.
+   * It reduces remainingDebt without counting as new money received.
+   */
+  @Prop({ default: 0 })
+  creditApplied: number;
+
+  /** Payment deadline for the credit portion. Defaults to 15 days after the invoice date. */
+  @Prop({ type: Date })
+  dueDate?: Date;
+
+  @Prop({ default: 15 })
+  dueDays: number;
+
+  /** shop: deduct shop stock. factory: goods leave the factory, shop stock is untouched. */
+  @Prop({ type: String, enum: ['shop', 'factory'], default: 'shop' })
+  fulfillment: string;
+
   /** Payments on migrated walk-in credit invoices that have no customer ledger. */
   @Prop({
     type: [{ _id: false, date: Date, amount: Number, method: String, accountId: String }],

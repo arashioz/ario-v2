@@ -82,7 +82,7 @@ export class AccountingService {
     const [invoices, products] = await Promise.all([
       this.invoiceModel
         .find()
-        .select('invoiceNumber type invoiceDate createdAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost items')
+        .select('invoiceNumber type invoiceDate createdAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost fulfillment items')
         .lean(),
       this.productModel.find().select('name unit weightPerUnitKg buyPrice stock').lean(),
     ]);
