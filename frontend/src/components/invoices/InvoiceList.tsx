@@ -55,7 +55,10 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
             {inv.fulfillment === 'factory' && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">از کارخانه</span>}
             {isOverdue(inv) && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-600 text-white">تاخیر</span>}
           </div>
-          <h4 className="text-xs font-bold text-slate-800 mt-1 truncate">{inv.customerName}</h4>
+          <h4 className="text-xs font-bold text-slate-800 mt-1 truncate">
+            {inv.customerName}
+            {inv.branchName ? ` · ${inv.branchName}` : ''}
+          </h4>
         </div>
       </div>
       <div className="text-left shrink-0">

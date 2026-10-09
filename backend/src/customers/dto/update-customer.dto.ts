@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsNumber, Min } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, IsNumber, Min } from 'class-validator';
 import { CUSTOMER_KINDS, type CustomerKind } from '../schemas/customer.schema';
 
 export class UpdateCustomerDto {
@@ -17,6 +17,11 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  branches?: string[];
 
   @IsOptional()
   @IsString()

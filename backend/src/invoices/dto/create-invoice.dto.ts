@@ -115,6 +115,10 @@ export class CreateInvoiceDto {
 
   @IsOptional()
   @IsString()
+  branchName?: string;
+
+  @IsOptional()
+  @IsString()
   invoiceDate?: string;
 
   @IsArray()

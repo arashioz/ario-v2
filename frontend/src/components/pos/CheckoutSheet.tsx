@@ -37,6 +37,7 @@ export interface CheckoutResult {
   terms: PaymentTerms;
   asProforma: boolean;
   fulfillment: 'shop' | 'factory';
+  branchName?: string;
   /** Parent-company price per unit, keyed by product id. Hidden on the customer invoice. */
   factoryUnitCosts?: Record<string, number>;
   /** Customer price per unit after a wholesale markup or a hand-typed price. */
@@ -97,6 +98,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [terms, setTerms] = useState<PaymentTerms>(emptyTerms());
   const [asProforma, setAsProforma] = useState(false);
   const [fulfillment, setFulfillment] = useState<'shop' | 'factory'>('shop');
+  const [branch, setBranch] = useState('');
   const [factoryCosts, setFactoryCosts] = useState<Record<string, number>>({});
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
   const [margins, setMargins] = useState<Record<string, number>>({});
@@ -116,6 +118,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setAsProforma(bulk && settings.proformaForBulk);
     const fromFactory = factoryOn && shipFrom === 'factory';
     setFulfillment(fromFactory ? 'factory' : 'shop');
+    setBranch('');
     setFactoryCosts(Object.fromEntries(factoryLines.map((l) => [l.productId, l.buyPrice || 0])));
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
     setMargins(Object.fromEntries(factoryLines.map((l) => [l.productId, wholesaleMarkupPercent(l.buyPrice, l.priceWholesale)])));
@@ -155,10 +158,14 @@ export const CheckoutSheet: React.FC<Props> = ({
   const final = termsFinal(goodsTotal, terms);
   const credit = termsCredit(final, terms);
   const walkInNamed = !customer && !!walkName.trim();
-  const error = termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
+  const branches = (customer?.branches || []).map((b) => b.trim()).filter(Boolean);
+  const branchError = branches.length > 0 && !branches.includes(branch) ? 'شعبه را انتخاب کنید' : '';
+  const error = branchError || termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
 
   const pick = (c: Customer | null) => {
+    const list = (c?.branches || []).map((b) => b.trim()).filter(Boolean);
     setCustomer(c);
+    setBranch(list.length === 1 ? list[0] : '');
     setWalkIn(!c);
     setStep('payment');
   };
@@ -215,6 +222,7 @@ export const CheckoutSheet: React.FC<Props> = ({
       terms,
       asProforma: bulk && asProforma && !!buyer,
       fulfillment: fromFactory ? 'factory' : 'shop',
+      branchName: branches.includes(branch) ? branch : undefined,
       factoryUnitCosts: fromFactory ? factoryCosts : undefined,
       factorySellPrices: fromFactory || (bulk && asProforma) ? sellPrices : undefined,
     });
@@ -394,6 +402,23 @@ export const CheckoutSheet: React.FC<Props> = ({
         </div>
         <span className="text-[11px] font-bold text-sky-600">{customer ? 'تغییر' : 'انتخاب مشتری'}</span>
       </button>
+      {branches.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold text-slate-500">ارسال برای کدام شعبه</div>
+          <div className="flex flex-wrap gap-1.5">
+            {branches.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setBranch(name)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${branch === name ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200'}`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!customer && (
         <div className="grid grid-cols-2 gap-2 -mt-2">

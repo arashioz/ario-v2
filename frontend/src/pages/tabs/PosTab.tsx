@@ -142,7 +142,7 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices }: CheckoutResult) => {
+  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName }: CheckoutResult) => {
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
       const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
@@ -170,6 +170,7 @@ export const PosTab: React.FC = () => {
       totalWeightKg: Math.round(totalKg * 10) / 10,
       ...termsPayload(final, terms),
       fulfillment,
+      branchName,
     };
     try {
       setSubmitting(true);

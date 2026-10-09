@@ -103,6 +103,10 @@ export class Invoice {
   @Prop({ trim: true, default: '' })
   customerPhone?: string;
 
+  /** Which of the customer's branches this shipment is for. Empty when the customer has no branches. */
+  @Prop({ trim: true, default: '' })
+  branchName?: string;
+
   @Prop({ type: Date, default: Date.now })
   invoiceDate: Date; // تاریخ فاکتور قابل انتخاب و ویرایش با تقویم
 

@@ -21,6 +21,15 @@ export class ProformasService {
     private settings: SettingsService,
   ) {}
 
+  private branchName(branches: string[] | undefined, raw?: string) {
+    const list = (branches || []).map((b) => String(b || '').trim()).filter(Boolean);
+    const name = String(raw || '').trim();
+    if (!list.length) return '';
+    if (!name) throw new BadRequestException('شعبه مشتری را انتخاب کنید');
+    if (!list.includes(name)) throw new BadRequestException('این شعبه برای مشتری تعریف نشده');
+    return name;
+  }
+
   private async assertFactory() {
     const settings = await this.settings.get();
     if (!settings.factorySalesEnabled) throw new BadRequestException('فروش از کارخانه در تنظیمات خاموش است');
@@ -73,6 +82,7 @@ export class ProformasService {
       customerId: customer._id,
       customerName: customer.name,
       customerPhone: customer.phoneNumber || '',
+      branchName: this.branchName(customer.branches, dto.branchName),
       orderDate: dto.invoiceDate ? new Date(dto.invoiceDate) : new Date(),
       items,
       totalAmount: dto.totalAmount,
@@ -140,6 +150,7 @@ export class ProformasService {
     if (t.paidAmount !== undefined) doc.paidAmount = t.paidAmount;
     if (t.discount !== undefined) doc.discount = t.discount;
     if (t.notes !== undefined) doc.notes = t.notes;
+    if (t.branchName !== undefined) doc.branchName = t.branchName.trim();
     if (t.fulfillment === 'shop' || t.fulfillment === 'factory') doc.fulfillment = t.fulfillment;
     if (t.items?.length) {
       for (const row of t.items) {
@@ -156,10 +167,17 @@ export class ProformasService {
     this.checkPayment(doc);
   }
 
+  private async applyBranch(doc: ProformaDocument) {
+    if (!doc.customerId) return;
+    const customer = await this.customerModel.findById(doc.customerId).select('branches').lean();
+    doc.branchName = this.branchName(customer?.branches, doc.branchName);
+  }
+
   async update(id: string, terms: ProformaTermsDto) {
     const doc = await this.pending(id);
     if (terms.fulfillment === 'factory' && doc.fulfillment !== 'factory') await this.assertFactory();
     this.applyTerms(doc, terms);
+    await this.applyBranch(doc);
     return doc.save();
   }
 
@@ -168,6 +186,7 @@ export class ProformasService {
     const doc = await this.pending(id);
     if (body.fulfillment === 'factory' || (body.fulfillment === undefined && doc.fulfillment === 'factory')) await this.assertFactory();
     this.applyTerms(doc, body);
+    await this.applyBranch(doc);
     const shippedAt = new Date();
 
     const dto: CreateInvoiceDto = {
@@ -176,6 +195,7 @@ export class ProformasService {
       customerId: doc.customerId ? String(doc.customerId) : undefined,
       customerName: doc.customerName,
       customerPhone: doc.customerPhone,
+      branchName: doc.branchName || '',
       invoiceDate: body.date || shippedAt.toISOString(),
       items: doc.items.map((i) => ({
         productId: i.productId,

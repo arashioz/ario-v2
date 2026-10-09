@@ -39,6 +39,9 @@ export class Proforma {
   @Prop({ trim: true, default: '' })
   customerPhone?: string;
 
+  @Prop({ trim: true, default: '' })
+  branchName?: string;
+
   @Prop({ type: Date, default: Date.now })
   orderDate: Date;
 

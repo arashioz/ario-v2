@@ -11,6 +11,7 @@ export interface Customer {
   phoneNumber: string;
   phoneSecondary?: string;
   address?: string;
+  branches?: string[];
   customerType?: 'retail' | 'supermarket' | 'wholesale';
   kind?: CustomerKind;
   latitude?: number;
@@ -74,6 +75,7 @@ export interface CreateCustomerInput {
   phoneNumber: string;
   phoneSecondary?: string;
   address?: string;
+  branches?: string[];
   customerType?: 'retail' | 'supermarket' | 'wholesale';
   kind?: CustomerKind;
   latitude?: number;

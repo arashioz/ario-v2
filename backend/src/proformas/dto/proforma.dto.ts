@@ -57,6 +57,10 @@ export class ProformaTermsDto {
   notes?: string;
 
   @IsOptional()
+  @IsString()
+  branchName?: string;
+
+  @IsOptional()
   @IsEnum(['shop', 'factory'])
   fulfillment?: 'shop' | 'factory';
 

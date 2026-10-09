@@ -46,6 +46,7 @@ export interface Invoice {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
+  branchName?: string;
   invoiceDate: string;
   items: InvoiceItem[];
   totalAmount: number;
@@ -91,6 +92,7 @@ export interface CreateInvoiceInput {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
+  branchName?: string;
   invoiceDate?: string;
   items: InvoiceItem[];
   totalAmount: number;

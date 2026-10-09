@@ -7,6 +7,7 @@ import { dateToYmd } from '../../lib/jalali';
 import { suppliersService, type SupplierListItem } from '../../services/suppliers.service';
 import { invoicesService, apiErrorMessage } from '../../services/invoices.service';
 import type { Invoice, CreateInvoiceInput } from '../../services/invoices.service';
+import { customersService } from '../../services/customers.service';
 import { productsService } from '../../services/products.service';
 import type { Product } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -73,6 +74,8 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [accountId, setAccountId] = useState('');
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchName, setBranchName] = useState('');
   const settings = useSettings();
   const { bankCards } = settings;
 
@@ -104,6 +107,14 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
     setFreight(invoice.type === 'purchase' && invoice.shippingPayer === 'me' ? invoice.shippingCost || 0 : 0);
     setNotes(invoice.notes || '');
     setFromCompany(invoice.type === 'sale' && invoice.fulfillment === 'factory');
+    setBranchName(invoice.branchName || '');
+    setBranches([]);
+    if (invoice.type === 'sale' && invoice.customerId) {
+      customersService
+        .getCustomer(invoice.customerId)
+        .then((c) => setBranches((c.branches || []).map((b) => b.trim()).filter(Boolean)))
+        .catch(() => setBranches([]));
+    }
     setSupplierName(invoice.type === 'purchase' ? invoice.customerName || '' : '');
     setSupplierPhone(invoice.type === 'purchase' ? invoice.customerPhone || '' : '');
     if (invoice.type === 'purchase') suppliersService.list().then(setSuppliers).catch(() => undefined);
@@ -206,6 +217,10 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       showNotification({ title: 'اقلام نامعتبر', message: 'حداقل یک قلم با مقدار بیشتر از صفر لازم است.', type: 'warning' });
       return;
     }
+    if (isSale && branches.length > 0 && !branches.includes(branchName)) {
+      showNotification({ title: 'شعبه', message: 'مشخص کنید این فاکتور برای کدام شعبه است.', type: 'warning' });
+      return;
+    }
     if (isCard && bankCards.length > 0 && !accountId) {
       showNotification({ title: 'حساب واریز', message: 'مشخص کنید پول به کدام حساب واریز شده.', type: 'warning' });
       return;
@@ -221,6 +236,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       customerId: invoice.customerId,
       customerName: isSale ? invoice.customerName : supplierName.trim(),
       customerPhone: isSale ? invoice.customerPhone : supplierPhone.trim(),
+      ...(isSale ? { branchName: branches.includes(branchName) ? branchName : '' } : {}),
       invoiceDate: parsedDate.toISOString(),
       fulfillment: isSale ? (fromCompany ? 'factory' : 'shop') : invoice.fulfillment || 'shop',
       items: rows.map((r) => {
@@ -464,6 +480,23 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         </div>
       )}
 
+      {isSale && branches.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold text-slate-500">شعبه</div>
+          <div className="flex flex-wrap gap-1.5">
+            {branches.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setBranchName(name)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${branchName === name ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200'}`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {isSale && (settings.factorySalesEnabled || fromCompany) && (
         <div className="space-y-2">
           <button

@@ -21,6 +21,10 @@ export class Customer {
   @Prop({ trim: true })
   address?: string;
 
+  /** Branch names, when this customer receives goods at more than one place. */
+  @Prop({ type: [String], default: [] })
+  branches: string[];
+
   @Prop({
     trim: true,
     enum: ['retail', 'supermarket', 'wholesale'],

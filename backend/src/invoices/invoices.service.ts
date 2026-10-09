@@ -137,6 +137,16 @@ export class InvoicesService {
     return this.customerModel.findById(dto.customerId).exec();
   }
 
+  /** Empty when the customer has no branches. Required, and must match a defined branch, when they do. */
+  private branchName(customer: { branches?: string[] } | null, raw?: string) {
+    const branches = (customer?.branches || []).map((b) => String(b || '').trim()).filter(Boolean);
+    const name = String(raw || '').trim();
+    if (!branches.length) return '';
+    if (!name) throw new BadRequestException('شعبه مشتری را انتخاب کنید');
+    if (!branches.includes(name)) throw new BadRequestException('این شعبه برای مشتری تعریف نشده');
+    return name;
+  }
+
   /** On purchases only 'me' is meaningful: freight/unloading the shop pays, added to the landed cost. */
   private shippingFields(dto: CreateInvoiceDto, isSale: boolean) {
     const allowed = isSale || dto.shippingPayer === 'me';
@@ -311,6 +321,7 @@ export class InvoicesService {
     if (fromFactory) await this.assertFactoryEnabled();
     const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory);
     const customer = isSale ? await this.resolveCustomer(dto) : null;
+    const branchName = this.branchName(customer, dto.branchName);
     // Purchases on credit go on the supplier's account (see SuppliersService).
     const credit = this.creditPortion(dto);
 
@@ -339,6 +350,7 @@ export class InvoicesService {
       customerId: customer ? customer._id : undefined,
       customerName: customer?.name || (isSale ? dto.customerName : canonicalSupplier(dto.customerName)),
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
+      branchName,
       invoiceDate,
       items,
       totalAmount: dto.totalAmount,
@@ -408,6 +420,7 @@ export class InvoicesService {
     else if (willShopPurchase) await this.shiftStock(prepared.items, 1, true);
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
+    const branchName = this.branchName(customer, dto.branchName ?? invoice.branchName);
     let credit = this.creditPortion(dto);
     if (isSale) {
       const paidLater = await this.customersService.getPaidLater(invoice._id);
@@ -439,6 +452,7 @@ export class InvoicesService {
       customerId: customer ? customer._id : undefined,
       customerName: customer?.name || (isSale ? dto.customerName : dto.customerName && canonicalSupplier(dto.customerName)) || invoice.customerName,
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
+      branchName,
       invoiceDate,
       fulfillment: dto.fulfillment ?? invoice.fulfillment ?? 'shop',
       ...(typeof dueDays === 'number' ? { dueDays } : {}),

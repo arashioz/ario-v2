@@ -45,7 +45,18 @@ export class CustomersService implements OnModuleInit {
     }
   }
 
+  private cleanBranches(list?: string[]) {
+    const out: string[] = [];
+    for (const raw of list || []) {
+      const name = String(raw || '').trim();
+      if (!name || out.includes(name) || out.length >= 12) continue;
+      out.push(name);
+    }
+    return out;
+  }
+
   async create(createCustomerDto: CreateCustomerDto, recordedByName?: string): Promise<CustomerDocument> {
+    if (createCustomerDto.branches) createCustomerDto.branches = this.cleanBranches(createCustomerDto.branches);
     if (createCustomerDto.kind === 'walkin') return this.createWalkIn(createCustomerDto);
     const initialDebt = createCustomerDto.initialDebt || 0;
 
@@ -158,6 +169,7 @@ export class CustomersService implements OnModuleInit {
   }
 
   async update(id: string, updateDto: UpdateCustomerDto): Promise<CustomerDocument> {
+    if (updateDto.branches) updateDto.branches = this.cleanBranches(updateDto.branches);
     const previous = await this.findOne(id);
     const customer = await this.customerModel
       .findByIdAndUpdate(id, { $set: updateDto }, { new: true })

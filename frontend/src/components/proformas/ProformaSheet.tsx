@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Ban, Check, Share2, Truck } from 'lucide-react';
 import { Sheet } from '../ui/Sheet';
+import { customersService } from '../../services/customers.service';
 import { proformasService, PROFORMA_STATUS_LABELS, type Proforma } from '../../services/proformas.service';
 import { apiErrorMessage, SHIPPING_PAYER_LABELS, type Invoice } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS } from '../../services/settings.service';
@@ -34,6 +35,8 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
   const [busy, setBusy] = useState<'save' | 'ship' | 'cancel' | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [fromFactory, setFromFactory] = useState(false);
+  const [branch, setBranch] = useState('');
+  const [branches, setBranches] = useState<string[]>([]);
   const [prices, setPrices] = useState<Record<string, { unit: number; cost: number }>>({});
 
   useEffect(() => {
@@ -41,6 +44,18 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
       setTerms(termsFromSaved(proforma));
       setConfirmCancel(false);
       setFromFactory(proforma.fulfillment === 'factory');
+      setBranch(proforma.branchName || '');
+      setBranches([]);
+      if (proforma.customerId && proforma.status === 'pending') {
+        customersService
+          .getCustomer(proforma.customerId)
+          .then((c) => {
+            const list = (c.branches || []).map((b) => b.trim()).filter(Boolean);
+            setBranches(list);
+            setBranch((current) => (list.length === 1 ? list[0] : list.includes(current) ? current : proforma.branchName || ''));
+          })
+          .catch(() => setBranches([]));
+      }
       setPrices(
         Object.fromEntries(proforma.items.map((i) => [i.productId, { unit: i.unitPrice, cost: i.factoryUnitCost || 0 }])),
       );
@@ -52,11 +67,13 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
   const factoryOn = !!settings.factorySalesEnabled || fromFactory;
   const goods = proforma.items.reduce((s, i) => s + Math.round(i.quantity * (prices[i.productId]?.unit ?? i.unitPrice)), 0);
   const final = termsFinal(pending ? goods : proforma.totalAmount, terms);
-  const error = termsError(final, terms, true, settings.bankCards);
+  const branchError = pending && branches.length > 0 && !branches.includes(branch) ? 'شعبه را انتخاب کنید' : '';
+  const error = branchError || termsError(final, terms, true, settings.bankCards);
 
   const payload = () => ({
     ...termsPayload(final, terms),
     fulfillment: (fromFactory ? 'factory' : 'shop') as 'factory' | 'shop',
+    branchName: branches.includes(branch) ? branch : proforma.branchName || '',
     items: proforma.items.map((i) => ({
       productId: i.productId,
       unitPrice: Math.round(prices[i.productId]?.unit ?? i.unitPrice),
@@ -166,6 +183,27 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
         </button>
       </div>
 
+      {(pending ? branches.length > 0 : !!proforma.branchName) && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-bold text-slate-500">شعبه</div>
+          {pending ? (
+            <div className="flex flex-wrap gap-1.5">
+              {branches.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setBranch(name)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${branch === name ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200'}`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs font-bold text-slate-800">{proforma.branchName}</div>
+          )}
+        </div>
+      )}
       {pending && factoryOn && (
         <button
           type="button"

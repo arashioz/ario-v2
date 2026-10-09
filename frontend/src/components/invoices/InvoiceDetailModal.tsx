@@ -274,6 +274,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   <span>{isSale ? 'خریدار:' : 'تأمین‌کننده:'}</span>
                 </div>
                 <span className="font-semibold text-slate-800 block">{invoice.customerName}</span>
+                {invoice.branchName && <span className="text-[11px] text-sky-700 block">شعبه {invoice.branchName}</span>}
                 {invoice.customerPhone && (
                   <span className="text-[11px] text-slate-500 font-mono block" dir="ltr">
                     {invoice.customerPhone}

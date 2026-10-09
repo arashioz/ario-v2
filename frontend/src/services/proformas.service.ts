@@ -12,6 +12,7 @@ export interface Proforma {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
+  branchName?: string;
   orderDate: string;
   items: InvoiceItem[];
   totalAmount: number;
@@ -42,6 +43,7 @@ export interface ProformaTerms {
   paidAmount?: number;
   discount?: number;
   notes?: string;
+  branchName?: string;
   fulfillment?: 'shop' | 'factory';
   items?: { productId: string; unitPrice: number; factoryUnitCost?: number }[];
 }
