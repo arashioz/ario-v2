@@ -575,4 +575,44 @@ export class InvoicesService {
       chartData,
     };
   }
+
+  /**
+   * Rewrite every product's stock from invoices.
+   * Purchases count only when the goods were received. Sales count only when they left Ario stock.
+   */
+  async rebuildStock() {
+    const invoices = await this.invoiceModel
+      .find({ type: { $in: ['sale', 'purchase'] } })
+      .select('type fulfillment items')
+      .lean()
+      .exec();
+
+    const totals = new Map<string, number>();
+    let purchases = 0;
+    let sales = 0;
+    for (const inv of invoices) {
+      const purchase = inv.type === 'purchase';
+      if (!purchase && inv.fulfillment === 'factory') continue;
+      if (purchase) purchases++;
+      else sales++;
+      for (const item of inv.items || []) {
+        const productId = String(item.productId || '');
+        if (!Types.ObjectId.isValid(productId)) continue;
+        if (purchase && item.received === false) continue;
+        totals.set(productId, (totals.get(productId) || 0) + (purchase ? 1 : -1) * (item.quantity || 0));
+      }
+    }
+
+    const products = await this.productModel.find().select('_id stock').lean().exec();
+    const writes: { updateOne: { filter: { _id: unknown }; update: { $set: { stock: number } } } }[] = [];
+    for (const product of products) {
+      const id = String(product._id);
+      if (!totals.has(id)) continue;
+      const stock = Math.round((totals.get(id) || 0) * 1000) / 1000;
+      if (Math.abs((product.stock || 0) - stock) < 0.0005) continue;
+      writes.push({ updateOne: { filter: { _id: product._id }, update: { $set: { stock } } } });
+    }
+    if (writes.length) await this.productModel.bulkWrite(writes);
+    return { changed: writes.length, products: totals.size, purchases, sales };
+  }
 }

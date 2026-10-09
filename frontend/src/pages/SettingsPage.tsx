@@ -12,6 +12,7 @@ import {
   LayoutList,
   MessageSquareText,
   Plus,
+  RefreshCw,
   Rows3,
   Save,
   Scale,
@@ -22,7 +23,7 @@ import { ReportHeader } from '../components/reports/ReportUI';
 import { ProductBrowser } from '../components/pos/ProductBrowser';
 import { productsService, type Product } from '../services/products.service';
 import { num } from '../lib/format';
-import { apiErrorMessage } from '../services/invoices.service';
+import { apiErrorMessage, invoicesService } from '../services/invoices.service';
 import { settingsService, useSettings, type PosLayout, type PosView } from '../services/settings.service';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -137,6 +138,7 @@ export const SettingsPage: React.FC = () => {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [shop, setShop] = useState({ shopName: '', shopPhone: '', shopAddress: '', invoiceFooter: '', supermarketMinKg: 0, wholesaleMinKg: 0 });
   const [saving, setSaving] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newSubName, setNewSubName] = useState<Record<string, string>>({});
@@ -714,6 +716,37 @@ export const SettingsPage: React.FC = () => {
 
             <Row id="sms" title="متن پیامک‌ها" icon={MessageSquareText} tone="teal" {...row}>
               <SmsTemplatesSettings settings={settings} isAdmin={isAdmin} />
+            </Row>
+          </Group>}
+
+          {adminPart && <Group title="انبار">
+            <Row id="stock" title="محاسبه مجدد انبار" hint="از روی فاکتورهای خرید و فروش" icon={RefreshCw} tone="emerald" {...row}>
+              <p className="text-[11px] text-slate-500 leading-5 mb-2">
+                موجودی هر کالا دوباره حساب می‌شود: خریدهایی که تحویل شده‌اند، منهای فروش‌هایی که از موجودی آریو رفته‌اند. فروش از شرکت و باری که هنوز تحویل نشده وارد این حساب نمی‌شود.
+              </p>
+              <button
+                disabled={rebuilding}
+                onClick={() => {
+                  if (!window.confirm('موجودی انبار از روی فاکتورهای خرید و فروش دوباره نوشته شود؟')) return;
+                  setRebuilding(true);
+                  invoicesService
+                    .rebuildStock()
+                    .then((res) => {
+                      showNotification({
+                        title: 'انبار به‌روز شد',
+                        message: `${res.changed.toLocaleString('fa-IR')} کالا اصلاح شد. ${res.purchases.toLocaleString('fa-IR')} فاکتور خرید و ${res.sales.toLocaleString('fa-IR')} فاکتور فروش حساب شد.`,
+                        type: 'success',
+                      });
+                    })
+                    .catch((err) => {
+                      showNotification({ title: 'انبار به‌روز نشد', message: apiErrorMessage(err, 'محاسبه انبار انجام نشد'), type: 'error' });
+                    })
+                    .finally(() => setRebuilding(false));
+                }}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold disabled:opacity-50"
+              >
+                {rebuilding ? 'در حال محاسبه…' : 'محاسبه و به‌روزرسانی انبار'}
+              </button>
             </Row>
           </Group>}
 

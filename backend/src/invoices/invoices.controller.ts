@@ -12,6 +12,9 @@ import {
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 
 const actorName = (req: any) => req.user?.fullName || req.user?.username || 'کاربر سیستم';
 
@@ -28,6 +31,13 @@ export class InvoicesController {
   @Get('stats')
   getStats() {
     return this.invoicesService.getStats();
+  }
+
+  @Post('rebuild-stock')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  rebuildStock() {
+    return this.invoicesService.rebuildStock();
   }
 
   @Get()

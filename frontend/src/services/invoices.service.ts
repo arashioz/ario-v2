@@ -173,6 +173,11 @@ export const invoicesService = {
     return response.data;
   },
 
+  rebuildStock: async (): Promise<{ changed: number; products: number; purchases: number; sales: number }> => {
+    const response = await api.post('/invoices/rebuild-stock', {}, { timeout: 60000 });
+    return response.data;
+  },
+
   addPayment: async (
     id: string,
     data: { amount: number; paymentMethod?: string; description?: string; accountId?: string },
