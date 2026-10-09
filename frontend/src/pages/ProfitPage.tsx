@@ -17,8 +17,11 @@ type View = 'watch' | 'lot' | 'product' | 'day' | 'customer' | 'check';
 
 const jDate = (iso: string) => formatJalali(dateToYmd(new Date(iso)));
 
+type Lane = 'all' | 'shop' | 'factory';
+
 export const ProfitPage: React.FC = () => {
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
+  const [lane, setLane] = useState<Lane>('all');
   const [data, setData] = useState<ProfitReport | null>(null);
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('lot');
@@ -29,11 +32,11 @@ export const ProfitPage: React.FC = () => {
   const load = useCallback(async () => {
     try {
       setError('');
-      setData(await accountingService.profit(periodQuery(period)));
+      setData(await accountingService.profit({ ...periodQuery(period), channel: lane }));
     } catch {
       setError('دریافت گزارش سود ناموفق بود');
     }
-  }, [period]);
+  }, [period, lane]);
 
   useEffect(() => {
     load();
@@ -118,21 +121,29 @@ export const ProfitPage: React.FC = () => {
             <ChevronLeft className="w-4 h-4 text-slate-300" />
           </button>
 
-          {data?.channels && (data.channels.shop.kg > 0 || data.channels.factory.kg > 0) && (
-            <div className="grid grid-cols-2 gap-2">
+          {data?.channels && (
+            <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  ['از مغازه', data.channels.shop, 'bg-sky-50 border-sky-100 text-sky-900'],
-                  ['از کارخانه', data.channels.factory, 'bg-amber-50 border-amber-100 text-amber-900'],
+                  ['all', 'جمع کل', { profit: data.channels.shop.profit + data.channels.factory.profit, revenue: data.channels.shop.revenue + data.channels.factory.revenue, kg: data.channels.shop.kg + data.channels.factory.kg, invoices: data.channels.shop.invoices + data.channels.factory.invoices }, 'bg-emerald-50 border-emerald-100 text-emerald-950'],
+                  ['shop', 'دفتر', data.channels.shop, 'bg-sky-50 border-sky-100 text-sky-950'],
+                  ['factory', 'کارخانه', data.channels.factory, 'bg-amber-50 border-amber-100 text-amber-950'],
                 ] as const
-              ).map(([label, c, tone]) => (
-                <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
+              ).map(([id, label, c, tone]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setLane(id)}
+                  className={`rounded-2xl border p-2.5 text-right ${tone} ${lane === id ? 'ring-2 ring-offset-1 ring-slate-400' : ''}`}
+                >
                   <div className="text-[11px] font-bold">{label}</div>
-                  <div className="text-sm font-bold font-mono mt-1">{formatToman(c.profit)}</div>
-                  <div className="text-[10px] mt-0.5 opacity-80">
-                    فروش {formatToman(c.revenue)} · {tons(c.kg)} تن · {num(c.invoices)} فاکتور
+                  <div className="text-[13px] font-bold font-mono mt-1">{formatToman(c.profit)}</div>
+                  <div className="text-[10px] mt-0.5 opacity-80 leading-4">
+                    فروش {formatToman(c.revenue)}
+                    <br />
+                    {tons(c.kg)} تن · {num(c.invoices)} فاکتور
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

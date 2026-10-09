@@ -44,8 +44,8 @@ import { dateToYmd } from '../../lib/jalali';
 
 const QUICK: { id: string; label: string; patch: Partial<InvoiceFilters>; match: (f: InvoiceFilters) => boolean }[] = [
   { id: 'all', label: 'همه', patch: { type: 'all', status: 'all', source: 'all' }, match: (f) => f.type === 'all' && f.status === 'all' && f.source === 'all' },
-  { id: 'sale', label: 'فروش', patch: { type: 'sale', status: 'all', source: 'all' }, match: (f) => f.type === 'sale' && f.status === 'all' && f.source === 'all' },
-  { id: 'purchase', label: 'خرید', patch: { type: 'purchase', saleType: 'all', status: 'all', source: 'all' }, match: (f) => f.type === 'purchase' && f.status === 'all' && f.source === 'all' },
+  { id: 'sale', label: 'فروش', patch: { type: 'sale', status: 'all', source: 'shop' }, match: (f) => f.type === 'sale' && f.status === 'all' && f.source === 'shop' },
+  { id: 'purchase', label: 'خرید', patch: { type: 'purchase', saleType: 'all', status: 'all', source: 'shop' }, match: (f) => f.type === 'purchase' && f.status === 'all' && f.source === 'shop' },
   { id: 'credit', label: 'نسیه', patch: { type: 'all', status: 'credit', source: 'all' }, match: (f) => f.type === 'all' && f.status === 'credit' && f.source === 'all' },
   { id: 'factory', label: 'از کارخانه', patch: { type: 'sale', status: 'all', source: 'factory' }, match: (f) => f.source === 'factory' },
 ];

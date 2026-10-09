@@ -355,9 +355,15 @@ export class AccountingService {
   }
 
   /** ریز سود: خلاصه، به تفکیک کالا، روز و بار خرید، و فاکتورهای مشکوک. */
-  async profit(period: Period = {}) {
+  async profit(period: Period = {}, channel: 'all' | 'shop' | 'factory' = 'all') {
     const f = await this.fifo();
-    const lines = f.saleLines.filter((l) => this.inPeriod(l.date, period));
+    const allLines = f.saleLines.filter((l) => this.inPeriod(l.date, period));
+    const lines =
+      channel === 'factory'
+        ? allLines.filter((l) => l.fulfillment === 'factory')
+        : channel === 'shop'
+          ? allLines.filter((l) => l.fulfillment !== 'factory')
+          : allLines;
 
     const group = (keyFn: (l: SaleLine) => string, labelFn: (l: SaleLine) => any) => {
       const m = new Map<string, { label: any; lines: SaleLine[] }>();
@@ -435,11 +441,11 @@ export class AccountingService {
         invoices: new Set(lines.map((l) => l.invoiceId)).size,
         days: new Set(lines.map((l) => dayKey(l.date))).size,
       },
-      channels: this.channels(lines),
+      channels: this.channels(allLines),
       byProduct,
       byDay,
       byCustomer,
-      byLot,
+      byLot: channel === 'factory' ? [] : byLot,
       suspicious,
       warnings: {
         estimatedLines: estimated.length,

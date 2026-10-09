@@ -13,6 +13,7 @@ import { ChequesPage } from './ChequesPage';
 import { ExpensesPage } from './ExpensesPage';
 import { FollowUpsPage } from './FollowUpsPage';
 import { InventoryPage } from './InventoryPage';
+import { StocktakePage } from './StocktakePage';
 import { ProfitPage } from './ProfitPage';
 import { CreditReportPage } from './CreditReportPage';
 import { InflationPage } from './InflationPage';
@@ -52,6 +53,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/cashbox" element={<CashboxPage />} />
           <Route path="/follow-ups" element={<FollowUpsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/stocktake" element={<StocktakePage />} />
           <Route path="/profit" element={<ProfitPage />} />
           <Route path="/credit-report" element={<CreditReportPage />} />
           <Route path="/inflation" element={<InflationPage />} />

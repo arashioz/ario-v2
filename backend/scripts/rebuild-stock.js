@@ -69,13 +69,14 @@ async function main() {
     }
   }
 
-  const products = await db.collection('products').find({}, { projection: { name: 1, unit: 1, stock: 1 } }).toArray();
+  const products = await db.collection('products').find({}, { projection: { name: 1, unit: 1, stock: 1, stockAdjust: 1 } }).toArray();
   const writes = [];
   const changed = [];
   for (const product of products) {
     const id = String(product._id);
-    if (!totals.has(id)) continue;
-    const stock = round3(totals.get(id) || 0);
+    const adjust = Number(product.stockAdjust) || 0;
+    if (!totals.has(id) && !adjust) continue;
+    const stock = round3((totals.get(id) || 0) + adjust);
     const before = Number(product.stock) || 0;
     if (Math.abs(before - stock) < 0.0005) continue;
     changed.push({ name: product.name, unit: product.unit || '', before, stock });

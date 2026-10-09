@@ -239,6 +239,14 @@ export const productsService = {
     return res.data;
   },
 
+  async applyStockCount(lines: { productId: string; countedQty: number }[]): Promise<{
+    changed: number;
+    lines: { productId: string; name: string; unit: string; systemQty: number; countedQty: number; delta: number }[];
+  }> {
+    const res = await api.post('/products/stock-count', { lines });
+    return res.data;
+  },
+
   /** Public — no login needed. */
   async getCatalog(tier: CatalogTier = 'retail'): Promise<Catalog> {
     const res = await api.get('/public/catalog', { params: { tier } });

@@ -94,6 +94,10 @@ export class Product {
   @Prop({ required: true, default: 0, index: true })
   stock: number;
 
+  /** Added on top of invoice-derived stock so a physical count survives a stock rebuild. */
+  @Prop({ default: 0 })
+  stockAdjust: number;
+
   @Prop({ default: 5 })
   minStockAlert: number;
 

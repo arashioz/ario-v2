@@ -1,4 +1,5 @@
-import { IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 export class UpdatePriceDto {
   @IsNumber({}, { message: 'قیمت فروش جدید باید عدد باشد' })
@@ -67,4 +68,21 @@ export class BulkPriceUpdateDto {
   @IsOptional()
   @IsIn([1, 10, 100, 1000, 10000])
   roundTo?: number;
+}
+
+export class StockCountLineDto {
+  @IsString()
+  @IsNotEmpty()
+  productId: string;
+
+  @IsNumber()
+  @Min(0)
+  countedQty: number;
+}
+
+export class ApplyStockCountDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StockCountLineDto)
+  lines: StockCountLineDto[];
 }

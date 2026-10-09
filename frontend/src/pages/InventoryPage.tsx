@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react';
+import { useNavigate } from 'react-router-dom';
 import type { RefresherEventDetail } from '@ionic/react';
 import { AlertTriangle, Boxes, ChevronDown, RefreshCw, Search, TrendingUp, Truck, Weight } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
@@ -24,6 +25,7 @@ const SORTS: [SortKey, string][] = [
 ];
 
 export const InventoryPage: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const isAdmin = user?.role === 'admin';
@@ -125,6 +127,15 @@ export const InventoryPage: React.FC = () => {
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin' : ''}`} />
                 {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از خرید و فروش'}
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/stocktake')}
+                className="mt-2 w-full py-2 rounded-xl bg-white text-sky-800 text-[11px] font-bold"
+              >
+                انبارگردانی قدم‌به‌قدم
               </button>
             )}
             <div className="mt-3 pt-3 border-t border-white/15 flex items-center justify-between">

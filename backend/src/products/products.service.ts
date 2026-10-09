@@ -11,6 +11,7 @@ import { randomBytes } from 'crypto';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { Product, ProductDocument } from './schemas/product.schema';
+import { StockCount, StockCountDocument } from './schemas/stock-count.schema';
 import { SettingsService } from '../settings/settings.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -18,6 +19,7 @@ import {
   UpdatePriceDto,
   UpdateStockDto,
   BulkPriceUpdateDto,
+  ApplyStockCountDto,
 } from './dto/product-operations.dto';
 
 const IMAGE_DIR = join(process.cwd(), 'uploads', 'products');
@@ -135,6 +137,8 @@ export class ProductsService implements OnModuleInit {
   constructor(
     @InjectModel(Product.name)
     private productModel: Model<ProductDocument>,
+    @InjectModel(StockCount.name)
+    private stockCountModel: Model<StockCountDocument>,
     private settings: SettingsService,
   ) {}
 
@@ -524,6 +528,27 @@ export class ProductsService implements OnModuleInit {
         };
       }),
     };
+  }
+
+  /** Sets counted quantities and remembers the difference so a later invoice rebuild does not wipe the count. */
+  async applyStockCount(dto: ApplyStockCountDto, recordedByName: string) {
+    if (!dto.lines?.length) throw new BadRequestException('کالایی برای ثبت شمارش نیست');
+    const lines: { productId: string; name: string; unit: string; systemQty: number; countedQty: number; delta: number }[] = [];
+    for (const row of dto.lines) {
+      const product = await this.productModel.findById(row.productId).exec();
+      if (!product || !product.isActive) continue;
+      const countedQty = Math.round(row.countedQty * 1000) / 1000;
+      const systemQty = Math.round((product.stock || 0) * 1000) / 1000;
+      const delta = Math.round((countedQty - systemQty) * 1000) / 1000;
+      if (Math.abs(delta) < 0.0005) continue;
+      product.stockAdjust = Math.round(((product.stockAdjust || 0) + delta) * 1000) / 1000;
+      product.stock = countedQty;
+      await product.save();
+      lines.push({ productId: String(product._id), name: product.name, unit: product.unit || '', systemQty, countedQty, delta });
+    }
+    if (!lines.length) throw new BadRequestException('شمارش با موجودی سیستم یکی است و چیزی برای اصلاح نماند');
+    const saved = await this.stockCountModel.create({ lines, createdByName: recordedByName || 'مدیر سیستم' });
+    return { id: String(saved._id), changed: lines.length, lines };
   }
 
   async updateStock(id: string, dto: UpdateStockDto): Promise<ProductDocument> {

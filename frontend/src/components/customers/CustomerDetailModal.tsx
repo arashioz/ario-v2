@@ -82,9 +82,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
+  const [editBranches, setEditBranches] = useState<string[]>([]);
   const [branchDraft, setBranchDraft] = useState('');
-  const [savingBranch, setSavingBranch] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -146,16 +146,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     if (!customer) return;
     setEditName(customer.name);
     setEditPhone(customer.phoneNumber || '');
+    setEditBranches(customer.branches || []);
+    setBranchDraft('');
     setEditingProfile(true);
   };
 
   const saveProfile = async () => {
     if (!customer || !editName.trim()) return;
+    const extra = branchDraft.trim();
+    const branches = extra && !editBranches.includes(extra) ? [...editBranches, extra] : editBranches;
     setSavingProfile(true);
     try {
       const updated = await customersService.updateCustomer(customer._id, {
         name: editName.trim(),
         phoneNumber: editPhone.trim(),
+        branches,
       });
       setCustomer(updated);
       setEditingProfile(false);
@@ -165,20 +170,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       showNotification({ title: 'ذخیره نشد', message: apiErrorMessage(err, 'خطا در ویرایش مشتری'), type: 'error' });
     } finally {
       setSavingProfile(false);
-    }
-  };
-
-  const saveBranches = async (next: string[]) => {
-    if (!customer) return;
-    setSavingBranch(true);
-    try {
-      const updated = await customersService.updateCustomer(customer._id, { branches: next });
-      setCustomer(updated);
-      setBranchDraft('');
-    } catch (err) {
-      showNotification({ title: 'شعبه ذخیره نشد', message: apiErrorMessage(err, 'خطا در ذخیره شعبه'), type: 'error' });
-    } finally {
-      setSavingBranch(false);
     }
   };
 
@@ -336,6 +327,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-mono" dir="ltr">
                       <span>{customer.phoneNumber || 'بدون شماره'}</span>
                     </div>
+                    {(customer.branches || []).length > 0 && (
+                      <div className="text-[11px] text-slate-500 mt-0.5">{(customer.branches || []).join(' · ')}</div>
+                    )}
                   </div>
                 </div>
 
@@ -343,7 +337,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <button
                     onClick={startEditProfile}
                     className="p-2 rounded-xl text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition"
-                    title="ویرایش نام و شماره"
+                    title="ویرایش مشتری"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
@@ -373,13 +367,41 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     dir="ltr"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-mono text-left bg-white"
                   />
+                  <input
+                    value={branchDraft}
+                    onChange={(e) => setBranchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const name = branchDraft.trim();
+                      if (!name || editBranches.includes(name)) return;
+                      setEditBranches((list) => [...list, name]);
+                      setBranchDraft('');
+                    }}
+                    placeholder="نام شعبه"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
+                  />
+                  {editBranches.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {editBranches.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setEditBranches((list) => list.filter((b) => b !== name))}
+                          className="px-2 py-0.5 rounded-lg bg-white text-sky-800 text-[11px] font-bold border border-sky-100"
+                        >
+                          {name} ×
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={() => void saveProfile()}
                       disabled={savingProfile || !editName.trim()}
                       className="flex-1 py-2 rounded-xl bg-sky-600 text-white text-[11px] font-bold disabled:opacity-40"
                     >
-                      {savingProfile ? 'در حال ذخیره…' : 'ذخیره نام و شماره'}
+                      {savingProfile ? 'در حال ذخیره…' : 'ذخیره'}
                     </button>
                     <button onClick={() => setEditingProfile(false)} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-500">
                       انصراف
@@ -387,45 +409,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                 </div>
               )}
-
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-bold text-slate-500">شعبه‌ها</div>
-                {(customer.branches || []).length === 0 && (
-                  <p className="text-[10px] text-slate-400 leading-5">اگر این مشتری چند شعبه دارد، اسم هر شعبه را اضافه کنید تا موقع فروش مشخص شود بار برای کدام شعبه است.</p>
-                )}
-                <div className="flex flex-wrap gap-1.5">
-                  {(customer.branches || []).map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      disabled={savingBranch}
-                      onClick={() => void saveBranches((customer.branches || []).filter((b) => b !== name))}
-                      className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 text-[11px] font-bold"
-                    >
-                      {name} ×
-                    </button>
-                  ))}
-                </div>
-                <form
-                  className="flex gap-1.5"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const name = branchDraft.trim();
-                    if (!name || (customer.branches || []).includes(name)) return;
-                    void saveBranches([...(customer.branches || []), name]);
-                  }}
-                >
-                  <input
-                    value={branchDraft}
-                    onChange={(e) => setBranchDraft(e.target.value)}
-                    placeholder="نام شعبه"
-                    className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
-                  />
-                  <button type="submit" disabled={savingBranch || !branchDraft.trim()} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-[11px] font-bold disabled:opacity-40">
-                    افزودن
-                  </button>
-                </form>
-              </div>
 
               {/* Balance Box */}
               <div

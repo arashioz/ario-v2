@@ -32,8 +32,9 @@ export class AccountingController {
   }
 
   @Get('profit')
-  profit(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.accounting.profit({ from, to });
+  profit(@Query('from') from?: string, @Query('to') to?: string, @Query('channel') channel?: string) {
+    const lane = channel === 'shop' || channel === 'factory' ? channel : 'all';
+    return this.accounting.profit({ from, to }, lane);
   }
 
   @Get('credit')

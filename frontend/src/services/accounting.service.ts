@@ -395,7 +395,7 @@ export const accountingService = {
   async inventory(p: PeriodQuery = {}): Promise<InventoryReport> {
     return (await api.get('/accounting/inventory', { params: p })).data;
   },
-  async profit(p: PeriodQuery = {}): Promise<ProfitReport> {
+  async profit(p: PeriodQuery & { channel?: 'all' | 'shop' | 'factory' } = {}): Promise<ProfitReport> {
     return (await api.get('/accounting/profit', { params: p })).data;
   },
   async credit(p: PeriodQuery = {}): Promise<CreditReport> {

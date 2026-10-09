@@ -744,12 +744,13 @@ export class InvoicesService {
       }
     }
 
-    const products = await this.productModel.find().select('_id stock').lean().exec();
+    const products = await this.productModel.find().select('_id stock stockAdjust').lean().exec();
     const writes: { updateOne: { filter: { _id: unknown }; update: { $set: { stock: number } } } }[] = [];
     for (const product of products) {
       const id = String(product._id);
-      if (!totals.has(id)) continue;
-      const stock = Math.round((totals.get(id) || 0) * 1000) / 1000;
+      const adjust = (product as { stockAdjust?: number }).stockAdjust || 0;
+      if (!totals.has(id) && !adjust) continue;
+      const stock = Math.round(((totals.get(id) || 0) + adjust) * 1000) / 1000;
       if (Math.abs((product.stock || 0) - stock) < 0.0005) continue;
       writes.push({ updateOne: { filter: { _id: product._id }, update: { $set: { stock } } } });
     }

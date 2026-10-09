@@ -44,6 +44,7 @@ interface PurchaseRow {
   paidAmount: number;
   remainingDebt: number;
   isPaid: boolean;
+  fulfillment?: string;
 }
 
 @Injectable()
@@ -70,7 +71,7 @@ export class SuppliersService implements OnApplicationBootstrap {
   private async purchasesOf(supplier: string): Promise<PurchaseRow[]> {
     const all = await this.invoiceModel
       .find({ type: 'purchase' })
-      .select('invoiceNumber invoiceDate createdAt customerName finalAmount totalWeightKg creditAmount paidAmount remainingDebt isPaid')
+      .select('invoiceNumber invoiceDate createdAt customerName finalAmount totalWeightKg creditAmount paidAmount remainingDebt isPaid fulfillment')
       .lean<PurchaseRow[]>();
     return all
       .filter((i) => canonicalSupplier(i.customerName) === supplier)
@@ -145,6 +146,14 @@ export class SuppliersService implements OnApplicationBootstrap {
     return { supplier, invoices, payments, open, allocationsByPayment };
   }
 
+  private purchaseChannel(invoices: PurchaseRow[]) {
+    return {
+      count: invoices.length,
+      amount: r0(invoices.reduce((s, i) => s + (i.finalAmount || 0), 0)),
+      kg: Math.round(invoices.reduce((s, i) => s + (i.totalWeightKg || 0), 0)),
+    };
+  }
+
   /** حساب یک تامین‌کننده: کل خرید، پرداختی‌ها به تفکیک مقصد، بدهی فعلی و گردش حساب. */
   async account(name?: string) {
     const { supplier, invoices, payments, open, allocationsByPayment } = await this.sync(name || PARENT_COMPANY);
@@ -202,6 +211,10 @@ export class SuppliersService implements OnApplicationBootstrap {
         oldestOpenDate: oldestOpen?.invoiceDate ?? null,
         oldestOpenInvoice: oldestOpen?.invoiceNumber ?? null,
         lastPaymentDate: payments.length ? payments[payments.length - 1].date : null,
+      },
+      purchaseChannels: {
+        shop: this.purchaseChannel(invoices.filter((i) => i.fulfillment !== 'factory')),
+        factory: this.purchaseChannel(invoices.filter((i) => i.fulfillment === 'factory')),
       },
       byDestination: group((p) => p.destination || 'نامشخص').map((g) => ({
         destination: g.key,

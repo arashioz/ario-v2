@@ -62,7 +62,7 @@ const REPORTS: Item[] = [
   {
     path: '/profit',
     title: 'سود فروش',
-    desc: 'سود هر بار، هر کالا و هر روز',
+    desc: 'جمع سود، و جدا برای دفتر و کارخانه',
     icon: TrendingUp,
     tone: 'bg-emerald-100 text-emerald-600',
   },
@@ -117,6 +117,13 @@ const SHOP: Item[] = [
     desc: 'ویرایش کالا، عکس، قیمت و موجودی',
     icon: Tag,
     tone: 'bg-sky-100 text-sky-600',
+  },
+  {
+    path: '/stocktake',
+    title: 'انبارگردانی',
+    desc: 'شمارش کالاها یکی‌یکی و اصلاح موجودی',
+    icon: ClipboardList,
+    tone: 'bg-teal-100 text-teal-700',
   },
   {
     path: '/settings',
@@ -235,7 +242,7 @@ export const MoreTab: React.FC = () => {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const pwa = usePwaInstall();
-  const [open, setOpen] = useState({ money: true, shop: true, security: true });
+  const [open, setOpen] = useState({ money: true, reports: true, shop: false, security: false });
   const isAdmin = user?.role === 'admin';
 
   const handleInstall = async () => {
@@ -301,21 +308,24 @@ export const MoreTab: React.FC = () => {
           </div>
 
           <Group
-            title="حساب و گزارش"
-            hint="شرکت مادر، تأمین‌کننده‌ها، سود و نسیه"
-            tone="text-emerald-800"
+            title="حساب‌ها"
+            hint="شرکت مادر و تأمین‌کننده‌ها"
+            tone="text-rose-800"
             open={open.money}
             onToggle={() => setOpen((s) => ({ ...s, money: !s.money }))}
           >
-            <div className="px-4 pt-3 pb-1">
-              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">حساب‌ها</span>
-            </div>
             {ACCOUNTS.map((item) => (
               <Row key={item.path} item={item} onOpen={navigate} />
             ))}
-            <div className="px-4 pt-3 pb-1">
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">گزارش‌ها</span>
-            </div>
+          </Group>
+
+          <Group
+            title="گزارشات"
+            hint="سود دفتر و کارخانه، نسیه، صندوق و انبار"
+            tone="text-emerald-800"
+            open={open.reports}
+            onToggle={() => setOpen((s) => ({ ...s, reports: !s.reports }))}
+          >
             {REPORTS.map((item) => (
               <Row key={item.path} item={item} onOpen={navigate} />
             ))}

@@ -20,6 +20,8 @@ import {
   Truck,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { accountingService } from '../services/accounting.service';
+import type { ProfitReport } from '../services/accounting.service';
 import { suppliersService, SUPPLIER_METHOD_LABELS, formatAccountNumber } from '../services/suppliers.service';
 import type { SupplierAccount, SupplierListItem, SupplierPaymentRow, SupplierProfile } from '../services/suppliers.service';
 import { CompanySheet } from '../components/suppliers/CompanySheet';
@@ -41,6 +43,7 @@ export const SupplierAccountPage: React.FC = () => {
   const { showNotification } = useNotification();
   const name = params.get('name') || undefined;
   const [data, setData] = useState<SupplierAccount | null>(null);
+  const [profit, setProfit] = useState<ProfitReport | null>(null);
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('payments');
@@ -62,6 +65,8 @@ export const SupplierAccountPage: React.FC = () => {
       const p = await suppliersService.profile(name);
       setProfile(p);
       setData(p.account);
+      if (p.isParent) setProfit(await accountingService.profit({}).catch(() => null));
+      else setProfit(null);
       if (p.isParent) setOthers((await suppliersService.list()).filter((c) => !c.isParent));
     } catch {
       setError('دریافت حساب شرکت ناموفق بود');
@@ -235,6 +240,41 @@ export const SupplierAccountPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {profile?.isParent && profit?.channels && (
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ['جمع سود', profit.channels.shop.profit + profit.channels.factory.profit, profit.channels.shop.revenue + profit.channels.factory.revenue, 'bg-emerald-50 border-emerald-100 text-emerald-950'],
+                  ['سود دفتر', profit.channels.shop.profit, profit.channels.shop.revenue, 'bg-sky-50 border-sky-100 text-sky-950'],
+                  ['سود کارخانه', profit.channels.factory.profit, profit.channels.factory.revenue, 'bg-amber-50 border-amber-100 text-amber-950'],
+                ] as const
+              ).map(([label, value, revenue, tone]) => (
+                <div key={label} className={`rounded-2xl border p-2.5 ${tone}`}>
+                  <div className="text-[11px] font-bold">{label}</div>
+                  <div className="text-[13px] font-bold font-mono mt-1">{formatToman(value)}</div>
+                  <div className="text-[10px] mt-0.5 opacity-80">فروش {formatToman(revenue)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {profile?.isParent && data?.purchaseChannels && (
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ['جمع خرید', data.purchaseChannels.shop.amount + data.purchaseChannels.factory.amount, data.purchaseChannels.shop.kg + data.purchaseChannels.factory.kg, 'bg-white border-slate-100 text-slate-800'],
+                  ['رسیده به دفتر', data.purchaseChannels.shop.amount, data.purchaseChannels.shop.kg, 'bg-white border-sky-100 text-sky-950'],
+                  ['از کارخانه', data.purchaseChannels.factory.amount, data.purchaseChannels.factory.kg, 'bg-white border-amber-100 text-amber-950'],
+                ] as const
+              ).map(([label, amount, kg, tone]) => (
+                <div key={label} className={`rounded-2xl border p-2.5 ${tone}`}>
+                  <div className="text-[11px] font-bold">{label}</div>
+                  <div className="text-[13px] font-bold font-mono mt-1">{formatToman(amount)}</div>
+                  <div className="text-[10px] mt-0.5 text-slate-400">{tons(kg)} تن</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-emerald-100 p-3 shadow-xs flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">

@@ -21,6 +21,7 @@ import {
   UpdatePriceDto,
   UpdateStockDto,
   BulkPriceUpdateDto,
+  ApplyStockCountDto,
 } from './dto/product-operations.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -38,6 +39,12 @@ export class ProductsController {
   async create(@Body() createProductDto: CreateProductDto, @Request() req: any) {
     const recordedByName = req.user?.fullName || req.user?.username || 'کاربر سیستم';
     return this.productsService.create(createProductDto, recordedByName);
+  }
+
+  @Post('stock-count')
+  async applyStockCount(@Body() dto: ApplyStockCountDto, @Request() req: any) {
+    const recordedByName = req.user?.fullName || req.user?.username || 'کاربر سیستم';
+    return this.productsService.applyStockCount(dto, recordedByName);
   }
 
   @Post('bulk-price')

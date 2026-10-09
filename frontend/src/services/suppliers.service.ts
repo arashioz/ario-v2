@@ -61,6 +61,10 @@ export interface SupplierAccount {
     oldestOpenInvoice: string | null;
     lastPaymentDate: string | null;
   };
+  purchaseChannels?: {
+    shop: { count: number; amount: number; kg: number };
+    factory: { count: number; amount: number; kg: number };
+  };
   byDestination: { destination: string; amount: number; count: number; lastDate: string; accounts: string[] }[];
   byMethod: { method: SupplierPaymentMethod; amount: number; count: number }[];
   payments: SupplierPaymentRow[];
