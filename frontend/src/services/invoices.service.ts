@@ -162,6 +162,15 @@ export const invoicesService = {
     return response.data;
   },
 
+  lastPurchasePrices: async (productIds: string[]): Promise<Record<string, number>> => {
+    const ids = [...new Set(productIds.filter(Boolean))];
+    if (!ids.length) return {};
+    const response = await api.get<Record<string, number>>('/invoices/last-purchase-prices', {
+      params: { productIds: ids.join(',') },
+    });
+    return response.data || {};
+  },
+
   create: async (data: CreateInvoiceInput): Promise<Invoice> => {
     const response = await api.post<Invoice>('/invoices', data);
     return response.data;

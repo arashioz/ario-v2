@@ -3,7 +3,7 @@ import { Check, ChevronRight, ClipboardList, FileCheck2, Phone, Search, UserPlus
 import { Sheet } from '../ui/Sheet';
 import { customersService, CUSTOMER_KIND_LABELS } from '../../services/customers.service';
 import type { Customer, CustomerKind } from '../../services/customers.service';
-import { apiErrorMessage } from '../../services/invoices.service';
+import { apiErrorMessage, invoicesService } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS, type AppSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
 import { formatToman, num, parseDecimal, searchKey, weight } from '../../lib/format';
@@ -102,6 +102,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [factoryCosts, setFactoryCosts] = useState<Record<string, number>>({});
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
   const [margins, setMargins] = useState<Record<string, number>>({});
+  const [loadingFactory, setLoadingFactory] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const factoryOn = !!settings.factorySalesEnabled;
 
@@ -161,6 +162,32 @@ export const CheckoutSheet: React.FC<Props> = ({
   const branches = (customer?.branches || []).map((b) => b.trim()).filter(Boolean);
   const branchError = branches.length > 0 && !branches.includes(branch) ? 'شعبه را انتخاب کنید' : '';
   const error = branchError || termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
+
+  const fillFactoryCosts = async () => {
+    let last: Record<string, number> = {};
+    try {
+      last = await invoicesService.lastPurchasePrices(factoryLines.map((l) => l.productId));
+    } catch {
+      last = {};
+    }
+    setFactoryCosts((prev) => {
+      const next = { ...prev };
+      for (const l of factoryLines) {
+        const price = Math.round(last[l.productId] || 0);
+        next[l.productId] = price > 0 ? price : (next[l.productId] ?? l.buyPrice) || 0;
+      }
+      return next;
+    });
+    setMargins((prev) => {
+      const next = { ...prev };
+      for (const l of factoryLines) {
+        const cost = Math.round(last[l.productId] || 0) || factoryCosts[l.productId] || l.buyPrice || 0;
+        const sell = sellPrices[l.productId] ?? l.sellPrice;
+        if (cost > 0 && sell > cost) next[l.productId] = Math.round(((sell - cost) / cost) * 1000) / 10;
+      }
+      return next;
+    });
+  };
 
   const pick = (c: Customer | null) => {
     const list = (c?.branches || []).map((b) => b.trim()).filter(Boolean);
@@ -377,7 +404,7 @@ export const CheckoutSheet: React.FC<Props> = ({
           {error && <p className="text-[11px] text-rose-600 text-center">{error}</p>}
           <button
             onClick={submit}
-            disabled={!!error || submitting || saving}
+            disabled={!!error || submitting || saving || loadingFactory}
             className={`w-full py-3.5 rounded-2xl text-white text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition flex items-center justify-center gap-2 ${
               bulk && asProforma ? 'bg-amber-600' : 'bg-sky-600'
             }`}
@@ -463,19 +490,17 @@ export const CheckoutSheet: React.FC<Props> = ({
       {factoryOn && (
         <button
           type="button"
-          onClick={() =>
-            setFulfillment((f) => {
-              const next = f === 'shop' ? 'factory' : 'shop';
-              if (next === 'factory') {
-                setFactoryCosts((prev) => {
-                  const nextCosts = { ...prev };
-                  for (const l of factoryLines) if (nextCosts[l.productId] == null) nextCosts[l.productId] = l.buyPrice || 0;
-                  return nextCosts;
-                });
-              }
-              return next;
-            })
-          }
+          onClick={() => {
+            if (fulfillment === 'factory') {
+              setFulfillment('shop');
+              return;
+            }
+            setLoadingFactory(true);
+            void fillFactoryCosts().finally(() => {
+              setFulfillment('factory');
+              setLoadingFactory(false);
+            });
+          }}
           className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fulfillment === 'factory' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
         >
           <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
@@ -519,7 +544,7 @@ export const CheckoutSheet: React.FC<Props> = ({
           <div className="space-y-2 pt-1">
             {pricingFactory && (
               <p className="text-[10px] text-amber-800 leading-5">
-                از موجودی آریو کم نمی‌شود. فاکتور مشتری به نام آریو می‌ماند و خرید به حساب شرکت مادر ثبت می‌شود. قیمت کارخانه روی فاکتور مشتری نمی‌آید؛ فقط سود مخفی با آن حساب می‌شود.
+                از موجودی آریو کم نمی‌شود. قیمت خرید از آخرین فاکتور خرید همین کالا آمده تا سود درست حساب شود. اگر لازم است همین‌جا عوضش کنید. روی فاکتور مشتری نمی‌آید.
               </p>
             )}
             {factoryLines.map((l) => {

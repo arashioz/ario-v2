@@ -10,6 +10,8 @@ export interface WatchFinding {
   detail: string;
   invoiceId?: string;
   invoiceNumber?: string;
+  otherInvoiceId?: string;
+  otherInvoiceNumber?: string;
   invoiceType?: 'sale' | 'purchase';
   productId?: string;
   productName?: string;

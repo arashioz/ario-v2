@@ -142,7 +142,7 @@ export const CustomersTab: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       const [list, statsData] = await Promise.all([
-        customersService.getCustomers({ search, filter, kind }),
+        customersService.getCustomers({ search, filter, ...(filter === 'debtors' ? {} : { kind }) }),
         customersService.getCustomerStats(),
       ]);
       setCustomers(list);
@@ -414,7 +414,12 @@ export const CustomersTab: React.FC = () => {
                   {/* Card Header */}
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-800">{customer.name}</h3>
+                      <h3 className="text-sm font-bold text-slate-800">
+                        {customer.name}
+                        {customer.kind === 'walkin' && (
+                          <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">حضوری</span>
+                        )}
+                      </h3>
                       {(customer.overdueCount || 0) > 0 && (
                         <span className="mt-1 inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600 text-white">
                           تاخیر در پرداخت · {formatToman(customer.overdueAmount || 0)}

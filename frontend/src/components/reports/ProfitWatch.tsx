@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertOctagon, AlertTriangle, CheckCircle2, ChevronDown, Eye, Info, RefreshCw, RotateCcw, ShieldCheck, XCircle } from 'lucide-react';
 import { watchService } from '../../services/watch.service';
 import type { Severity, WatchFinding, WatchReport } from '../../services/watch.service';
-import { apiErrorMessage } from '../../services/invoices.service';
+import { apiErrorMessage, invoicesService } from '../../services/invoices.service';
 import { useNotification } from '../../context/NotificationContext';
 import { formatJalaliIso } from '../../lib/jalali';
 import { formatToman, formatTomanSigned, num } from '../../lib/format';
@@ -179,6 +179,8 @@ export const ProfitWatchList: React.FC<{
   const [limit, setLimit] = useState(PAGE);
   const [dismissed, setDismissed] = useState<WatchFinding[] | null>(null);
   const [busy, setBusy] = useState('');
+  const [deleting, setDeleting] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (filter !== 'dismissed') return;
@@ -202,6 +204,22 @@ export const ProfitWatchList: React.FC<{
   }, [pool]);
 
   const list = rule ? pool.filter((f) => f.rule === rule) : pool;
+
+  const removeDuplicate = async (f: WatchFinding) => {
+    if (!f.invoiceId || !password) return;
+    try {
+      setBusy(f.id);
+      const res = await invoicesService.remove(f.invoiceId, password);
+      showNotification({ title: 'نسخهٔ اضافه حذف شد', message: res.message, type: 'success' });
+      setDeleting('');
+      setPassword('');
+      onChanged();
+    } catch (err) {
+      showNotification({ title: 'حذف نشد', message: apiErrorMessage(err, 'حذف فاکتور انجام نشد'), type: 'error' });
+    } finally {
+      setBusy('');
+    }
+  };
 
   const act = async (f: WatchFinding, restore: boolean) => {
     try {
@@ -280,12 +298,47 @@ export const ProfitWatchList: React.FC<{
                   {f.dismissed.at ? ` · ${formatJalaliIso(f.dismissed.at)}` : ''}
                 </p>
               )}
-              <div className="flex gap-2 mt-2.5">
+              <div className="flex flex-wrap gap-2 mt-2.5">
                 {f.invoiceId && (
-                  <button onClick={() => onOpenInvoice(f.invoiceId!)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700">
+                  <button onClick={() => onOpenInvoice(f.invoiceId!)} className="flex-1 min-w-[8rem] flex items-center justify-center gap-1 py-2 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700">
                     <Eye className="w-3.5 h-3.5" />
-                    باز کردن فاکتور
+                    {f.rule === 'duplicate' ? `نسخه اضافه ${f.invoiceNumber || ''}` : 'باز کردن فاکتور'}
                   </button>
+                )}
+                {f.otherInvoiceId && (
+                  <button onClick={() => onOpenInvoice(f.otherInvoiceId!)} className="flex-1 min-w-[8rem] flex items-center justify-center gap-1 py-2 rounded-xl bg-white border border-slate-200 text-[11px] font-bold text-slate-700">
+                    <Eye className="w-3.5 h-3.5" />
+                    نسخه اول {f.otherInvoiceNumber || ''}
+                  </button>
+                )}
+                {f.rule === 'duplicate' && f.invoiceId && deleting !== f.id && (
+                  <button
+                    onClick={() => {
+                      setDeleting(f.id);
+                      setPassword('');
+                    }}
+                    className="w-full py-2 rounded-xl bg-rose-600 text-white text-[11px] font-bold"
+                  >
+                    حذف نسخهٔ اضافه
+                  </button>
+                )}
+                {f.rule === 'duplicate' && deleting === f.id && (
+                  <div className="w-full flex gap-1.5">
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="رمز عبور"
+                      className="flex-1 px-3 py-2 rounded-xl border border-slate-200 text-xs"
+                    />
+                    <button
+                      disabled={busy === f.id || !password}
+                      onClick={() => void removeDuplicate(f)}
+                      className="px-3 py-2 rounded-xl bg-rose-600 text-white text-[11px] font-bold disabled:opacity-40"
+                    >
+                      حذف
+                    </button>
+                  </div>
                 )}
                 <button
                   onClick={() => act(f, !!f.dismissed)}

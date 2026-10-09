@@ -10,9 +10,11 @@ import { WatchDismissal, WatchDismissalSchema } from './schemas/watch-dismissal.
 import { AccountingService } from './accounting.service';
 import { AccountingController } from './accounting.controller';
 import { ProfitWatchService } from './profit-watch.service';
+import { InvoicesModule } from '../invoices/invoices.module';
 
 @Module({
   imports: [
+    InvoicesModule,
     MongooseModule.forFeature([
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Product.name, schema: ProductSchema },

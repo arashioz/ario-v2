@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Check, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
+import { Calendar, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
@@ -38,7 +38,7 @@ export const PosTab: React.FC = () => {
   const [dateOpen, setDateOpen] = useState(false);
 
   const [lines, setLines] = useState<CartLine[]>([]);
-  const [shipFrom, setShipFrom] = useState<'shop' | 'factory'>('shop');
+  const fromFactory = false;
   const [editing, setEditing] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
@@ -113,8 +113,6 @@ export const PosTab: React.FC = () => {
     setLines((prev) => prev.filter((l) => l.product._id !== id));
     setEditing(null);
   };
-
-  const fromFactory = settings.factorySalesEnabled && shipFrom === 'factory';
 
   const step = (l: CartLine, delta: number) => {
     const q = r3(l.quantity + delta);
@@ -345,23 +343,6 @@ export const PosTab: React.FC = () => {
         <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها و مشتریان..." />
 
         <div className={`p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
-          {settings.factorySalesEnabled && (
-            <button
-              type="button"
-              onClick={() => setShipFrom((s) => (s === 'factory' ? 'shop' : 'factory'))}
-              className={`mb-3 w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromFactory ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
-            >
-              <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
-              <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${fromFactory ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300'}`}>
-                {fromFactory && <Check className="w-3.5 h-3.5" />}
-              </span>
-            </button>
-          )}
-          {fromFactory && (
-            <div className="mb-3 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">
-              این فروش از کارخانه است. فاکتور مشتری به نام آریو صادر می‌شود، از موجودی آریو کم نمی‌شود و بهای کارخانه جدا، فقط برای سود، ثبت می‌شود.
-            </div>
-          )}
           <ProductBrowser
             products={products}
             saleType={saleType}

@@ -259,7 +259,57 @@ export class CustomersService implements OnModuleInit {
     await this.reconcilePromise;
   }
 
+  /** Open walk-in credit that was never posted to a customer account. */
+  private async attachWalkInCredits(): Promise<void> {
+    const orphans = await this.invoiceModel
+      .find({
+        type: 'sale',
+        remainingDebt: { $gt: 0 },
+        $or: [{ customerId: { $exists: false } }, { customerId: null }],
+      })
+      .exec();
+    for (const inv of orphans) {
+      const amount = Math.round(inv.remainingDebt || 0);
+      if (amount <= 0) continue;
+      const name = (inv.customerName || '').trim() || 'مشتری حضوری';
+      const phone = (inv.customerPhone || '').trim();
+      let customer = phone
+        ? await this.customerModel.findOne({ phoneNumber: phone, isActive: true, kind: 'walkin' }).exec()
+        : null;
+      if (!customer) customer = await this.customerModel.findOne({ name, isActive: true, kind: 'walkin' }).exec();
+      if (!customer) {
+        customer = await this.customerModel.create({
+          name,
+          phoneNumber: phone,
+          kind: 'walkin',
+          customerType: 'retail',
+          balance: 0,
+          isActive: true,
+          lastTransactionDate: inv.invoiceDate || new Date(),
+        });
+      }
+      inv.customerId = customer._id as any;
+      await inv.save();
+      const already = await this.transactionModel.findOne({ type: 'debt', invoiceId: inv._id }).exec();
+      if (already) continue;
+      const balance = await this.changeBalance(customer._id as any, amount);
+      await this.transactionModel.create({
+        customer: customer._id,
+        type: 'debt',
+        amount,
+        balanceAfter: balance,
+        paymentMethod: 'cash',
+        description: `نسیه فاکتور ${inv.invoiceNumber}`,
+        invoiceId: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        recordedByName: 'اصلاح حساب',
+        date: inv.invoiceDate || new Date(),
+      });
+    }
+  }
+
   private async runReconcile(): Promise<void> {
+    await this.attachWalkInCredits();
     await this.resetRazghandiLedger();
     const customers = await this.customerModel.find({ isActive: true }).select('_id balance').lean().exec();
     const grouped = await this.invoiceModel

@@ -33,6 +33,15 @@ export class InvoicesController {
     return this.invoicesService.getStats();
   }
 
+  @Get('last-purchase-prices')
+  lastPurchasePrices(@Query('productIds') productIds?: string) {
+    const ids = (productIds || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    return this.invoicesService.lastShopPurchasePrices(ids);
+  }
+
   @Post('rebuild-stock')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)

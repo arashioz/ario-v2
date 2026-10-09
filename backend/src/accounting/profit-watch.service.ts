@@ -6,6 +6,7 @@ import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { WatchDismissal, WatchDismissalDocument } from './schemas/watch-dismissal.schema';
 import { AccountingService } from './accounting.service';
 import { AuditService } from '../audit/audit.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { dayKey, isDoubleDiscount } from './fifo';
 import type { FifoResult, SaleLine } from './fifo';
 
@@ -19,6 +20,9 @@ export interface Finding {
   detail: string;
   invoiceId?: string;
   invoiceNumber?: string;
+  /** The earlier copy, when this finding is a duplicate. */
+  otherInvoiceId?: string;
+  otherInvoiceNumber?: string;
   invoiceType?: 'sale' | 'purchase';
   productId?: string;
   productName?: string;
@@ -136,6 +140,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     @InjectModel(WatchDismissal.name) private dismissalModel: Model<WatchDismissalDocument>,
     private readonly accounting: AccountingService,
     private readonly audit: AuditService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   onModuleInit() {
@@ -152,6 +157,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return this.running;
     this.running = (async () => {
       try {
+        await this.invoices.repairFactoryPurchasePrices().catch((e) => this.logger.warn(`Factory price repair: ${e.message}`));
         const f = await this.accounting.fifo();
         if (!force && this.last && this.last.fifoAt === f.computedAt) return this.last;
         const started = Date.now();
@@ -359,11 +365,18 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
       const gapMin = twin?.createdAt && inv.createdAt ? Math.abs(new Date(inv.createdAt).getTime() - new Date(twin.createdAt).getTime()) / 60000 : Infinity;
       const isDuplicate = twin && items.length && (inv.customerId ? true : gapMin <= DUPLICATE_WALKIN_MINUTES);
       if (isDuplicate) {
+        const clock = (d?: Date) =>
+          d
+            ? new Date(d).toLocaleString('fa-IR', { timeZone: 'Asia/Tehran', hour: '2-digit', minute: '2-digit' })
+            : '';
+        const names = items.map((it) => it.productName).filter(Boolean).slice(0, 4).join('، ');
         push('duplicate', {
           ...ref,
           id: `duplicate:${id}`,
           impact: inv.finalAmount,
-          detail: `همان مشتری، روز، اقلام و مبلغ فاکتور ${twin!.invoiceNumber}${Number.isFinite(gapMin) ? ` — ${fa(gapMin, 1)} دقیقه بعد ثبت شده` : ''}`,
+          otherInvoiceId: String(twin!._id),
+          otherInvoiceNumber: twin!.invoiceNumber,
+          detail: `نسخهٔ اضافه ${inv.invoiceNumber} ساعت ${clock(inv.createdAt)} است. نسخهٔ اول ${twin!.invoiceNumber} ساعت ${clock(twin!.createdAt)} است. مشتری ${inv.customerName || '—'}، مبلغ ${toman(inv.finalAmount)}${names ? `، کالا: ${names}` : ''}.`,
         });
       }
       if (!twin) seen.set(signature, inv);
