@@ -50,6 +50,8 @@ export interface FifoInvoice {
     totalPrice: number;
     weightKg?: number;
     secondaryQuantity?: number;
+    /** false: purchased but not delivered, so it is not a shop lot. */
+    received?: boolean;
   }[];
 }
 
@@ -203,8 +205,9 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
   const firstLotCost = new Map<string, number>();
   for (const inv of sorted) {
     if (inv.type !== 'purchase') continue;
-    const costs = purchaseLineCosts(inv, products);
-    inv.items.forEach((it, idx) => {
+    const lines = inv.items.filter((it) => it.received !== false);
+    const costs = purchaseLineCosts({ ...inv, items: lines }, products);
+    lines.forEach((it, idx) => {
       if (costs[idx].kg > 0 && !firstLotCost.has(it.productId)) firstLotCost.set(it.productId, costs[idx].costPerKg);
     });
   }
@@ -221,9 +224,10 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
   for (const inv of sorted) {
     const id = String(inv._id);
     if (inv.type === 'purchase') {
-      const costs = purchaseLineCosts(inv, products);
-      inv.items.forEach((it, idx) => {
-        const { kg, invoicePricePerKg, freightPerKg, costPerKg: newCost } = costs[idx];
+      const lines = inv.items.map((it, idx) => ({ it, idx })).filter((l) => l.it.received !== false);
+      const costs = purchaseLineCosts({ ...inv, items: lines.map((l) => l.it) }, products);
+      lines.forEach(({ it, idx }, i) => {
+        const { kg, invoicePricePerKg, freightPerKg, costPerKg: newCost } = costs[i];
         if (kg <= 0) return;
         const prev = lastCost.get(it.productId);
         if (prev !== undefined && Math.abs(newCost - prev) > 0.5) {

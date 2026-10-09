@@ -70,6 +70,9 @@ export const PosTab: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  useIonViewWillEnter(() => {
+    productsService.getAll().then(setProducts).catch(() => undefined);
+  });
 
   const totalKg = useMemo(() => lines.reduce((s, l) => s + lineKg(l), 0), [lines]);
   const subtotal = useMemo(() => lines.reduce((s, l) => s + lineTotal(l), 0), [lines]);

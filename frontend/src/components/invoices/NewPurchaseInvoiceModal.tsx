@@ -16,6 +16,7 @@ import {
   Scale,
   Sparkles,
   Truck,
+  Search,
 } from 'lucide-react';
 import { productsService } from '../../services/products.service';
 import type { Product } from '../../services/products.service';
@@ -46,6 +47,7 @@ interface PurchaseItemRow {
   unitRatio: number; // هر واحد اصلی = چند کیلوگرم
   unitBuyPrice: number; // قیمت خرید هر واحد اصلی
   totalPrice: number;
+  received: boolean;
 }
 
 export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = ({
@@ -74,6 +76,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
 
   // Item form states
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [productQuery, setProductQuery] = useState('');
   const [customProductName, setCustomProductName] = useState('');
   const [itemQuantity, setItemQuantity] = useState<string>('1');
   const [itemUnit, setItemUnit] = useState<string>('بسته');
@@ -178,6 +181,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
         unitRatio: ratio,
         unitBuyPrice: price,
         totalPrice: lineTotal,
+        received: true,
       },
     ]);
 
@@ -238,6 +242,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
           unitPrice: it.unitBuyPrice,
           totalPrice: it.totalPrice,
           weightKg: it.hasDualUnit ? it.secondaryQuantity : 0,
+          received: it.received !== false,
         })),
         totalAmount: subtotal,
         discount: discountNum,
@@ -372,17 +377,27 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
             </div>
 
             {/* Product selection */}
-            <div>
+            <div className="space-y-2">
               <label className="text-[11px] font-medium text-slate-600 mb-1 block">
                 انتخاب از کالاهای موجود یا نام دلخواه:
               </label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="search"
+                  value={productQuery}
+                  onChange={(e) => setProductQuery(e.target.value)}
+                  placeholder="جستجوی کالا…"
+                  className="w-full h-10 pr-10 pl-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
               <select
                 value={selectedProductId}
                 onChange={(e) => handleProductSelect(e.target.value)}
                 className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
               >
                 <option value="">-- انتخاب از لیست کالاهای انبار --</option>
-                {products.map((p) => {
+                {products.filter((p) => !productQuery.trim() || p.name.toLowerCase().includes(productQuery.trim().toLowerCase())).map((p) => {
                   const ratio = p.unitRatio || p.weightPerUnitKg || 1;
                   const units = Math.round((p.stock || 0) * 100) / 100;
                   const kg = Math.round((p.stock || 0) * ratio * 100) / 100;
@@ -526,9 +541,16 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
           {/* Items List */}
           {items.length > 0 && (
             <div className="bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-2.5">
-              <span className="text-xs font-semibold text-slate-700 block pb-1 border-b border-slate-100">
-                اقلام فاکتور خرید ({items.length} قلم)
-              </span>
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="text-xs font-semibold text-slate-700">
+                  اقلام فاکتور خرید ({items.length.toLocaleString('fa-IR')} قلم)
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {items.filter((it) => it.received === false).length
+                    ? `${items.filter((it) => it.received === false).length.toLocaleString('fa-IR')} قلم هنوز نرسیده`
+                    : 'همه تحویل شده'}
+                </span>
+              </div>
 
               <div className="divide-y divide-slate-100">
                 {items.map((it, idx) => (
@@ -549,6 +571,15 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setItems((prev) => prev.map((row, i) => (i === idx ? { ...row, received: !row.received } : row)))}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border whitespace-nowrap ${
+                          it.received ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {it.received ? 'تحویل شد' : 'تحویل نشده'}
+                      </button>
                       <span className="text-xs font-bold text-slate-800">
                         {formatToman(it.totalPrice)}
                       </span>

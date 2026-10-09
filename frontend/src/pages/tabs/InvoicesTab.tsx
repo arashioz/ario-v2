@@ -121,7 +121,8 @@ export const InvoicesTab: React.FC = () => {
           (inv) =>
             inv.invoiceNumber.toLowerCase().includes(s) ||
             inv.customerName.toLowerCase().includes(s) ||
-            !!inv.customerPhone?.includes(s),
+            !!inv.customerPhone?.includes(s) ||
+            inv.items.some((it) => it.productName.toLowerCase().includes(s)),
         )
       : inPeriod;
     return applyInvoiceFilters(searched, filters);
@@ -182,6 +183,27 @@ export const InvoicesTab: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3.5 space-y-4 max-w-md mx-auto pb-8">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="جستجوی فاکتور فروش و خرید…"
+              className="w-full h-11 pl-10 pr-10 text-sm rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 shadow-sm"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                aria-label="پاک کردن جستجو"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           <PendingProformasBanner refreshKey={invoices} />
 
           <div className="grid grid-cols-2 gap-2">
@@ -224,26 +246,14 @@ export const InvoicesTab: React.FC = () => {
             </div>
           )}
 
-          <div className="flex gap-2">
-            <div className="relative flex-1 flex items-center">
-              <div className="absolute right-3.5 text-slate-400 pointer-events-none">
-                <Search className="w-4 h-4" />
-              </div>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="شماره، نام یا تلفن"
-                className="w-full pl-4 pr-10 py-2.5 text-xs rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 shadow-sm"
-              />
-            </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setFilterOpen(true)}
-              className={`relative px-3 rounded-2xl border flex items-center gap-1 text-xs font-bold transition active:scale-95 ${
-                extraFilters.length ? 'bg-sky-600 border-sky-600 text-white' : 'bg-white border-sky-100 text-slate-600'
+              className={`relative shrink-0 px-3 py-1.5 rounded-xl border flex items-center gap-1 text-xs font-bold transition active:scale-95 ${
+                extraFilters.length ? 'bg-sky-600 border-sky-600 text-white' : 'bg-white border-slate-200 text-slate-600'
               }`}
             >
-              <SlidersHorizontal className="w-4 h-4" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
               فیلتر
               {extraFilters.length > 0 && (
                 <span className="absolute -top-1.5 -left-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center">
@@ -251,9 +261,6 @@ export const InvoicesTab: React.FC = () => {
                 </span>
               )}
             </button>
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {QUICK.map((q) => {
               const active = q.match(filters);
               return (

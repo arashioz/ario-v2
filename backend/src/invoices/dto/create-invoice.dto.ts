@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -46,6 +47,11 @@ export class InvoiceItemDto {
   @IsOptional()
   @IsNumber()
   weightKg?: number;
+
+  /** Purchase line: false means the goods are not in the shop yet. */
+  @IsOptional()
+  @IsBoolean()
+  received?: boolean;
 }
 
 export class SplitDetailsDto {

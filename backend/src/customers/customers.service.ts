@@ -217,14 +217,15 @@ export class CustomersService implements OnModuleInit {
     return rows[0]?.total || 0;
   }
 
-  /** Recompute paidAmount / remainingDebt / isPaid of an invoice from its credit and allocations. */
+  /** Recompute paidAmount / remainingDebt / isPaid from this invoice's own credit and its own payments. */
   async syncInvoicePayment(invoice: InvoiceDocument): Promise<InvoiceDocument> {
     const paidLater = await this.getPaidLater(invoice._id as Types.ObjectId);
     const credit = invoice.creditAmount || 0;
-    const applied = invoice.creditApplied || 0;
     const upfront = Math.max(0, (invoice.finalAmount || 0) - credit);
-    invoice.remainingDebt = Math.max(0, credit - paidLater - applied);
-    invoice.paidAmount = Math.min(invoice.finalAmount || 0, upfront + paidLater + applied);
+    invoice.creditApplied = 0;
+    invoice.creditSurplus = Math.max(0, paidLater - credit);
+    invoice.remainingDebt = Math.max(0, credit - paidLater);
+    invoice.paidAmount = Math.min(invoice.finalAmount || 0, upfront + paidLater);
     invoice.isPaid = invoice.remainingDebt <= 0;
     return invoice.save();
   }
@@ -232,9 +233,8 @@ export class CustomersService implements OnModuleInit {
   private reconcilePromise: Promise<void> | null = null;
 
   /**
-   * Invoice remaining must be that invoice's own credit, minus payments and any earlier
-   * customer credit. A payment or بستانکاری must not leave the full amount sitting on the invoice,
-   * and it must not be copied onto the customer's other invoices.
+   * Each invoice keeps its own debt and its own surplus.
+   * Credit from another invoice is not applied here and is not folded into a shared balance reduction.
    * Runs once per process, then again for a customer after their ledger changes.
    */
   async ensureReconciled(): Promise<void> {
@@ -248,6 +248,7 @@ export class CustomersService implements OnModuleInit {
   }
 
   private async runReconcile(): Promise<void> {
+    await this.resetRazghandiLedger();
     const customers = await this.customerModel.find({ isActive: true }).select('_id balance').lean().exec();
     const grouped = await this.invoiceModel
       .aggregate([
@@ -256,6 +257,10 @@ export class CustomersService implements OnModuleInit {
           $group: {
             _id: '$customerId',
             sumRem: { $sum: '$remainingDebt' },
+            applied: { $sum: '$creditApplied' },
+            upfrontGap: {
+              $sum: { $cond: [{ $gt: ['$finalAmount', '$creditAmount'] }, 1, 0] },
+            },
             missingDue: {
               $sum: {
                 $cond: [
@@ -273,15 +278,70 @@ export class CustomersService implements OnModuleInit {
     for (const c of customers) {
       const row = byId.get(String(c._id));
       if (!row) continue;
-      if ((row.sumRem || 0) > Math.max(0, c.balance || 0) + 1 || row.missingDue > 0) {
+      if ((row.applied || 0) > 0 || (row.upfrontGap || 0) > 0 || row.missingDue > 0) {
         await this.alignInvoiceDebts(String(c._id));
       }
     }
   }
 
   /**
-   * Spread account credit that is not backed by a later payment onto the newest open invoices.
-   * Never unwinds an application that is already there (a later manual debt stays on the account).
+   * رازقندی: old payments were never entered on the right invoices, so the ledger
+   * mixed them. Wipe it once and leave each invoice with only its own نسیه,
+   * so the payments can be recorded one by one.
+   */
+  private async resetRazghandiLedger(): Promise<void> {
+    const customer = await this.customerModel.findOne({ name: 'رازقندی', isActive: true }).exec();
+    if (!customer) return;
+    const claim = await this.customerModel.collection.updateOne(
+      { _id: customer._id, ledgerClearedAt: { $exists: false } },
+      { $set: { ledgerClearedAt: new Date() } },
+    );
+    if (!claim.matchedCount) return;
+
+    try {
+    const invoices = await this.invoiceModel
+      .find({ customerId: customer._id, type: 'sale' })
+      .sort({ invoiceDate: 1, createdAt: 1 })
+      .exec();
+    await this.transactionModel.deleteMany({ customer: customer._id }).exec();
+
+    let balance = 0;
+    for (const inv of invoices) {
+      const credit = Math.max(0, inv.creditAmount || 0);
+      const upfront = Math.max(0, (inv.finalAmount || 0) - credit);
+      inv.creditApplied = 0;
+      inv.creditSurplus = 0;
+      inv.remainingDebt = credit;
+      inv.paidAmount = Math.min(inv.finalAmount || 0, upfront);
+      inv.isPaid = credit <= 0;
+      await inv.save();
+      if (credit <= 0) continue;
+      balance += credit;
+      await this.transactionModel.create({
+        customer: customer._id,
+        type: 'debt',
+        amount: credit,
+        balanceAfter: balance,
+        paymentMethod: 'cash',
+        description: `نسیه فاکتور ${inv.invoiceNumber}`,
+        invoiceId: inv._id,
+        invoiceNumber: inv.invoiceNumber,
+        recordedByName: 'اصلاح حساب',
+        date: inv.invoiceDate || new Date(),
+      });
+    }
+    customer.balance = balance;
+    customer.lastTransactionDate = new Date();
+    await customer.save();
+    } catch (err) {
+      await this.customerModel.collection.updateOne({ _id: customer._id }, { $unset: { ledgerClearedAt: '' } });
+      throw err;
+    }
+  }
+
+  /**
+   * Remaining debt is this invoice's credit minus payments allocated to it.
+   * Any extra payment stays as this invoice's own surplus and is not used to shrink another invoice.
    */
   async alignInvoiceDebts(customerId: string): Promise<void> {
     if (!Types.ObjectId.isValid(customerId)) return;
@@ -291,24 +351,35 @@ export class CustomersService implements OnModuleInit {
       .find({ customerId: customer._id, type: 'sale', creditAmount: { $gt: 0 } })
       .sort({ invoiceDate: -1, createdAt: -1 })
       .exec();
+    const paidRows = invoices.length
+      ? await this.transactionModel
+          .aggregate([
+            { $match: { type: 'payment', 'allocations.invoiceId': { $in: invoices.map((inv) => inv._id) } } },
+            { $unwind: '$allocations' },
+            { $match: { 'allocations.invoiceId': { $in: invoices.map((inv) => inv._id) } } },
+            { $group: { _id: '$allocations.invoiceId', total: { $sum: '$allocations.amount' } } },
+          ])
+          .exec()
+      : [];
+    const paidById = new Map(paidRows.map((row) => [String(row._id), row.total || 0]));
     const rows: { inv: InvoiceDocument; paidLater: number; base: number }[] = [];
-    let sumBase = 0;
-    let currentApplied = 0;
     for (const inv of invoices) {
-      const paidLater = await this.getPaidLater(inv._id as Types.ObjectId);
-      const base = Math.max(0, (inv.creditAmount || 0) - paidLater);
+      const paidLater = paidById.get(String(inv._id)) || 0;
+      const credit = this.debtBase(inv.finalAmount || 0, inv.creditAmount || 0, this.splitPaid(inv.splitDetails), paidLater);
+      if (credit !== (inv.creditAmount || 0)) {
+        await this.resizeInvoiceDebt(inv, credit);
+        inv.creditAmount = credit;
+      }
+      const base = Math.max(0, credit - paidLater);
       rows.push({ inv, paidLater, base });
-      sumBase += base;
-      currentApplied += Math.min(inv.creditApplied || 0, base);
     }
-    const desired = Math.max(currentApplied, Math.max(0, sumBase - Math.max(0, customer.balance || 0)));
-    let left = desired;
+    const writes: { updateOne: { filter: { _id: unknown }; update: { $set: Record<string, unknown> } } }[] = [];
     for (const row of rows) {
-      const apply = Math.min(row.base, Math.max(0, left));
-      left -= apply;
-      const remaining = Math.max(0, row.base - apply);
-      const upfront = Math.max(0, (row.inv.finalAmount || 0) - (row.inv.creditAmount || 0));
-      const paidAmount = Math.min(row.inv.finalAmount || 0, upfront + row.paidLater + apply);
+      const credit = row.inv.creditAmount || 0;
+      const surplus = Math.max(0, row.paidLater - credit);
+      const remaining = row.base;
+      const upfront = Math.max(0, (row.inv.finalAmount || 0) - credit);
+      const paidAmount = Math.min(row.inv.finalAmount || 0, upfront + row.paidLater);
       const isPaid = remaining <= 0;
       const days = row.inv.dueDays || 15;
       const needsDue = remaining > 0 && !row.inv.dueDate;
@@ -316,21 +387,87 @@ export class CustomersService implements OnModuleInit {
         ? new Date(new Date(row.inv.invoiceDate || Date.now()).getTime() + days * 86400000)
         : row.inv.dueDate;
       const same =
-        (row.inv.creditApplied || 0) === apply &&
+        (row.inv.creditAmount || 0) === credit &&
+        (row.inv.creditApplied || 0) === 0 &&
+        (row.inv.creditSurplus || 0) === surplus &&
         (row.inv.remainingDebt || 0) === remaining &&
+        (row.inv.paidAmount || 0) === paidAmount &&
         !!row.inv.isPaid === isPaid &&
         !needsDue;
       if (same) continue;
-      row.inv.creditApplied = apply;
-      row.inv.remainingDebt = remaining;
-      row.inv.paidAmount = paidAmount;
-      row.inv.isPaid = isPaid;
+      const $set: Record<string, unknown> = {
+        creditAmount: credit,
+        creditApplied: 0,
+        creditSurplus: surplus,
+        remainingDebt: remaining,
+        paidAmount,
+        isPaid,
+      };
       if (needsDue && dueDate) {
-        row.inv.dueDate = dueDate;
-        row.inv.dueDays = days;
+        $set.dueDate = dueDate;
+        $set.dueDays = days;
       }
-      await row.inv.save();
+      writes.push({ updateOne: { filter: { _id: row.inv._id }, update: { $set } } });
     }
+    if (writes.length) await this.invoiceModel.bulkWrite(writes);
+    await this.rebuildRunningBalance(customerId);
+  }
+
+  /** Same-day cash stored on the invoice (کارتخوان/نقد/حواله/چک), not a later ledger payment. */
+  private splitPaid(split?: { pos?: number; cash?: number; transfer?: number; cheque?: number }) {
+    return (split?.pos || 0) + (split?.cash || 0) + (split?.transfer || 0) + (split?.cheque || 0);
+  }
+
+  /**
+   * Debt charged for this invoice. A bare gap between final and credit, with no split cash,
+   * is the same money as a later payment — counting both turns 22 into 2 instead of 12.
+   */
+  private debtBase(final: number, credit: number, splitPaid: number, paidLater: number) {
+    const gap = Math.max(0, final - (credit || 0));
+    if (gap > 0 && splitPaid <= 0 && paidLater + 1 >= gap) return final;
+    return credit || 0;
+  }
+
+  /** Make the invoice's debt transaction match `desired`, and move the customer balance by the difference. */
+  private async resizeInvoiceDebt(invoice: InvoiceDocument, desired: number) {
+    const debts = await this.transactionModel
+      .find({ type: 'debt', invoiceId: invoice._id })
+      .sort({ date: 1, createdAt: 1 })
+      .exec();
+    const current = debts.reduce((s, d) => s + (d.amount || 0), 0);
+    const delta = desired - current;
+    if (Math.abs(delta) < 1) return;
+    if (debts.length) {
+      const last = debts[debts.length - 1];
+      last.amount = Math.max(0, (last.amount || 0) + delta);
+      await last.save();
+    }
+    if (invoice.customerId) await this.changeBalance(String(invoice.customerId), delta);
+  }
+
+  /**
+   * Rewrite each row's مانده so it is the balance after that row.
+   * Old imports stamped one number on every row, so a later payment looked negative.
+   */
+  private async rebuildRunningBalance(customerId: string) {
+    if (!Types.ObjectId.isValid(customerId)) return;
+    const customer = await this.customerModel.findById(customerId).select('balance').exec();
+    if (!customer) return;
+    const txs = await this.transactionModel
+      .find({ customer: customer._id })
+      .sort({ date: 1, createdAt: 1 })
+      .exec();
+    let running = customer.balance || 0;
+    const writes: { updateOne: { filter: { _id: unknown }; update: { $set: { balanceAfter: number } } } }[] = [];
+    for (let i = txs.length - 1; i >= 0; i--) {
+      const tx = txs[i];
+      if (tx.type === 'adjustment') break;
+      if ((tx.balanceAfter || 0) !== running) {
+        writes.push({ updateOne: { filter: { _id: tx._id }, update: { $set: { balanceAfter: running } } } });
+      }
+      running += tx.type === 'payment' ? tx.amount || 0 : -(tx.amount || 0);
+    }
+    if (writes.length) await this.transactionModel.bulkWrite(writes);
   }
 
   /** Put the credit portion of a sale invoice on the customer's account. */

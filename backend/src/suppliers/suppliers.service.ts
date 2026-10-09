@@ -447,6 +447,8 @@ export class SuppliersService implements OnApplicationBootstrap {
 
   async updatePayment(id: string, dto: UpdateSupplierPaymentDto) {
     const p = await this.findPayment(id);
+    const previous = p.supplier;
+    if (dto.supplier) p.supplier = canonicalSupplier(dto.supplier);
     if (dto.amount !== undefined) p.amount = dto.amount;
     if (dto.date) p.date = new Date(dto.date);
     if (dto.method) p.method = dto.method;
@@ -454,6 +456,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     if (dto.destinationAccount !== undefined) p.destinationAccount = dto.destinationAccount.trim();
     if (dto.notes !== undefined) p.notes = dto.notes.trim();
     await p.save();
+    if (previous !== p.supplier) await this.sync(previous);
     return this.account(p.supplier);
   }
 

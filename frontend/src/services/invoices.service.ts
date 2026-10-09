@@ -10,6 +10,8 @@ export interface InvoiceItem {
   unitPrice: number;
   totalPrice: number;
   weightKg?: number;
+  /** Purchase line. false = ordered but not delivered into the shop. */
+  received?: boolean;
 }
 
 export interface SplitDetails {
@@ -55,8 +57,10 @@ export interface Invoice {
   paidAmount: number;
   remainingDebt: number;
   creditAmount?: number;
-  /** Earlier customer credit applied to this invoice, without new money coming in. */
+  /** Unused. Other invoices' credit is not applied to this one. */
   creditApplied?: number;
+  /** Extra money paid on this invoice, kept on this invoice only. */
+  creditSurplus?: number;
   dueDate?: string;
   dueDays?: number;
   /** shop stock, or goods that left the factory and never touched the shop. */
@@ -155,7 +159,7 @@ export const invoicesService = {
   },
 
   update: async (id: string, data: CreateInvoiceInput): Promise<Invoice> => {
-    const response = await api.put<Invoice>(`/invoices/${id}`, data);
+    const response = await api.put<Invoice>(`/invoices/${id}`, data, { timeout: 30000 });
     return response.data;
   },
 
@@ -179,7 +183,10 @@ export const invoicesService = {
 };
 
 export const apiErrorMessage = (err: unknown, fallback: string): string => {
-  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  const data = (err as { response?: { data?: { message?: string | string[] } }; code?: string }) || {};
+  const msg = data.response?.data?.message;
   if (Array.isArray(msg)) return msg[0];
-  return msg || fallback;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  if (data.code === 'ECONNABORTED') return 'ارتباط با سرور طول کشید. یک بار دیگر ذخیره کنید.';
+  return fallback;
 };

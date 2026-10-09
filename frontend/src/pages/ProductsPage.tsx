@@ -6,6 +6,7 @@ import {
   IonContent,
   IonRefresher,
   IonRefresherContent,
+  useIonViewWillEnter,
 } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
@@ -90,6 +91,9 @@ export const ProductsPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  useIonViewWillEnter(() => {
+    loadData();
+  });
 
   const handleRefresh = async (e: CustomEvent<RefresherEventDetail>) => {
     await loadData();

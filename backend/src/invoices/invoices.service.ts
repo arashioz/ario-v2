@@ -57,9 +57,14 @@ export class InvoicesService {
     return `${prefix}${String(n).padStart(4, '0')}`;
   }
 
+  /** Lines that actually sit in the shop. Unreceived purchase lines stay out of stock. */
+  private inShop<T extends { received?: boolean }>(items: T[], purchase: boolean): T[] {
+    return purchase ? items.filter((item) => item.received !== false) : items;
+  }
+
   /** Add `sign * quantity` of every item to stock. */
-  private async shiftStock(items: { productId: string; quantity: number }[], sign: 1 | -1) {
-    for (const item of items) {
+  private async shiftStock(items: { productId: string; quantity: number; received?: boolean }[], sign: 1 | -1, purchase = false) {
+    for (const item of this.inShop(items, purchase)) {
       if (!Types.ObjectId.isValid(item.productId)) continue;
       await this.productModel
         .updateOne({ _id: item.productId }, { $inc: { stock: sign * (item.quantity || 0) } })
@@ -74,7 +79,11 @@ export class InvoicesService {
     for (const item of items) {
       const product = await this.productModel.findById(item.productId).exec();
       if (!product) {
-        throw new NotFoundException(`کالای «${item.productName}» یافت نشد.`);
+        if (isSale) throw new NotFoundException(`کالای «${item.productName}» یافت نشد.`);
+        const weight = item.weightKg || item.secondaryQuantity || 0;
+        totalWeightKg += weight;
+        prepared.push({ ...item, weightKg: Math.round(weight * 10) / 10, received: item.received !== false });
+        continue;
       }
       if (isSale && product.stock < item.quantity) {
         throw new BadRequestException(
@@ -89,7 +98,7 @@ export class InvoicesService {
         else if (product.unit === 'کیلوگرم') weight = item.quantity;
       }
       totalWeightKg += weight;
-      prepared.push({ ...item, weightKg: Math.round(weight * 10) / 10 });
+      prepared.push({ ...item, weightKg: Math.round(weight * 10) / 10, received: isSale ? true : item.received !== false });
     }
 
     return { items: prepared, totalWeightKg: Math.round(totalWeightKg * 10) / 10 };
@@ -201,7 +210,7 @@ export class InvoicesService {
     if (isSale && !fromFactory) {
       await this.shiftStock(items, -1);
     } else if (!isSale) {
-      await this.shiftStock(items, 1);
+      await this.shiftStock(items, 1, true);
       for (const item of items) {
         if (item.unitPrice > 0) {
           await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
@@ -230,6 +239,7 @@ export class InvoicesService {
       depositAccounts: this.depositAccounts(dto),
       creditAmount: credit,
       creditApplied: 0,
+      creditSurplus: 0,
       dueDays,
       dueDate: credit > 0 ? new Date(invoiceDate.getTime() + dueDays * 86400000) : undefined,
       fulfillment: fromFactory ? 'factory' : 'shop',
@@ -268,24 +278,34 @@ export class InvoicesService {
 
     // Undo the old effects, then apply the new ones; restore on validation failure.
     if (wasShop) await this.shiftStock(invoice.items as any, 1);
-    else if (!isSale) await this.shiftStock(invoice.items as any, -1);
+    else if (!isSale) await this.shiftStock(invoice.items as any, -1, true);
     let prepared: Awaited<ReturnType<InvoicesService['prepareItems']>>;
     try {
       prepared = await this.prepareItems(dto.items, isSale && !willFactory);
     } catch (err) {
       if (wasShop) await this.shiftStock(invoice.items as any, -1);
-      else if (!isSale) await this.shiftStock(invoice.items as any, 1);
+      else if (!isSale) await this.shiftStock(invoice.items as any, 1, true);
       throw err;
     }
     if (!willFactory && isSale) await this.shiftStock(prepared.items, -1);
-    else if (!isSale) await this.shiftStock(prepared.items, 1);
+    else if (!isSale) await this.shiftStock(prepared.items, 1, true);
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
-    const credit = this.creditPortion(dto);
+    let credit = this.creditPortion(dto);
+    if (isSale) {
+      const paidLater = await this.customersService.getPaidLater(invoice._id);
+      const splitPaid =
+        (dto.splitDetails?.pos || 0) +
+        (dto.splitDetails?.cash || 0) +
+        (dto.splitDetails?.transfer || 0) +
+        (dto.splitDetails?.cheque || 0);
+      const gap = Math.max(0, (dto.finalAmount || 0) - credit);
+      if (gap > 0 && splitPaid <= 0 && paidLater + 1 >= gap) credit = dto.finalAmount || credit;
+    }
     if (isSale && credit > 0 && !customer) {
       if (!willFactory) await this.shiftStock(prepared.items, 1);
       if (wasShop) await this.shiftStock(invoice.items as any, -1);
-      else if (!isSale) await this.shiftStock(invoice.items as any, 1);
+      else if (!isSale) await this.shiftStock(invoice.items as any, 1, true);
       throw new BadRequestException('برای فروش نسیه، مشتری را انتخاب کنید');
     }
 
@@ -304,8 +324,8 @@ export class InvoicesService {
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
       invoiceDate,
       fulfillment: dto.fulfillment ?? invoice.fulfillment ?? 'shop',
-      dueDays,
-      ...(credit > 0 ? { dueDate: new Date(new Date(invoiceDate).getTime() + dueDays * 86400000) } : { dueDate: undefined }),
+      ...(typeof dueDays === 'number' ? { dueDays } : {}),
+      ...(credit > 0 ? { dueDate: new Date(new Date(invoiceDate).getTime() + (dueDays || 15) * 86400000) } : {}),
       items: prepared.items,
       totalAmount: dto.totalAmount,
       discount: dto.discount || 0,
@@ -324,6 +344,11 @@ export class InvoicesService {
     await this.syncShippingExpense(invoice, recordedByName);
 
     if (!isSale) {
+      for (const item of prepared.items) {
+        if (item.unitPrice > 0 && Types.ObjectId.isValid(String(item.productId))) {
+          await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
+        }
+      }
       await this.suppliersService.sync(invoice.customerName);
       if (canonicalSupplier(previousSupplier) !== canonicalSupplier(invoice.customerName)) {
         await this.suppliersService.sync(previousSupplier);
@@ -345,7 +370,7 @@ export class InvoicesService {
     const fromFactory = isSale && invoice.fulfillment === 'factory';
 
     if (isSale && !fromFactory) await this.shiftStock(invoice.items as any, 1);
-    else if (!isSale) await this.shiftStock(invoice.items as any, -1);
+    else if (!isSale) await this.shiftStock(invoice.items as any, -1, true);
     if (invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)) {
       await this.expenseModel.deleteOne({ _id: invoice.shippingExpenseId }).exec();
     }

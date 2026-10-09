@@ -33,6 +33,10 @@ export class CreateSupplierPaymentDto {
 
 export class UpdateSupplierPaymentDto {
   @IsOptional()
+  @IsString()
+  supplier?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(1)
   amount?: number;

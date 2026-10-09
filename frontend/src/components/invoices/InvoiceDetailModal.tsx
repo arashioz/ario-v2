@@ -31,7 +31,7 @@ import { InvoicePaymentSheet } from './InvoicePaymentSheet';
 import { InvoiceProfitCard } from './InvoiceProfitCard';
 import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
-import { customersService } from '../../services/customers.service';
+import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
 import { invoiceSms, openSms } from '../../lib/sms';
 import { formatToman, tons } from '../../lib/format';
 
@@ -53,10 +53,33 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const settings = useSettings();
   const [invoice, setInvoice] = useState<Invoice | null>(invoiceProp);
   const [sheet, setSheet] = useState<'edit' | 'delete' | 'pay' | 'price' | null>(null);
+  const [payments, setPayments] = useState<{ id: string; amount: number; date: string; method?: string }[]>([]);
 
   useEffect(() => {
     setInvoice(invoiceProp);
     setSheet(null);
+  }, [invoiceProp]);
+
+  useEffect(() => {
+    if (!invoiceProp?.customerId || invoiceProp.type !== 'sale') {
+      setPayments([]);
+      return;
+    }
+    customersService
+      .getCustomerTransactions(invoiceProp.customerId)
+      .then((txs) => {
+        const rows: { id: string; amount: number; date: string; method?: string }[] = [];
+        for (const tx of txs) {
+          if (tx.type !== 'payment') continue;
+          for (const a of tx.allocations || []) {
+            if (a.invoiceId === invoiceProp._id) {
+              rows.push({ id: `${tx._id}-${a.invoiceId}`, amount: a.amount, date: tx.date, method: tx.paymentMethod });
+            }
+          }
+        }
+        setPayments(rows);
+      })
+      .catch(() => setPayments([]));
   }, [invoiceProp]);
 
   if (!invoice) return null;
@@ -151,14 +174,32 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0">
           {invoice.fulfillment === 'factory' && (
             <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">
-              این فاکتور از کارخانه ارسال شده است. از موجودی دفتر کم نشده و در سود و موجودی انبار دفتر حساب نمی‌شود.
+              این بار از موجودی شرکت رفته است. از موجودی آریو کم نشده و در سود و انبار آریو حساب نمی‌شود.
+            </div>
+          )}
+          {isSale && payments.length > 0 && (
+            <div className="rounded-2xl bg-white border border-emerald-100 px-3 py-2 space-y-1.5">
+              <span className="text-[11px] font-bold text-emerald-800">پرداخت‌های همین فاکتور</span>
+              {payments.map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-[11px] text-slate-700">
+                  <span>
+                    {new Date(p.date).toLocaleDateString('fa-IR')}
+                    {p.method ? ` · ${PAYMENT_METHOD_LABELS[p.method as keyof typeof PAYMENT_METHOD_LABELS] || ''}` : ''}
+                  </span>
+                  <span className="font-mono font-bold text-emerald-700">{formatToman(p.amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {isSale && (invoice.creditSurplus || 0) > 0 && (
+            <div className="rounded-2xl bg-sky-50 border border-sky-200 px-3 py-2 text-[11px] text-sky-900 leading-5">
+              بستانکاری همین فاکتور {formatToman(invoice.creditSurplus || 0)} است و روی بدهی فاکتورهای دیگر اعمال نمی‌شود.
             </div>
           )}
           {isSale && invoice.remainingDebt > 0 && invoice.dueDate && (
             <div className={`rounded-2xl px-3 py-2 text-[11px] leading-5 border ${new Date(invoice.dueDate).getTime() < Date.now() ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
               سررسید {new Date(invoice.dueDate).toLocaleDateString('fa-IR')}
               {new Date(invoice.dueDate).getTime() < Date.now() ? ' — تاخیر در پرداخت' : ''}
-              {(invoice.creditApplied || 0) > 0 ? ` · بستانکاری قبلی ${formatToman(invoice.creditApplied || 0)} روی همین فاکتور اعمال شده` : ''}
             </div>
           )}
           {isSale && invoice.remainingDebt > 0 && (
@@ -255,6 +296,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-slate-800">
                         {index + 1}. {item.productName}
+                        {!isSale && item.received === false && (
+                          <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">تحویل نشده</span>
+                        )}
+                        {!isSale && item.received !== false && (
+                          <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">تحویل شد</span>
+                        )}
                       </span>
                       <span className="text-xs font-semibold text-slate-900 font-mono">
                         {formatToman(item.totalPrice)}

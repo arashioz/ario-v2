@@ -31,6 +31,10 @@ export class InvoiceItem {
 
   @Prop({ default: 0 })
   weightKg: number; // Line item weight in kg
+
+  /** Purchase lines only. Missing means the goods were received (older invoices). */
+  @Prop({ default: true })
+  received?: boolean;
 }
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
@@ -137,11 +141,17 @@ export class Invoice {
   creditAmount: number;
 
   /**
-   * Earlier credit on the customer's account (بستانکاری) applied to this invoice.
-   * It reduces remainingDebt without counting as new money received.
+   * Kept at 0. Account credit from other invoices must not reduce this invoice.
    */
   @Prop({ default: 0 })
   creditApplied: number;
+
+  /**
+   * Money paid on this invoice beyond its own credit (بستانکاری همین فاکتور).
+   * It stays on this invoice and is not spread onto the customer's other invoices.
+   */
+  @Prop({ default: 0 })
+  creditSurplus: number;
 
   /** Payment deadline for the credit portion. Defaults to 15 days after the invoice date. */
   @Prop({ type: Date })

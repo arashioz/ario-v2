@@ -27,6 +27,7 @@ interface Row {
   qtyBy: 'unit' | 'kg';
   priceBy: 'unit' | 'kg';
   qtyText?: string;
+  received: boolean;
 }
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -63,6 +64,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const [notes, setNotes] = useState('');
   const [payMode, setPayMode] = useState<PayMode>('pos');
   const [upfront, setUpfront] = useState(0);
+  const [fromCompany, setFromCompany] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [accountId, setAccountId] = useState('');
@@ -86,6 +88,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           altLabel: 'کیلوگرم',
           qtyBy: 'unit' as const,
           priceBy: 'unit' as const,
+          received: it.received !== false,
         };
       }),
     );
@@ -93,6 +96,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
     setDiscount(invoice.discount || 0);
     setFreight(invoice.type === 'purchase' && invoice.shippingPayer === 'me' ? invoice.shippingCost || 0 : 0);
     setNotes(invoice.notes || '');
+    setFromCompany(invoice.type === 'sale' && invoice.fulfillment === 'factory');
     const credit = invoice.creditAmount ?? invoice.remainingDebt ?? 0;
     if (credit > 0 || invoice.paymentMethod === 'credit' || invoice.paymentMethod === 'split') {
       setPayMode('credit');
@@ -105,7 +109,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   }, [invoice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!products.length) return;
+    if (!products.length || invoice?.type === 'purchase') return;
     setRows((prev) =>
       prev.map((r) => {
         const p = products.find((x) => x._id === r.productId);
@@ -164,6 +168,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         qtyBy: byAlt ? 'kg' : 'unit',
         priceBy: byAlt ? 'kg' : 'unit',
         qtyText: byAlt ? '1' : undefined,
+        received: true,
       },
     ]);
   };
@@ -189,13 +194,19 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       showNotification({ title: 'حساب واریز', message: 'مشخص کنید پول به کدام حساب واریز شده.', type: 'warning' });
       return;
     }
+    const parsedDate = new Date(`${date}T12:00:00`);
+    if (!date || Number.isNaN(parsedDate.getTime())) {
+      showNotification({ title: 'تاریخ نامعتبر', message: 'تاریخ فاکتور را دوباره انتخاب کنید.', type: 'warning' });
+      return;
+    }
     const payload: CreateInvoiceInput = {
       type: invoice.type,
       saleType: invoice.saleType,
       customerId: invoice.customerId,
       customerName: invoice.customerName,
       customerPhone: invoice.customerPhone,
-      invoiceDate: new Date(date).toISOString(),
+      invoiceDate: parsedDate.toISOString(),
+      fulfillment: isSale && fromCompany ? 'factory' : 'shop',
       items: rows.map((r) => {
         const secondary = r.ratio ? Math.round(r.quantity * r.ratio * 1000) / 1000 : undefined;
         return {
@@ -208,6 +219,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           secondaryQuantity: secondary,
           secondaryUnit: r.secondaryUnit,
           weightKg: r.secondaryUnit === 'کیلوگرم' ? secondary : undefined,
+          ...(isSale ? {} : { received: r.received !== false }),
         };
       }),
       totalAmount: total,
@@ -258,8 +270,19 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       <div className="space-y-2">
         {rows.map((r, i) => (
           <div key={i} className="border border-slate-100 rounded-2xl p-3 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-800">{r.productName}</span>
+              {!isSale && (
+                <button
+                  type="button"
+                  onClick={() => updateRow(i, { received: !r.received })}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                    r.received ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {r.received ? 'تحویل شد' : 'تحویل نشده'}
+                </button>
+              )}
               <button onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))} className="p-1 text-slate-300 hover:text-rose-600">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -380,6 +403,33 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
       {isSale && (
         <div className="space-y-2">
+          <label className="text-[11px] text-slate-500 block">این بار از کجا رفته</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFromCompany(false)}
+              className={`py-2 rounded-xl text-[11px] font-bold border ${!fromCompany ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200'}`}
+            >
+              از موجودی آریو
+            </button>
+            <button
+              type="button"
+              onClick={() => setFromCompany(true)}
+              className={`py-2 rounded-xl text-[11px] font-bold border ${fromCompany ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200'}`}
+            >
+              از موجودی شرکت
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-5">
+            {fromCompany
+              ? 'بار از شرکت رفته است. با ذخیره، اگر قبلاً از انبار آریو کم شده باشد برمی‌گردد.'
+              : 'از انبار آریو کم می‌شود. اگر بار واقعاً از شرکت قند رفته، «از موجودی شرکت» را بزنید.'}
+          </p>
+        </div>
+      )}
+
+      {isSale && (
+        <div className="space-y-2">
           <label className="text-[11px] text-slate-500 block">نحوه پرداخت</label>
           <div className="grid grid-cols-4 gap-1.5">
             {(Object.keys(PAY_LABELS) as PayMode[])
@@ -403,7 +453,8 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           {isCard && <AccountPicker value={accountId} onChange={setAccountId} />}
           {payMode === 'credit' && (
             <div className="bg-rose-50/60 rounded-2xl p-3 space-y-2">
-              <label className="text-[11px] text-slate-600 block">پرداخت نقدی همان روز (پیش‌پرداخت)</label>
+              <label className="text-[11px] text-slate-600 block">فقط پول گرفته‌شده همان روز فاکتور</label>
+              <p className="text-[10px] text-slate-400 leading-4">پرداخت‌های بعدی را اینجا ننویسید؛ همان‌ها در گردش حساب همین فاکتور می‌مانند و یک بار از بدهی کم می‌شوند.</p>
               <AmountInput value={upfront} onChange={setUpfront} />
               <div className="flex justify-between text-xs text-rose-700">
                 <span>نسیه روی حساب مشتری</span>

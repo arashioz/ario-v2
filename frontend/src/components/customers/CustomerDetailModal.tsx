@@ -40,7 +40,7 @@ import type { FollowUpTarget } from '../followups/FollowUpSheet';
 import { useSettings } from '../../services/settings.service';
 import { accountTitle } from '../ui/AccountPicker';
 import { debtSms, invoiceSms, openSms } from '../../lib/sms';
-import { formatToman } from '../../lib/format';
+import { formatToman, formatTomanSigned } from '../../lib/format';
 import { dateToYmd, ymdToJalali, JALALI_MONTHS } from '../../lib/jalali';
 
 interface CustomerDetailModalProps {
@@ -177,7 +177,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
   const openInvoices = invoices.filter((i) => i.type === 'sale' && i.remainingDebt > 0);
   const invoiceDebt = openInvoices.reduce((s, i) => s + i.remainingDebt, 0);
-  const otherDebt = customer ? customer.balance - invoiceDebt : 0;
+  const invoiceCredit = invoices.reduce((s, i) => s + (i.type === 'sale' ? i.creditSurplus || 0 : 0), 0);
+  const otherDebt = customer ? customer.balance - invoiceDebt + invoiceCredit : 0;
 
   const handleSendSms = async () => {
     if (!customer) return;
@@ -405,16 +406,24 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </span>
               </div>
 
-              {customer.balance > 0 && (
+              {(invoiceDebt > 0 || invoiceCredit > 0 || otherDebt > 0) && (
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="bg-slate-50 rounded-xl px-3 py-2">
                     <span className="text-slate-400 block">نسیه فاکتورها ({openInvoices.length.toLocaleString('fa-IR')})</span>
                     <span className="font-mono font-bold text-slate-700">{formatToman(invoiceDebt)}</span>
                   </div>
-                  <div className="bg-slate-50 rounded-xl px-3 py-2">
-                    <span className="text-slate-400 block">بدهی دستی / سایر</span>
-                    <span className="font-mono font-bold text-slate-700">{formatToman(Math.max(0, otherDebt))}</span>
-                  </div>
+                  {invoiceCredit > 0 ? (
+                    <div className="bg-sky-50 rounded-xl px-3 py-2">
+                      <span className="text-sky-700 block">بستانکاری فاکتورها</span>
+                      <span className="font-mono font-bold text-sky-800">{formatToman(invoiceCredit)}</span>
+                      <span className="text-[9px] text-sky-600 block leading-4">فقط روی همان فاکتور می‌ماند</span>
+                    </div>
+                  ) : otherDebt > 0 ? (
+                    <div className="bg-slate-50 rounded-xl px-3 py-2">
+                      <span className="text-slate-400 block">بدهی دستی / سایر</span>
+                      <span className="font-mono font-bold text-slate-700">{formatToman(otherDebt)}</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -609,17 +618,48 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              inv.isPaid
+                              (inv.creditSurplus || 0) > 0
+                                ? 'bg-sky-50 text-sky-800 border border-sky-200'
+                                : inv.isPaid
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : 'bg-rose-50 text-rose-700 border border-rose-200'
                             }`}
                           >
-                            {inv.isPaid ? 'تسویه شده' : `نسیه همین فاکتور: ${formatToman(inv.remainingDebt)}`}
+                            {inv.isPaid
+                              ? (inv.creditSurplus || 0) > 0
+                                ? `بستانکاری همین فاکتور: ${formatToman(inv.creditSurplus || 0)}`
+                                : 'تسویه شده'
+                              : `نسیه همین فاکتور: ${formatToman(inv.remainingDebt)}`}
                             {!inv.isPaid && inv.dueDate && new Date(inv.dueDate).getTime() < Date.now() ? ' · تاخیر' : ''}
                           </span>
                           <ChevronLeft className="w-4 h-4 text-slate-400" />
                         </div>
                       </div>
+
+                      {(() => {
+                        const pays = transactions.flatMap((tx) =>
+                          tx.type === 'payment'
+                            ? (tx.allocations || [])
+                                .filter((a) => a.invoiceId === inv._id)
+                                .map((a) => ({ ...a, date: tx.date, method: tx.paymentMethod, txId: tx._id }))
+                            : [],
+                        );
+                        if (!pays.length) return null;
+                        return (
+                          <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 px-2.5 py-2 space-y-1">
+                            <span className="text-[10px] font-bold text-emerald-800">پرداخت‌های همین فاکتور</span>
+                            {pays.map((p) => (
+                              <div key={`${p.txId}-${p.amount}`} className="flex items-center justify-between text-[10px] text-emerald-900">
+                                <span>
+                                  {formatDate(p.date)}
+                                  {p.method ? ` · ${PAYMENT_METHOD_LABELS[p.method]}` : ''}
+                                </span>
+                                <span className="font-mono font-bold">{formatToman(p.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
@@ -810,7 +850,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           {formatToman(tx.amount)}
                         </span>
                         <span className="text-[10px] text-slate-400 block">
-                          مانده: <span className="font-mono">{formatToman(tx.balanceAfter)}</span>
+                          مانده بعد از این: <span className="font-mono">{formatTomanSigned(tx.balanceAfter)}</span>
                         </span>
                         {(tx.type === 'payment' || (tx.type === 'debt' && !tx.invoiceId)) && (
                           <button
