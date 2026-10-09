@@ -146,6 +146,13 @@ export class AppSettings {
   @Prop({ default: true })
   proformaForBulk: boolean;
 
+  /**
+   * Sales shipped straight from the parent company.
+   * They do not touch Ario stock; a hidden factory cost is kept for profit.
+   */
+  @Prop({ default: false })
+  factorySalesEnabled: boolean;
+
   @Prop({ type: SchemaFactory.createForClass(SalesView), default: () => ({}) })
   salesView: SalesView;
 

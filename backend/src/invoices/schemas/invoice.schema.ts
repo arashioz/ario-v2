@@ -35,6 +35,13 @@ export class InvoiceItem {
   /** Purchase lines only. Missing means the goods were received (older invoices). */
   @Prop({ default: true })
   received?: boolean;
+
+  /**
+   * What the parent company charged per primary unit on a direct factory sale.
+   * Kept off the customer invoice; profit uses it instead of Ario stock.
+   */
+  @Prop({ default: 0 })
+  factoryUnitCost?: number;
 }
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
@@ -163,6 +170,17 @@ export class Invoice {
   /** shop: deduct shop stock. factory: goods leave the factory, shop stock is untouched. */
   @Prop({ type: String, enum: ['shop', 'factory'], default: 'shop' })
   fulfillment: string;
+
+  /** Purchase invoice booked to the parent company for a direct factory sale. */
+  @Prop({ trim: true, default: '' })
+  factoryPurchaseId?: string;
+
+  @Prop({ trim: true, default: '' })
+  factoryPurchaseNumber?: string;
+
+  /** Set on that purchase; points back at the customer sale. */
+  @Prop({ trim: true, default: '' })
+  factorySaleId?: string;
 
   /** Payments on migrated walk-in credit invoices that have no customer ledger. */
   @Prop({

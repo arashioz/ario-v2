@@ -173,8 +173,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       <IonContent className="bg-slate-50">
         <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0">
           {invoice.fulfillment === 'factory' && (
-            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">
-              این بار از موجودی شرکت رفته است. از موجودی آریو کم نشده و در سود و انبار آریو حساب نمی‌شود.
+            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5 print:hidden">
+              {isSale
+                ? `این بار از کارخانه رفته است. فاکتور مشتری به نام آریو است و از موجودی آریو کم نشده${
+                    invoice.factoryPurchaseNumber ? ` (خرید شرکت: ${invoice.factoryPurchaseNumber})` : ''
+                  }. سود فقط با دکمهٔ سود فاکتور دیده می‌شود.`
+                : 'این خرید شرکت مادر برای ارسال مستقیم از کارخانه است و به موجودی آریو اضافه نشده.'}
             </div>
           )}
           {isSale && payments.length > 0 && (

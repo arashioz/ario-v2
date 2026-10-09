@@ -1,7 +1,11 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { CashbookService } from './cashbook.service';
+import { SetCashboxBalanceDto } from './dto/cashbox-balance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 
 @Controller('history')
 @UseGuards(JwtAuthGuard)
@@ -14,6 +18,23 @@ export class HistoryController {
   @Get('cashbook')
   getCashbook(@Query('from') from?: string, @Query('to') to?: string) {
     return this.cashbook.cashbook({ from, to });
+  }
+
+  @Put('cashbox/balance')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  setCashboxBalance(@Body() dto: SetCashboxBalanceDto) {
+    return this.cashbook.setBalance(dto.method, dto.balance, dto.note);
+  }
+
+  @Delete('cashbox/balance/:method')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  clearCashboxBalance(@Param('method') method: string) {
+    if (method !== 'cash' && method !== 'pos' && method !== 'transfer') {
+      throw new BadRequestException('روش صندوق نامعتبر است');
+    }
+    return this.cashbook.clearBalance(method);
   }
 
   @Get('legacy-ledger')

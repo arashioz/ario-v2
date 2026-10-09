@@ -28,6 +28,8 @@ export interface ProfitLossReport {
     totalSalesWeightKg: number;
     profitPerKg: number;
     markupPercent: number;
+    shop?: { revenue: number; profit: number; kg: number; invoices: number };
+    factory?: { revenue: number; profit: number; kg: number; invoices: number };
   };
   expensesSummary: {
     operatingExpenses: number;
@@ -45,7 +47,7 @@ export interface ProfitLossReport {
     managerDebt?: number;
     retainedProfit: number; // سود پس از کسر مانده برداشت مدیر
   };
-  recentSales?: { id: string; invoiceNumber: string; date: string; customerName: string; sellAmount: number; profit: number }[];
+  recentSales?: { id: string; invoiceNumber: string; date: string; customerName: string; sellAmount: number; profit: number; fulfillment?: 'shop' | 'factory' }[];
   recentWithdrawals: ExpenseItem[];
   recentStoreExpenses: ExpenseItem[];
 }

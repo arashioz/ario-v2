@@ -122,6 +122,18 @@ export class AccountingService {
     };
   }
 
+  /** Shop stock versus direct factory shipments. Together they are the full sales total. */
+  private channels(lines: SaleLine[]) {
+    const pack = (ls: SaleLine[]) => ({
+      ...this.summarize(ls),
+      invoices: new Set(ls.map((l) => l.invoiceId)).size,
+    });
+    return {
+      shop: pack(lines.filter((l) => l.fulfillment !== 'factory')),
+      factory: pack(lines.filter((l) => l.fulfillment === 'factory')),
+    };
+  }
+
   /**
    * Payments received on `day` toward credit invoices that were sold on an earlier day.
    * Same sources as the credit report (allocations + legacy payments).
@@ -164,7 +176,9 @@ export class AccountingService {
       .reduce((s, i) => s + (i.remainingDebt ?? 0), 0);
 
     const sales = f.invoices.filter((i) => i.type === 'sale' && dayKey(i.invoiceDate) === day);
-    const todaySummary = this.summarize(f.saleLines.filter((l) => this.inPeriod(l.date, { from: day, to: day })));
+    const todayLines = f.saleLines.filter((l) => this.inPeriod(l.date, { from: day, to: day }));
+    const monthLines = f.saleLines.filter((l) => this.inPeriod(l.date, { from: month, to: day }));
+    const todaySummary = this.summarize(todayLines);
 
     return {
       stockKg: totals.stockKg,
@@ -172,7 +186,9 @@ export class AccountingService {
       currentValue: totals.currentValue,
       currentProfit: totals.currentProfit,
       today: todaySummary,
-      month: this.summarize(f.saleLines.filter((l) => this.inPeriod(l.date, { from: month, to: day }))),
+      month: this.summarize(monthLines),
+      todayChannels: this.channels(todayLines),
+      monthChannels: this.channels(monthLines),
       creditOutstanding: r0(credit),
       work: {
         sold: r0(sales.reduce((s, i) => s + (i.finalAmount || 0), 0)),
@@ -247,7 +263,7 @@ export class AccountingService {
     // must not be what flags a warehouse error.
     for (const inv of f.invoices) {
       const purchase = inv.type === 'purchase';
-      if (!purchase && inv.fulfillment === 'factory') continue;
+      if (inv.fulfillment === 'factory') continue;
       for (const it of inv.items) {
         if (purchase && it.received === false) continue;
         if (!it.productId) continue;
@@ -385,7 +401,11 @@ export class AccountingService {
     const suspicious = lines
       .filter((l) => {
         const m = l.revenue ? (l.profit / l.revenue) * 100 : 0;
-        return l.kg > 0 && (m < SUSPICIOUS.minMargin || m > SUSPICIOUS.maxMargin);
+        if (l.kg <= 0 || l.cost <= 0) return false;
+        if (m < SUSPICIOUS.minMargin) return true;
+        // A factory price typed on purpose can sit above the shop's usual margin.
+        if (m > SUSPICIOUS.maxMargin && l.fulfillment !== 'factory') return true;
+        return false;
       })
       .map((l) => ({
         invoiceId: l.invoiceId,
@@ -415,6 +435,7 @@ export class AccountingService {
         invoices: new Set(lines.map((l) => l.invoiceId)).size,
         days: new Set(lines.map((l) => dayKey(l.date))).size,
       },
+      channels: this.channels(lines),
       byProduct,
       byDay,
       byCustomer,
@@ -837,7 +858,9 @@ export class AccountingService {
     const lastChangeByPid = new Map<string, (typeof f.priceChanges)[number]>();
     for (const c of f.priceChanges) lastChangeByPid.set(c.productId, c);
 
-    const roundPrice = (n: number) => Math.round(n / 1000) * 1000;
+    const PRICE_STEP = 500;
+    const roundPrice = (n: number) => Math.round(n / PRICE_STEP) * PRICE_STEP;
+    const roundHalfPct = (n: number) => Math.round(n * 2) / 2;
 
     return products
       .map((p: any) => {
@@ -910,11 +933,11 @@ export class AccountingService {
         else suggestedPerKg = baseCost * (1 + DEFAULT_MARKUP / 100);
 
         const keepCurrent = mode === 'list' && unchanged && retail > 0;
-        const suggestedRetail = keepCurrent ? r0(retail) : roundPrice(suggestedPerKg * scale);
+        const suggestedRetail = keepCurrent ? roundPrice(retail) : roundPrice(suggestedPerKg * scale);
         const ratio = (v: number) => (retail > 0 && v > 0 ? v / retail : 1);
-        const suggestedSupermarket = keepCurrent ? r0(p.priceSupermarket || retail) : roundPrice(suggestedRetail * ratio(p.priceSupermarket));
-        const suggestedWholesaleRaw = keepCurrent ? r0(p.priceWholesale || retail) : roundPrice(suggestedRetail * ratio(p.priceWholesale));
-        const floorUnit = last > 0 ? Math.ceil((last * scale) / 1000) * 1000 : 0;
+        const suggestedSupermarket = keepCurrent ? roundPrice(p.priceSupermarket || retail) : roundPrice(suggestedRetail * ratio(p.priceSupermarket));
+        const suggestedWholesaleRaw = keepCurrent ? roundPrice(p.priceWholesale || retail) : roundPrice(suggestedRetail * ratio(p.priceWholesale));
+        const floorUnit = last > 0 ? Math.ceil((last * scale) / PRICE_STEP) * PRICE_STEP : 0;
         const atCost = (n: number) => (floorUnit > 0 && n < floorUnit ? floorUnit : n);
         const safeRetail = atCost(suggestedRetail);
         const safeSuper = atCost(suggestedSupermarket);
@@ -945,23 +968,23 @@ export class AccountingService {
           holdDays: r0(holdDays),
           holdDaysMeasured: measuredHold !== null ? r0(measuredHold) : null,
           monthlyInflation: monthly,
-          bufferPercent: r2(bufferPercent),
+          bufferPercent: roundHalfPct(bufferPercent),
           baseCostPerKg: r0(baseCost),
           priceBaseCostPerKg: r0(priceBaseCost),
           costChangeSincePricePercent: pct(baseCost - priceBaseCost, priceBaseCost),
           priceSetAt: p.priceSetAt ?? null,
           recentSellPerKg: recentSellPerKg !== null ? r0(recentSellPerKg) : null,
-          recentMarkupPercent: recentMarkup !== null ? r2(recentMarkup) : null,
+          recentMarkupPercent: recentMarkup !== null ? roundHalfPct(recentMarkup) : null,
           current: {
             retail: r0(retail),
             supermarket: r0(p.priceSupermarket || retail),
             wholesale: r0(p.priceWholesale || retail),
             perKg: r0(listPerKg),
-            markupOnBaseCost: listPerKg ? r2((listPerKg / baseCost - 1) * 100) : null,
+            markupOnBaseCost: listPerKg ? roundHalfPct((listPerKg / baseCost - 1) * 100) : null,
             profitPerKg: r0(listPerKg - baseCost),
           },
           mode,
-          markupUsed: pct(safePerKg - baseCost, baseCost),
+          markupUsed: roundHalfPct(pct(safePerKg - baseCost, baseCost)),
           belowCost: false,
           lossGuarded,
           suggested: {
@@ -971,7 +994,7 @@ export class AccountingService {
             perKg: r0(safePerKg),
             profitPerKg: r0(safePerKg - baseCost),
           },
-          changePercent: retail ? pct(safeRetail - retail, retail) : null,
+          changePercent: retail ? roundHalfPct(pct(safeRetail - retail, retail)) : null,
           needsUpdate:
             drifted(safeRetail, retail) ||
             drifted(safeSuper, p.priceSupermarket || retail) ||
@@ -1126,6 +1149,7 @@ export class AccountingService {
   /** Accrual cost of goods for a period (used by the P&L). */
   async periodSales(period: Period) {
     const f = await this.fifo();
-    return this.summarize(f.saleLines.filter((l) => this.inPeriod(l.date, period)));
+    const lines = f.saleLines.filter((l) => this.inPeriod(l.date, period));
+    return { ...this.summarize(lines), channels: this.channels(lines) };
   }
 }

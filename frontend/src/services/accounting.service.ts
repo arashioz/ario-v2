@@ -119,8 +119,15 @@ export interface SuspiciousLine {
   level: 'error' | 'loss';
 }
 
+export interface ChannelSplit {
+  shop: SalesSummary & { invoices: number };
+  factory: SalesSummary & { invoices: number };
+}
+
 export interface ProfitReport {
   summary: SalesSummary & { invoices: number; days: number };
+  /** Full total is `summary`. These two add up to it. */
+  channels?: ChannelSplit;
   byProduct: (GroupRow & { name: string })[];
   byDay: (GroupRow & { date: string })[];
   byCustomer: (GroupRow & { name: string; customerId?: string | null })[];
@@ -214,6 +221,8 @@ export interface AccountingDashboard {
   currentProfit: TierValues;
   today: SalesSummary;
   month: SalesSummary;
+  todayChannels?: ChannelSplit;
+  monthChannels?: ChannelSplit;
   creditOutstanding: number;
   work: DayWork;
 }

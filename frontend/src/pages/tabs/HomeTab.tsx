@@ -463,15 +463,22 @@ export const HomeTab: React.FC = () => {
             {showProfit ? (
               <button onClick={() => navigate('/profit')} className="w-full grid grid-cols-2 gap-3 mt-3 text-right">
                 {([
-                  ['امروز', acc?.today],
-                  ['این ماه', acc?.month],
-                ] as const).map(([label, s]) => (
+                  ['امروز', acc?.today, acc?.todayChannels],
+                  ['این ماه', acc?.month, acc?.monthChannels],
+                ] as const).map(([label, s, ch]) => (
                   <div key={label} className="rounded-2xl bg-emerald-50/70 p-3">
                     <div className="text-[11px] text-emerald-800">{label}</div>
                     <div className="text-sm font-bold font-mono text-emerald-900 mt-0.5">{s ? formatToman(s.profit) : '...'}</div>
                     <div className="text-[10px] text-emerald-700/80 font-mono mt-0.5">
                       {s ? `${percent(s.marginPercent)} · کیلویی ${formatToman(s.profitPerKg)}` : ''}
                     </div>
+                    {ch && (ch.factory.profit !== 0 || ch.factory.revenue > 0) && (
+                      <div className="text-[10px] text-emerald-800/80 mt-1 leading-4">
+                        مغازه {formatToman(ch.shop.profit)}
+                        <br />
+                        کارخانه {formatToman(ch.factory.profit)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </button>

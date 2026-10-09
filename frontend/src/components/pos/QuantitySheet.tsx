@@ -14,17 +14,19 @@ interface Props {
   onClose: () => void;
   onConfirm: (line: CartLine) => void;
   onRemove: (productId: string) => void;
+  /** Factory shipments are not limited by Ario stock. */
+  ignoreStock?: boolean;
 }
 
 const faNum = (n: number) => (n ? n.toLocaleString('fa-IR', { maximumFractionDigits: 3, useGrouping: false }) : '');
 
 /** Type the amount by count or by weight; price per package or per kilo. */
-export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, onClose, onConfirm, onRemove }) => {
-  const perUnit = product ? kgPerUnit(product) : 0;
+export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, onClose, onConfirm, onRemove, ignoreStock }) => {
   const sellBy = product?.sellBy || 'stock';
-  const altRatio = sellBy === 'other' ? product?.salePerStock || 0 : perUnit;
+  const perUnit = product ? kgPerUnit(product) : 0;
+  const altRatio = sellBy === 'other' ? product?.salePerStock || 0 : perUnit || 1;
   const altLabel = sellBy === 'other' ? product?.saleUnit || 'واحد' : 'کیلو';
-  const lockAlt = (sellBy === 'kg' || sellBy === 'other') && altRatio > 0 && altRatio !== 1;
+  const lockAlt = sellBy === 'kg' || (sellBy === 'other' && altRatio > 0);
   const [by, setBy] = useState<'unit' | 'kg'>('unit');
   const [text, setText] = useState('');
   const [priceBy, setPriceBy] = useState<'unit' | 'kg'>('unit');
@@ -54,7 +56,7 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
   const unitPrice = priceBy === 'unit' ? price : Math.round(price * (lockAlt ? altRatio : perUnit));
   const total = Math.round(quantity * unitPrice);
   const listPrice = tierPrice(product, saleType);
-  const overStock = quantity > product.stock;
+  const overStock = !ignoreStock && quantity > product.stock;
   const fractional = Math.abs(quantity - Math.round(quantity)) > 0.001;
 
   const switchBy = (next: 'unit' | 'kg') => {
@@ -72,7 +74,7 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
 
   const bump = (delta: number) => setText(faNum(r3(Math.max(0, typed + delta))));
 
-  const belowCost = (product.buyPrice || 0) > 0 && unitPrice > 0 && unitPrice < product.buyPrice;
+  const belowCost = !ignoreStock && (product.buyPrice || 0) > 0 && unitPrice > 0 && unitPrice < product.buyPrice;
   const confirm = () => {
     if (quantity <= 0 || belowCost) return;
     onConfirm({ product, quantity: r3(quantity), unitPrice, priceOverride: override && unitPrice !== listPrice });
@@ -88,7 +90,9 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
       subtitle={[
         `قیمت ${SALE_TYPE_LABELS[saleType]}: ${formatToman(listPrice)} هر ${product.unit}`,
         perUnit > 0 && perUnit !== 1 ? `${formatToman(Math.round(listPrice / perUnit))} هر کیلو` : '',
-        `موجودی ${num(product.stock, 1)} ${product.unit}${perUnit > 0 && perUnit !== 1 ? ` (${weight(product.stock * perUnit)})` : ''}`,
+        ignoreStock
+          ? 'از کارخانه — از موجودی آریو کم نمی‌شود'
+          : `موجودی ${num(product.stock, 1)} ${product.unit}${perUnit > 0 && perUnit !== 1 ? ` (${weight(product.stock * perUnit)})` : ''}`,
       ]
         .filter(Boolean)
         .join(' · ')}

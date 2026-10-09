@@ -249,6 +249,8 @@ export class ExpensesService {
         totalSalesWeightKg: Math.round(totalSalesWeightKg * 10) / 10,
         profitPerKg: sales.profitPerKg,
         markupPercent: sales.markupPercent,
+        shop: sales.channels.shop,
+        factory: sales.channels.factory,
       },
       expensesSummary: {
         operatingExpenses, // هزینه‌های عملیاتی مغازه
@@ -279,6 +281,7 @@ export class ExpensesService {
         customerName: inv.customerName,
         sellAmount: inv.finalAmount || 0,
         profit: Math.round(fifo.invoiceProfit.get(String(inv._id))?.profit || 0),
+        fulfillment: inv.fulfillment === 'factory' ? 'factory' : 'shop',
       })),
       recentWithdrawals: withdrawalsList.slice(0, 20),
       recentStoreExpenses: storeExpensesList.slice(0, 20),

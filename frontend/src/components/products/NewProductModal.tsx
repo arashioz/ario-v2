@@ -108,16 +108,18 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       <span className="text-[10px] text-slate-400 block font-mono">هر کیلو {formatToman(Math.round(Number(v) / formKg))}</span>
     ) : null;
 
-  const [roundStep, setRoundStep] = useState(1000);
+  const [roundStep, setRoundStep] = useState(500);
   const roundMoney = (n: number, step = roundStep) => {
     const s = step > 1 ? step : 1;
     return Math.round(n / s) * s;
   };
+  const roundHalfPct = (n: number) => Math.round(n * 2) / 2;
   const marginOf = (buy: number, sell: number) =>
-    buy > 0 && sell > 0 ? String(Math.round(((sell - buy) / buy) * 10000) / 100) : '';
+    buy > 0 && sell > 0 ? String(roundHalfPct(((sell - buy) / buy) * 100)) : '';
   const priceFromPct = (buy: number, pct: string, step = roundStep) => {
-    const p = Number(pct);
-    if (!buy || pct === '' || pct === '.' || Number.isNaN(p)) return null;
+    if (!buy || pct === '' || pct === '.' || pct.endsWith('.')) return null;
+    const p = roundHalfPct(Number(pct));
+    if (Number.isNaN(p)) return null;
     return String(Math.max(0, roundMoney(buy * (1 + p / 100), step)));
   };
   const cleanPct = (raw: string) => {
@@ -154,7 +156,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setPctRetail(marginOf(editProduct.buyPrice || 0, editProduct.sellPrice || 0));
       setPctSuper(marginOf(editProduct.buyPrice || 0, editProduct.priceSupermarket || editProduct.sellPrice || 0));
       setPctWhole(marginOf(editProduct.buyPrice || 0, editProduct.priceWholesale || editProduct.sellPrice || 0));
-      setRoundStep(1000);
+      setRoundStep(500);
       setStock(editProduct.stock.toString());
       setMinStockAlert(editProduct.minStockAlert ? editProduct.minStockAlert.toString() : '5');
       setDescription(editProduct.description || '');
@@ -178,7 +180,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setPctRetail('');
       setPctSuper('');
       setPctWhole('');
-      setRoundStep(1000);
+      setRoundStep(500);
       setStock('0');
       setMinStockAlert('5');
       setDescription('');
@@ -461,15 +463,30 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 <span className="text-xs font-medium text-slate-700">واحد سنجش و تبدیل وزن</span>
               </div>
 
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasDualUnit}
-                  onChange={(e) => setHasDualUnit(e.target.checked)}
-                  className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"
-                />
-                <span className="text-xs text-sky-700 font-medium">دو واحدی (بسته + کیلوگرم)</span>
-              </label>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sellBy === 'kg'}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setSellBy(on ? 'kg' : 'stock');
+                      if (on && !hasDualUnit && unit !== 'کیلوگرم') setUnit('کیلوگرم');
+                    }}
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                  />
+                  <span className="text-xs text-emerald-700 font-medium">فله</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasDualUnit}
+                    onChange={(e) => setHasDualUnit(e.target.checked)}
+                    className="rounded text-sky-600 focus:ring-sky-500 w-4 h-4"
+                  />
+                  <span className="text-xs text-sky-700 font-medium">دو واحدی (بسته + کیلوگرم)</span>
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -539,8 +556,10 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                   </button>
                 ))}
               </div>
-              {sellBy === 'kg' && !hasDualUnit && unit !== 'کیلوگرم' && (
-                <p className="text-[10px] text-amber-700">برای فروش کیلویی، دو واحدی را روشن کن و وزن هر {unit || 'واحد'} را بگذار.</p>
+              {sellBy === 'kg' && (
+                <p className="text-[10px] text-emerald-700 leading-5">
+                  در سبد فروش، مقدار کیلو گرفته می‌شود و مبلغ از قیمت هر کیلو حساب می‌شود.
+                </p>
               )}
               {sellBy === 'other' && (
                 <div className="grid grid-cols-2 gap-2">
@@ -585,13 +604,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               <span className="text-xs font-medium text-slate-700">قیمت‌گذاری</span>
             </div>
             <p className="text-[10px] text-slate-400 leading-5">
-              اول قیمت خرید را بزن. درصد سود اعشار هم می‌گیرد، مثل ۳٫۲. مبلغ را که خودت بنویسی همان عدد می‌ماند.
+              قیمت‌ها روی ۰ یا ۵۰۰ گرد می‌شوند، مثل ۱۵۱٬۰۰۰ / ۱۵۱٬۵۰۰ / ۱۵۲٬۰۰۰. درصد سود هم نیم‌درصد: ۶، ۶٫۵، ۷.
             </p>
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-5 gap-1">
               {(
                 [
                   [1, 'دقیق'],
                   [100, '۱۰۰'],
+                  [500, '۵۰۰'],
                   [1000, '۱٬۰۰۰'],
                   [10000, '۱۰٬۰۰۰'],
                 ] as const
@@ -663,9 +683,18 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                     value={pct}
                     onChange={(e) => {
                       const next = cleanPct(e.target.value);
-                      setPct(next);
-                      const priced = priceFromPct(Number(buyPrice), next);
+                      if (next === '' || next.endsWith('.')) {
+                        setPct(next);
+                        return;
+                      }
+                      const rounded = String(roundHalfPct(Number(next) || 0));
+                      setPct(next.includes('.') ? next : rounded);
+                      const priced = priceFromPct(Number(buyPrice), rounded);
                       if (priced !== null) setPrice(priced);
+                    }}
+                    onBlur={() => {
+                      if (pct === '' || pct === '.') return;
+                      setPct(String(roundHalfPct(Number(pct) || 0)));
                     }}
                     placeholder="مثلاً ۶"
                     className="w-full px-2 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800 text-center"

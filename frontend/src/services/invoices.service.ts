@@ -12,6 +12,8 @@ export interface InvoiceItem {
   weightKg?: number;
   /** Purchase line. false = ordered but not delivered into the shop. */
   received?: boolean;
+  /** Parent-company price per unit. Hidden on the customer invoice; used for profit. */
+  factoryUnitCost?: number;
 }
 
 export interface SplitDetails {
@@ -65,6 +67,11 @@ export interface Invoice {
   dueDays?: number;
   /** shop stock, or goods that left the factory and never touched the shop. */
   fulfillment?: 'shop' | 'factory';
+  /** Company purchase created for a direct factory sale. */
+  factoryPurchaseId?: string;
+  factoryPurchaseNumber?: string;
+  /** On that company purchase: the customer sale it belongs to. */
+  factorySaleId?: string;
   customerPrevBalance: number;
   customerNewBalance: number;
   shippingPayer?: ShippingPayer;

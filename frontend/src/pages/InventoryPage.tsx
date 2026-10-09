@@ -54,14 +54,14 @@ export const InventoryPage: React.FC = () => {
   };
 
   const rebuild = () => {
-    if (!window.confirm('موجودی ثبت‌شده هر کالا از روی فاکتورهای خرید (منهای فروش از آریو) دوباره نوشته شود؟')) return;
+    if (!window.confirm('موجودی هر کالا از جمع فاکتورهای خرید تحویل‌شده، منهای جمع فاکتورهای فروش از آریو، دوباره نوشته شود؟')) return;
     setRebuilding(true);
     invoicesService
       .rebuildStock()
       .then(async (res) => {
         showNotification({
           title: 'انبار به‌روز شد',
-          message: `${res.changed.toLocaleString('fa-IR')} کالا از ${res.purchases.toLocaleString('fa-IR')} فاکتور خرید اصلاح شد.`,
+                            message: `${res.changed.toLocaleString('fa-IR')} کالا اصلاح شد. ${res.purchases.toLocaleString('fa-IR')} فاکتور خرید و ${res.sales.toLocaleString('fa-IR')} فاکتور فروش حساب شد.`,
           type: 'success',
         });
         await load();
@@ -115,7 +115,7 @@ export const InventoryPage: React.FC = () => {
               <span className="text-sm mb-1.5 text-sky-100">تن</span>
             </div>
             <div className="mt-1 text-[11px] text-sky-100">
-              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا · از فاکتورهای خرید
+              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا · خرید منهای فروش از آریو
             </div>
             {isAdmin && (
               <button
@@ -124,7 +124,7 @@ export const InventoryPage: React.FC = () => {
                 className="mt-3 w-full py-2 rounded-xl bg-white/15 text-white text-[11px] font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin' : ''}`} />
-                {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از فاکتورهای خرید'}
+                {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از خرید و فروش'}
               </button>
             )}
             <div className="mt-3 pt-3 border-t border-white/15 flex items-center justify-between">
@@ -184,9 +184,9 @@ export const InventoryPage: React.FC = () => {
             <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-800 leading-6">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-1" />
               <div className="min-w-0 flex-1">
-                <b>موجودی ثبت‌شده با فاکتورهای خرید یکی نیست</b>
+                <b>موجودی ثبت‌شده با جمع خرید و فروش یکی نیست</b>
                 <br />
-                اختلاف روی {num(Math.abs(t.differenceKg), 2)} واحد است. وزن انبار از خود فاکتورهای خرید حساب می‌شود؛ این هشدار فقط وقتی است که تعداد ثبت‌شده کالا با جمع خرید تحویل‌شده منهای فروش از آریو فرق دارد.
+                اختلاف روی {num(Math.abs(t.differenceKg), 2)} واحد است. موجودی باید برابر جمع فاکتورهای خرید تحویل‌شده منهای جمع فاکتورهای فروش از آریو باشد.
                 {isAdmin && (
                   <button
                     disabled={rebuilding}
@@ -194,7 +194,7 @@ export const InventoryPage: React.FC = () => {
                     className="mt-2 w-full py-2 rounded-xl bg-amber-700 text-white text-[11px] font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin' : ''}`} />
-                    {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از فاکتورهای خرید'}
+                    {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از خرید و فروش'}
                   </button>
                 )}
               </div>
@@ -308,7 +308,7 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
           </div>
           {mismatch && (
             <div className="text-[10px] text-amber-700 bg-amber-50 rounded-xl p-2.5 leading-5">
-              طبق فاکتورهای خرید باید <b className="font-mono">{num(expected, 2)} {i.unit || 'واحد'}</b> مانده باشد ولی موجودی ثبت‌شده{' '}
+              طبق جمع خرید منهای فروش از آریو باید <b className="font-mono">{num(expected, 2)} {i.unit || 'واحد'}</b> مانده باشد ولی موجودی ثبت‌شده{' '}
               <b className="font-mono">{num(i.stockUnits, 2)} {i.unit || 'واحد'}</b> است.
             </div>
           )}

@@ -118,6 +118,25 @@ export const ProfitPage: React.FC = () => {
             <ChevronLeft className="w-4 h-4 text-slate-300" />
           </button>
 
+          {data?.channels && (data.channels.shop.kg > 0 || data.channels.factory.kg > 0) && (
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['از مغازه', data.channels.shop, 'bg-sky-50 border-sky-100 text-sky-900'],
+                  ['از کارخانه', data.channels.factory, 'bg-amber-50 border-amber-100 text-amber-900'],
+                ] as const
+              ).map(([label, c, tone]) => (
+                <div key={label} className={`rounded-2xl border p-3 ${tone}`}>
+                  <div className="text-[11px] font-bold">{label}</div>
+                  <div className="text-sm font-bold font-mono mt-1">{formatToman(c.profit)}</div>
+                  <div className="text-[10px] mt-0.5 opacity-80">
+                    فروش {formatToman(c.revenue)} · {tons(c.kg)} تن · {num(c.invoices)} فاکتور
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {s && s.kg > 0 && (
             <div className="flex gap-2.5 bg-sky-50 border border-sky-100 rounded-2xl p-3 text-[11px] text-sky-900 leading-6">
               <Info className="w-4 h-4 shrink-0 mt-1 text-sky-600" />
@@ -159,8 +178,7 @@ export const ProfitPage: React.FC = () => {
             <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-800 leading-6">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-1" />
               <div>
-                <b className="font-mono">{weight(data.warnings.estimatedKg)}</b> فروش ({num(data.warnings.estimatedLines)} ردیف) قبل از ثبت هیچ فاکتور
-                خریدی انجام شده؛ قیمت خرید آن‌ها از نزدیک‌ترین بار تخمین زده شد.
+                <b className="font-mono">{weight(data.warnings.estimatedKg)}</b> از فروش ({num(data.warnings.estimatedLines)} ردیف) قبل از فاکتور خریدِ همان روز است. این بخش با قیمت خریدهای بعدی ضرر حساب نمی‌شود.
               </div>
             </div>
           )}

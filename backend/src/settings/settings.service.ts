@@ -18,6 +18,7 @@ const SCALARS = [
   'wholesaleMinKg',
   'autoSaleType',
   'proformaForBulk',
+  'factorySalesEnabled',
 ] as const;
 
 const VIEW_FLAGS = ['groupByDay', 'showWeight', 'showPayment', 'showItems', 'showSaleType'] as const;
@@ -50,7 +51,7 @@ export class SettingsService {
         const v = Number(body[k]);
         if (!Number.isFinite(v) || v < 0) throw new BadRequestException('حد وزن نامعتبر است');
         set[k] = v;
-      } else if (k === 'autoSaleType' || k === 'proformaForBulk') {
+      } else if (k === 'autoSaleType' || k === 'proformaForBulk' || k === 'factorySalesEnabled') {
         set[k] = !!body[k];
       } else {
         set[k] = String(body[k]).trim();

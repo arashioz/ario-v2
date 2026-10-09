@@ -398,7 +398,10 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
         push('estimated_cost', {
           ...ref,
           id: `estimated_cost:${id}`,
-          detail: `${fa(l.estimatedKg, 1)} کیلو از ${fa(l.kg, 1)} کیلو بدون بار خرید قبلی فروخته شده؛ فاکتور خرید جا افتاده یا موجودی اول دوره ثبت نشده`,
+          detail:
+            l.fulfillment === 'factory'
+              ? 'قیمت کارخانه این ردیف وارد نشده؛ سود از روی آخرین خرید مغازه تخمین زده شد'
+              : `${fa(l.estimatedKg, 1)} کیلو از ${fa(l.kg, 1)} کیلو قبل از این فروش بار خرید ندارد. با قیمت خریدهای بعدی حساب نمی‌شود.`,
         });
       }
       if (l.kg <= 0 || l.revenue <= 0) continue;
@@ -406,18 +409,28 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
       if (!byProduct.has(l.productId)) byProduct.set(l.productId, []);
       byProduct.get(l.productId)!.push({ l, id, perKg, t: new Date(l.date).getTime() });
 
+      if (l.cost <= 0) continue;
       const margin = (l.profit / l.revenue) * 100;
       const costPerKg = l.cost / l.kg;
-      const detail = `فروش هر کیلو ${toman(perKg)}، خرید هر کیلو ${toman(costPerKg)} — ${margin >= 0 ? 'سود' : 'زیان'} ${fa(Math.abs(margin), 1)}٪ (${toman(l.profit)})`;
+      const lots = l.consumptions
+        .filter((c) => c.lotInvoiceNumber)
+        .map((c) => c.lotInvoiceNumber)
+        .filter((n, i, a) => a.indexOf(n) === i)
+        .slice(0, 3);
+      const where = l.fulfillment === 'factory' ? 'از کارخانه — ' : '';
+      const fromLot = lots.length ? ` از فاکتور ${lots.join('، ')}` : '؛ خریدِ قبل از این فروش';
+      const detail = `${where}فروش هر کیلو ${toman(perKg)}، خرید همان زمان هر کیلو ${toman(costPerKg)}${fromLot} — ${margin >= 0 ? 'سود' : 'زیان'} ${fa(Math.abs(margin), 1)}٪ (${toman(l.profit)})`;
       if (margin < LOSS_ERROR) push('sale_loss_big', { ...ref, id: `sale_loss_big:${id}`, impact: l.profit, detail });
       else if (margin < LOSS_WARN) push('sale_loss', { ...ref, id: `sale_loss:${id}`, impact: l.profit, detail });
-      else if (margin > HIGH_MARGIN) push('sale_high_margin', { ...ref, id: `sale_high_margin:${id}`, impact: l.profit, detail });
+      else if (margin > HIGH_MARGIN && l.fulfillment !== 'factory') push('sale_high_margin', { ...ref, id: `sale_high_margin:${id}`, impact: l.profit, detail });
     }
 
     const windowMs = OUTLIER_WINDOW_DAYS * 86400000;
     for (const rows of byProduct.values()) {
       for (const r of rows) {
-        const near = rows.filter((o) => o.l.invoiceId !== r.l.invoiceId && Math.abs(o.t - r.t) <= windowMs).map((o) => o.perKg);
+        const near = rows
+          .filter((o) => o.l.invoiceId !== r.l.invoiceId && o.l.fulfillment === r.l.fulfillment && Math.abs(o.t - r.t) <= windowMs)
+          .map((o) => o.perKg);
         if (near.length < OUTLIER_MIN_NEIGHBOURS) continue;
         const med = median(near);
         const dev = med ? (r.perKg - med) / med : 0;
@@ -488,7 +501,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     const soldQty = new Map<string, number>();
     for (const inv of f.invoices) {
       const purchase = inv.type === 'purchase';
-      if (!purchase && inv.fulfillment === 'factory') continue;
+      if (inv.fulfillment === 'factory') continue;
       for (const it of inv.items) {
         if (purchase && it.received === false) continue;
         if (!it.productId) continue;
@@ -514,7 +527,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
             ...ref,
             id: `stock_mismatch:${pid}:${Math.round(gap)}`,
             impact: gap * (wpu || 1) * (f.lastCost.get(pid) ?? 0),
-            detail: `از فاکتورهای خرید باید ${fa(expected, 2)} ${p.unit || 'واحد'} باشد ولی موجودی ثبت‌شده ${fa(actual, 2)} است (${gap > 0 ? 'اضافه' : 'کسری'} ${fa(Math.abs(gap), 2)})`,
+            detail: `جمع خرید منهای فروش از آریو ${fa(expected, 2)} ${p.unit || 'واحد'} است ولی موجودی ثبت‌شده ${fa(actual, 2)} است (${gap > 0 ? 'اضافه' : 'کسری'} ${fa(Math.abs(gap), 2)})`,
           });
         }
       }

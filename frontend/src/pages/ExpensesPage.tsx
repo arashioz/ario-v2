@@ -471,6 +471,21 @@ export const ExpensesPage: React.FC = () => {
                   </div>
                 </div>
 
+                {(report?.salesSummary?.shop || report?.salesSummary?.factory) && (
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2.5 rounded-2xl bg-sky-50 border border-sky-100">
+                      <div className="text-sky-800 font-bold">از مغازه</div>
+                      <div className="font-mono font-bold text-slate-800 mt-0.5">{formatToman(report?.salesSummary?.shop?.revenue)}</div>
+                      <div className="text-emerald-700 font-mono">سود {formatToman(report?.salesSummary?.shop?.profit)}</div>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-100">
+                      <div className="text-amber-800 font-bold">از کارخانه</div>
+                      <div className="font-mono font-bold text-slate-800 mt-0.5">{formatToman(report?.salesSummary?.factory?.revenue)}</div>
+                      <div className="text-emerald-700 font-mono">سود {formatToman(report?.salesSummary?.factory?.profit)}</div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="p-2.5 bg-slate-50 rounded-2xl">
                     <span className="text-[10px] text-slate-400 block">درصد سود فروش</span>
@@ -496,6 +511,7 @@ export const ExpensesPage: React.FC = () => {
                         <div className="min-w-0">
                           <span className="font-mono font-bold text-slate-700" dir="ltr">{inv.invoiceNumber}</span>
                           <span className="text-slate-400 mr-1.5">{inv.customerName}</span>
+                          {inv.fulfillment === 'factory' && <span className="text-[9px] font-bold text-amber-700">کارخانه</span>}
                         </div>
                         <div className="text-left shrink-0">
                           <div className="font-mono font-bold text-slate-800">{formatToman(inv.sellAmount)}</div>

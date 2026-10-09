@@ -214,6 +214,8 @@ export interface AppSettings {
   wholesaleMinKg: number;
   autoSaleType: boolean;
   proformaForBulk: boolean;
+  /** Direct factory shipments: no Ario stock change, hidden profit from the company price. */
+  factorySalesEnabled: boolean;
   salesView: SalesView;
   posView: PosView;
   /** Category heading order on the sales screen. */
@@ -246,6 +248,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wholesaleMinKg: 1500,
   autoSaleType: true,
   proformaForBulk: true,
+  factorySalesEnabled: false,
   salesView: { layout: 'cards', groupByDay: true, showWeight: true, showPayment: true, showItems: false, showSaleType: true },
   posView: { layout: 'grid', size: 'sm', showImages: true, showPerKg: true, showStock: true },
   categoryOrder: [],

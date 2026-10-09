@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
+import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
@@ -38,6 +38,7 @@ export const PosTab: React.FC = () => {
   const [dateOpen, setDateOpen] = useState(false);
 
   const [lines, setLines] = useState<CartLine[]>([]);
+  const [shipFrom, setShipFrom] = useState<'shop' | 'factory'>('shop');
   const [editing, setEditing] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
@@ -113,10 +114,12 @@ export const PosTab: React.FC = () => {
     setEditing(null);
   };
 
+  const fromFactory = settings.factorySalesEnabled && shipFrom === 'factory';
+
   const step = (l: CartLine, delta: number) => {
     const q = r3(l.quantity + delta);
     if (q <= 0) return remove(l.product._id);
-    if (q > (l.product.stock ?? 0)) {
+    if (!fromFactory && q > (l.product.stock ?? 0)) {
       showNotification({ title: 'موجودی کافی نیست', message: `موجودی ${l.product.name}: ${num(l.product.stock)} ${l.product.unit}`, type: 'error' });
       return;
     }
@@ -139,8 +142,20 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma, fulfillment }: CheckoutResult) => {
-    const final = termsFinal(subtotal, terms);
+  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices }: CheckoutResult) => {
+    const items = lines.map((l) => {
+      const base = toInvoiceItem(l);
+      if (fulfillment !== 'factory') return base;
+      const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
+      return {
+        ...base,
+        unitPrice,
+        totalPrice: Math.round(base.quantity * unitPrice),
+        factoryUnitCost: Math.round(factoryUnitCosts?.[l.product._id] ?? l.product.buyPrice ?? 0),
+      };
+    });
+    const goods = items.reduce((s, it) => s + it.totalPrice, 0);
+    const final = termsFinal(goods, terms);
     const input = {
       type: 'sale' as const,
       saleType,
@@ -148,8 +163,8 @@ export const PosTab: React.FC = () => {
       customerName: customer?.name ?? 'مشتری حضوری',
       customerPhone: customer?.phoneNumber || undefined,
       invoiceDate,
-      items: lines.map(toInvoiceItem),
-      totalAmount: subtotal,
+      items,
+      totalAmount: goods,
       finalAmount: final,
       totalWeightKg: Math.round(totalKg * 10) / 10,
       ...termsPayload(final, terms),
@@ -170,7 +185,10 @@ export const PosTab: React.FC = () => {
         const inv = await invoicesService.create(input);
         showNotification({
           title: 'فاکتور صادر شد',
-          message: `فاکتور ${inv.invoiceNumber} به مبلغ ${formatToman(inv.finalAmount)} ثبت شد.`,
+          message:
+            fulfillment === 'factory'
+              ? `فاکتور ${inv.invoiceNumber} ثبت شد. از موجودی آریو کم نشد و خرید شرکت مادر هم ثبت شد.`
+              : `فاکتور ${inv.invoiceNumber} به مبلغ ${formatToman(inv.finalAmount)} ثبت شد.`,
           type: 'success',
         });
         setCreatedInvoice(inv);
@@ -322,6 +340,32 @@ export const PosTab: React.FC = () => {
         <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها و مشتریان..." />
 
         <div className={`p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
+          {settings.factorySalesEnabled && (
+            <div className="mb-3 grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-white border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShipFrom('shop')}
+                className={`py-2 rounded-xl text-xs font-bold ${shipFrom !== 'factory' ? 'bg-sky-600 text-white' : 'text-slate-500'}`}
+              >
+                از دفتر
+              </button>
+              <button
+                type="button"
+                onClick={() => setShipFrom('factory')}
+                className={`py-2 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 ${
+                  shipFrom === 'factory' ? 'bg-amber-500 text-white' : 'text-slate-500'
+                }`}
+              >
+                <Factory className="w-3.5 h-3.5" />
+                از کارخانه
+              </button>
+            </div>
+          )}
+          {fromFactory && (
+            <div className="mb-3 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">
+              این فروش از کارخانه است. فاکتور مشتری به نام آریو صادر می‌شود، از موجودی آریو کم نمی‌شود و بهای کارخانه جدا، فقط برای سود، ثبت می‌شود.
+            </div>
+          )}
           <ProductBrowser
             products={products}
             saleType={saleType}
@@ -333,6 +377,7 @@ export const PosTab: React.FC = () => {
             productOrder={settings.productOrder}
             layout={settings.posSections}
             slots={{ tiers: tiersBlock, cart: cartBlock }}
+            ignoreStock={fromFactory}
           />
         </div>
 
@@ -343,15 +388,17 @@ export const PosTab: React.FC = () => {
           >
             <button
               onClick={() => setCheckoutOpen(true)}
-              className="max-w-md mx-auto w-full flex items-center justify-between gap-3 rounded-2xl bg-sky-600 text-white pr-4 pl-2 py-2 shadow-lg shadow-sky-900/25 active:scale-[0.99] transition"
+              className={`max-w-md mx-auto w-full flex items-center justify-between gap-3 rounded-2xl text-white pr-4 pl-2 py-2 shadow-lg active:scale-[0.99] transition ${
+                fromFactory ? 'bg-amber-600 shadow-amber-900/25' : 'bg-sky-600 shadow-sky-900/25'
+              }`}
             >
               <div className="text-right min-w-0">
-                <div className="text-[10px] text-sky-100 truncate">
+                <div className={`text-[10px] truncate ${fromFactory ? 'text-amber-100' : 'text-sky-100'}`}>
                   {num(lines.length)} قلم · {weight(totalKg)} · {SALE_TYPE_LABELS[saleType]}
                 </div>
                 <div className="text-[15px] font-extrabold font-mono">{formatToman(subtotal)}</div>
               </div>
-              <span className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-sky-700 text-sm font-bold">
+              <span className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-sm font-bold ${fromFactory ? 'text-amber-700' : 'text-sky-700'}`}>
                 <FileCheck2 className="w-4 h-4" />
                 ثبت فاکتور
               </span>
@@ -366,6 +413,7 @@ export const PosTab: React.FC = () => {
           onClose={() => setEditing(null)}
           onConfirm={upsert}
           onRemove={remove}
+          ignoreStock={fromFactory}
         />
 
         <CheckoutSheet
@@ -380,6 +428,16 @@ export const PosTab: React.FC = () => {
           settings={settings}
           submitting={submitting}
           onSubmit={submit}
+          shipFrom={fromFactory ? 'factory' : 'shop'}
+          factoryLines={lines.map((l) => ({
+            productId: l.product._id,
+            name: l.product.name,
+            unit: l.product.unit,
+            quantity: l.quantity,
+            buyPrice: l.product.buyPrice || 0,
+            sellPrice: l.unitPrice,
+            priceWholesale: l.product.priceWholesale || 0,
+          }))}
         />
 
         <ProformaSheet

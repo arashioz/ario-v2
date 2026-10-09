@@ -18,6 +18,7 @@ import {
   Scale,
   Store,
   Tags,
+  Factory,
 } from 'lucide-react';
 import { ReportHeader } from '../components/reports/ReportUI';
 import { ProductBrowser } from '../components/pos/ProductBrowser';
@@ -677,6 +678,20 @@ export const SettingsPage: React.FC = () => {
             </Row>
           </Group>}
 
+          {adminPart && <Group title="فروش">
+            <Row id="factory" title="فروش از کارخانه" hint={settings.factorySalesEnabled ? 'روشن' : 'خاموش'} icon={Factory} tone="amber" {...row}>
+              <p className="text-[11px] text-slate-500 leading-5 mb-2">
+                وقتی روشن باشد، در صفحه فروش می‌شود بار را از کارخانه زد. فاکتور مشتری به نام آریو می‌ماند، از موجودی آریو کم نمی‌شود، خرید به حساب شرکت مادر می‌نشیند و سود فقط با دکمهٔ سود فاکتور دیده می‌شود.
+              </p>
+              <Toggle
+                label="فروش از کارخانه"
+                checked={!!settings.factorySalesEnabled}
+                disabled={!isAdmin}
+                onChange={(v) => save({ factorySalesEnabled: v }, true)}
+              />
+            </Row>
+          </Group>}
+
           {adminPart && <Group title="فروشگاه">
             <Row id="shop" title="مشخصات" hint={settings.shopName} icon={Store} tone="sky" {...row}>
               <div className="space-y-2">
@@ -722,7 +737,7 @@ export const SettingsPage: React.FC = () => {
           {adminPart && <Group title="انبار">
             <Row id="stock" title="محاسبه مجدد انبار" hint="از روی فاکتورهای خرید و فروش" icon={RefreshCw} tone="emerald" {...row}>
               <p className="text-[11px] text-slate-500 leading-5 mb-2">
-                موجودی هر کالا دوباره حساب می‌شود: خریدهایی که تحویل شده‌اند، منهای فروش‌هایی که از موجودی آریو رفته‌اند. فروش از شرکت و باری که هنوز تحویل نشده وارد این حساب نمی‌شود.
+                موجودی هر کالا دوباره حساب می‌شود: خریدهایی که به انبار آریو رسیده‌اند، منهای فروش‌هایی که از موجودی آریو رفته‌اند. فروش از کارخانه، خرید شرکت مادر برای همان بار، و باری که هنوز تحویل نشده وارد این حساب نمی‌شود.
               </p>
               <button
                 disabled={rebuilding}

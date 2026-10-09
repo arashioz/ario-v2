@@ -34,6 +34,8 @@ interface Props {
   layout?: PosSection[];
   /** Blocks owned by the page (tier picker, cart), placed according to `layout`. */
   slots?: Partial<Record<PosSectionId, React.ReactNode>>;
+  /** Factory shipments are not limited by Ario stock. */
+  ignoreStock?: boolean;
 }
 
 interface Section {
@@ -123,6 +125,7 @@ interface CardProps {
   qty?: number;
   view: PosView;
   onPick: (p: Product) => void;
+  ignoreStock?: boolean;
 }
 
 const Thumb: React.FC<{ p: Product; className: string }> = ({
@@ -157,12 +160,13 @@ const ProductCard: React.FC<CardProps> = ({
   qty,
   view,
   onPick,
+  ignoreStock,
 }) => {
   const z = SIZES[view.size];
   const price = tierPrice(p, saleType);
   const k = kgPerUnit(p);
   const perKg = pricePerKg(price, p);
-  const out = p.stock <= 0;
+  const out = !ignoreStock && p.stock <= 0;
   const showKg = view.showPerKg && perKg > 0 && k !== 1;
 
   const priceLine = (
@@ -270,6 +274,7 @@ export const ProductBrowser: React.FC<Props> = ({
   bare,
   layout = DEFAULT_POS_SECTIONS,
   slots = {},
+  ignoreStock,
 }) => {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
@@ -361,6 +366,7 @@ export const ProductBrowser: React.FC<Props> = ({
                       qty={inCart.get(p._id)}
                       view={view}
                       onPick={onPick}
+                      ignoreStock={ignoreStock}
                     />
                   ))}
                 </div>

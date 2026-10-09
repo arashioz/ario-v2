@@ -17,7 +17,8 @@ export const r3 = (n: number) => Math.round(n * 1000) / 1000;
 export const kgPerUnit = (p: Product) =>
   p.weightPerUnitKg ||
   (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio || 0 : 0) ||
-  (p.unit === 'کیلوگرم' ? 1 : 0);
+  (p.unit === 'کیلوگرم' ? 1 : 0) ||
+  (p.sellBy === 'kg' ? 1 : 0);
 
 export const tierPrice = (p: Product, type: SaleType) => {
   const tier = type === 'wholesale' ? p.priceWholesale : type === 'supermarket' ? p.priceSupermarket : p.priceRetail;

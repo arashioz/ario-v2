@@ -6,6 +6,7 @@ import { CustomerTransaction, CustomerTransactionDocument } from '../customers/s
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SupplierPayment, SupplierPaymentDocument } from '../suppliers/schemas/supplier-payment.schema';
 import { CashTransaction, CashTransactionDocument } from './schemas/cash-transaction.schema';
+import { CashboxAdjustment, CashboxAdjustmentDocument } from './schemas/cashbox-adjustment.schema';
 
 type Channel = 'cash' | 'bank' | 'cheque';
 type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'manager_deposit' | 'supplier_payment' | 'purchase_spot';
@@ -45,6 +46,15 @@ const LEGACY_LABELS: Record<string, string> = {
 const channelOf = (method?: string): Channel =>
   method === 'cash' ? 'cash' : method === 'cheque' ? 'cheque' : 'bank';
 
+/** Shop drawers: cash, card-to-card (including bank transfer), and the POS machine. */
+const drawerOf = (method?: string): 'cash' | 'pos' | 'transfer' | 'cheque' => {
+  const m = (method || 'cash').toLowerCase();
+  if (m === 'cheque') return 'cheque';
+  if (m === 'pos' || m === 'card') return 'pos';
+  if (m === 'transfer' || m === 'card_to_card' || m === 'paya') return 'transfer';
+  return 'cash';
+};
+
 const dayStart = (ymd?: string) => (ymd ? new Date(`${ymd.slice(0, 10)}T00:00:00+03:30`) : null);
 const dayEnd = (ymd?: string) => (ymd ? new Date(`${ymd.slice(0, 10)}T23:59:59.999+03:30`) : null);
 const tehranDay = (d: Date) => new Date(+new Date(d) + 3.5 * 3600000).toISOString().slice(0, 10);
@@ -58,6 +68,7 @@ export class CashbookService {
     @InjectModel(Expense.name) private expenseModel: Model<ExpenseDocument>,
     @InjectModel(SupplierPayment.name) private supplierPaymentModel: Model<SupplierPaymentDocument>,
     @InjectModel(CashTransaction.name) private legacyModel: Model<CashTransactionDocument>,
+    @InjectModel(CashboxAdjustment.name) private adjustmentModel: Model<CashboxAdjustmentDocument>,
   ) {}
 
   async cashbook(query: { from?: string; to?: string }) {
@@ -93,17 +104,21 @@ export class CashbookService {
       if (inv.paymentMethod === 'split' && inv.splitDetails) {
         for (const m of ['pos', 'cash', 'transfer', 'cheque'] as const) {
           const amount = (inv.splitDetails as any)[m] || 0;
-          if (amount > 0) entries.push({ date: inv.invoiceDate, direction, kind, channel: channelOf(m), method: m, amount, title, ref: inv.customerName, accountId: accountOf(m) });
+          if (amount > 0) {
+            const method = drawerOf(m);
+            entries.push({ date: inv.invoiceDate, direction, kind, channel: channelOf(method), method, amount, title, ref: inv.customerName, accountId: accountOf(m) });
+          }
         }
       } else {
-        const method = inv.paymentMethod === 'credit' ? 'cash' : inv.paymentMethod;
+        const method = drawerOf(inv.paymentMethod === 'credit' ? 'cash' : inv.paymentMethod);
         entries.push({ date: inv.invoiceDate, direction, kind, channel: channelOf(method), method, amount: upfront, title, ref: inv.customerName, accountId: accountOf(method) });
       }
     }
     for (const inv of walkins) {
       for (const p of inv.legacyPayments || []) {
         if (!inRange(p.date)) continue;
-        entries.push({ date: p.date, direction: 'in', kind: 'walkin_payment', channel: channelOf(p.method), method: p.method || 'cash', amount: p.amount, title: `وصول فاکتور ${inv.invoiceNumber}`, ref: inv.customerName, accountId: p.accountId || undefined });
+        const method = drawerOf(p.method);
+        entries.push({ date: p.date, direction: 'in', kind: 'walkin_payment', channel: channelOf(method), method, amount: p.amount, title: `وصول فاکتور ${inv.invoiceNumber}`, ref: inv.customerName, accountId: p.accountId || undefined });
       }
     }
     for (const t of txs) {
@@ -112,7 +127,7 @@ export class CashbookService {
         direction: 'in',
         kind: 'debt_payment',
         channel: channelOf(t.paymentMethod),
-        method: t.paymentMethod || 'cash',
+        method: drawerOf(t.paymentMethod),
         amount: t.amount,
         title: t.description || 'دریافت از مشتری',
         ref: (t.customer as any)?.name,
@@ -127,7 +142,7 @@ export class CashbookService {
         direction: deposit ? 'in' : 'out',
         kind: deposit ? 'manager_deposit' : withdrawal ? 'withdrawal' : 'expense',
         channel: channelOf(e.paymentMethod),
-        method: e.paymentMethod || 'cash',
+        method: drawerOf(e.paymentMethod),
         amount: e.amount,
         title: e.description || e.categoryName,
         ref: e.categoryName,
@@ -139,7 +154,7 @@ export class CashbookService {
         direction: 'out',
         kind: 'supplier_payment',
         channel: channelOf(p.method),
-        method: p.method,
+        method: drawerOf(p.method),
         amount: p.amount,
         title: `پرداخت به ${p.supplier}`,
         ref: p.destination || 'نامشخص',
@@ -147,8 +162,8 @@ export class CashbookService {
     }
     entries.sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
-    const totalIn = entries.filter((e) => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
-    const totalOut = entries.filter((e) => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
+    let totalIn = entries.filter((e) => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
+    let totalOut = entries.filter((e) => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
 
     const byKind = (Object.keys(KIND_LABELS) as Kind[])
       .map((k) => {
@@ -170,6 +185,28 @@ export class CashbookService {
       const outflow = list.filter((e) => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
       return { method: m, in: inflow, out: outflow, net: inflow - outflow };
     });
+
+    const allTime = !query.from && !query.to;
+    const saved = await this.adjustmentModel.find().lean();
+    const adjustments = saved.map((a) => ({
+      method: a.method,
+      amount: a.amount || 0,
+      note: a.note || '',
+    }));
+    if (allTime) {
+      for (const a of adjustments) {
+        const row = byMethod.find((m) => m.method === a.method);
+        if (!row || !a.amount) continue;
+        if (a.amount > 0) {
+          row.in += a.amount;
+          totalIn += a.amount;
+        } else {
+          row.out += -a.amount;
+          totalOut += -a.amount;
+        }
+        row.net += a.amount;
+      }
+    }
 
     const accounts = new Map<string, { accountId: string; in: number; count: number }>();
     for (const e of entries) {
@@ -195,6 +232,8 @@ export class CashbookService {
       byKind,
       byChannel,
       byMethod,
+      /** Manual corrections applied to the all-time balance of each drawer. */
+      adjustments,
       /** کارت‌به‌کارت received per shop account. کارتخوان is not tied to a card. */
       byAccount: [...accounts.values()].sort((a, b) => b.in - a.in),
       byDay: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)),
@@ -222,5 +261,22 @@ export class CashbookService {
       types,
       rows: rows.map((r) => ({ _id: String(r._id), date: r.date, type: r.type, label: LEGACY_LABELS[r.type] || r.type, direction: r.direction, amount: r.amount, description: r.description })),
     };
+  }
+
+  /** Sets a drawer's all-time balance to the amount actually on hand. */
+  async setBalance(method: 'cash' | 'pos' | 'transfer', balance: number, note?: string) {
+    const book = await this.cashbook({});
+    const current = book.byMethod.find((m) => m.method === method)?.net ?? 0;
+    const previous = book.adjustments.find((a) => a.method === method)?.amount ?? 0;
+    const amount = Math.round(balance - (current - previous));
+    const text = (note || '').trim();
+    if (!amount && !text) await this.adjustmentModel.deleteOne({ method });
+    else await this.adjustmentModel.updateOne({ method }, { $set: { method, amount, note: text } }, { upsert: true });
+    return this.cashbook({});
+  }
+
+  async clearBalance(method: 'cash' | 'pos' | 'transfer') {
+    await this.adjustmentModel.deleteOne({ method });
+    return this.cashbook({});
   }
 }

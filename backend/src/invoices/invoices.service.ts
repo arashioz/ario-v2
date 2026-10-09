@@ -14,8 +14,9 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { canonicalSupplier } from '../suppliers/supplier-names';
+import { canonicalSupplier, PARENT_COMPANY } from '../suppliers/supplier-names';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
+import { SettingsService } from '../settings/settings.service';
 
 interface ActingUser {
   id?: string;
@@ -37,6 +38,7 @@ export class InvoicesService {
     private customersService: CustomersService,
     private usersService: UsersService,
     private suppliersService: SuppliersService,
+    private settingsService: SettingsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -98,7 +100,12 @@ export class InvoicesService {
         else if (product.unit === 'کیلوگرم') weight = item.quantity;
       }
       totalWeightKg += weight;
-      prepared.push({ ...item, weightKg: Math.round(weight * 10) / 10, received: isSale ? true : item.received !== false });
+      prepared.push({
+        ...item,
+        weightKg: Math.round(weight * 10) / 10,
+        received: isSale ? true : item.received !== false,
+        factoryUnitCost: isSale ? Math.max(0, Math.round(Number(item.factoryUnitCost) || 0)) : 0,
+      });
     }
 
     return { items: prepared, totalWeightKg: Math.round(totalWeightKg * 10) / 10 };
@@ -178,6 +185,109 @@ export class InvoicesService {
     }
   }
 
+  private async assertFactoryEnabled() {
+    const settings = await this.settingsService.get();
+    if (!settings.factorySalesEnabled) {
+      throw new BadRequestException('فروش از کارخانه در تنظیمات خاموش است');
+    }
+  }
+
+  /**
+   * Direct factory sale: the parent company invoiced Ario, the goods never entered the shop,
+   * and the customer invoice is what Ario sends. Stock is untouched on both sides.
+   */
+  private async attachFactoryPurchase(sale: InvoiceDocument, recordedByName: string) {
+    const items = (sale.items || []).map((it) => {
+      const unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
+      return {
+        productId: it.productId,
+        productName: it.productName,
+        quantity: it.quantity,
+        unit: it.unit,
+        secondaryQuantity: it.secondaryQuantity,
+        secondaryUnit: it.secondaryUnit,
+        unitPrice,
+        totalPrice: Math.round((it.quantity || 0) * unitPrice),
+        weightKg: it.weightKg || 0,
+        received: true,
+      };
+    });
+    const total = items.reduce((s, it) => s + it.totalPrice, 0);
+    const fields = {
+      type: 'purchase',
+      saleType: 'wholesale',
+      customerName: PARENT_COMPANY,
+      customerPhone: '',
+      invoiceDate: sale.invoiceDate,
+      items,
+      totalAmount: total,
+      discount: 0,
+      finalAmount: total,
+      totalWeightKg: sale.totalWeightKg || 0,
+      paymentMethod: 'credit',
+      splitDetails: {},
+      creditAmount: total,
+      creditApplied: 0,
+      creditSurplus: 0,
+      paidAmount: 0,
+      remainingDebt: total,
+      isPaid: total <= 0,
+      fulfillment: 'factory',
+      factorySaleId: String(sale._id),
+      shippingPayer: 'none',
+      shippingCost: 0,
+      notes: `ارسال مستقیم از کارخانه برای فاکتور ${sale.invoiceNumber}. از موجودی آریو کم نشده.`,
+      createdByName: recordedByName || sale.createdByName || 'مدیر سیستم',
+    };
+
+    let purchase = sale.factoryPurchaseId && Types.ObjectId.isValid(sale.factoryPurchaseId)
+      ? await this.invoiceModel.findById(sale.factoryPurchaseId).exec()
+      : null;
+    if (purchase && String(purchase.factorySaleId || '') !== String(sale._id)) purchase = null;
+    if (!purchase) {
+      purchase = new this.invoiceModel({ ...fields, invoiceNumber: await this.nextInvoiceNumber(false) });
+    } else {
+      purchase.set(fields);
+    }
+    await purchase.save();
+    sale.factoryPurchaseId = String(purchase._id);
+    sale.factoryPurchaseNumber = purchase.invoiceNumber;
+    await sale.save();
+    await this.suppliersService.sync(PARENT_COMPANY);
+  }
+
+  private async detachFactoryPurchase(sale: InvoiceDocument) {
+    const id = sale.factoryPurchaseId;
+    if (id && Types.ObjectId.isValid(id)) {
+      const purchase = await this.invoiceModel.findById(id).exec();
+      if (purchase && String(purchase.factorySaleId || '') === String(sale._id)) {
+        await purchase.deleteOne();
+        await this.suppliersService.sync(purchase.customerName || PARENT_COMPANY);
+      }
+    }
+    if (sale.factoryPurchaseId || sale.factoryPurchaseNumber) {
+      sale.factoryPurchaseId = '';
+      sale.factoryPurchaseNumber = '';
+      await sale.save();
+    }
+  }
+
+  /** A price typed on the company purchase becomes the hidden cost of the customer sale. */
+  private async mirrorFactoryCostToSale(purchase: InvoiceDocument) {
+    if (!purchase.factorySaleId || !Types.ObjectId.isValid(purchase.factorySaleId)) return;
+    const sale = await this.invoiceModel.findById(purchase.factorySaleId).exec();
+    if (!sale || sale.type !== 'sale') return;
+    sale.items.forEach((it, i) => {
+      const src = purchase.items[i];
+      if (src && String(src.productId) === String(it.productId)) {
+        it.factoryUnitCost = Math.max(0, Math.round(src.unitPrice || 0));
+      }
+    });
+    sale.markModified('items');
+    await sale.save();
+    await this.attachFactoryPurchase(sale, purchase.createdByName || '');
+  }
+
   /** 403, not 401: the client treats 401 as an expired session and logs the user out. */
   private async verifyPassword(user: ActingUser, password?: string) {
     if (!password) throw new ForbiddenException('برای حذف، رمز عبور خود را وارد کنید');
@@ -198,6 +308,7 @@ export class InvoicesService {
   ): Promise<InvoiceDocument> {
     const isSale = (dto.type || 'sale') === 'sale';
     const fromFactory = isSale && dto.fulfillment === 'factory';
+    if (fromFactory) await this.assertFactoryEnabled();
     const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory);
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     // Purchases on credit go on the supplier's account (see SuppliersService).
@@ -209,10 +320,10 @@ export class InvoicesService {
 
     if (isSale && !fromFactory) {
       await this.shiftStock(items, -1);
-    } else if (!isSale) {
+    } else if (!isSale && dto.fulfillment !== 'factory') {
       await this.shiftStock(items, 1, true);
       for (const item of items) {
-        if (item.unitPrice > 0) {
+        if (item.unitPrice > 0 && dto.fulfillment !== 'factory') {
           await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
         }
       }
@@ -256,6 +367,7 @@ export class InvoicesService {
     });
     await invoice.save();
     await this.syncShippingExpense(invoice, recordedByName);
+    if (fromFactory) await this.attachFactoryPurchase(invoice, recordedByName);
 
     if (isSale && credit > 0 && customer) {
       invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
@@ -273,22 +385,27 @@ export class InvoicesService {
   async update(id: string, dto: CreateInvoiceDto, recordedByName: string): Promise<InvoiceDocument> {
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
-    const wasShop = isSale && invoice.fulfillment !== 'factory';
-    const willFactory = isSale && (dto.fulfillment ?? invoice.fulfillment) === 'factory';
+    const wasFactory = invoice.fulfillment === 'factory';
+    const willFactory = (dto.fulfillment ?? invoice.fulfillment) === 'factory';
+    const wasShopSale = isSale && !wasFactory;
+    const wasShopPurchase = !isSale && !wasFactory;
+    const willShopSale = isSale && !willFactory;
+    const willShopPurchase = !isSale && !willFactory;
+    if (isSale && willFactory && !wasFactory) await this.assertFactoryEnabled();
 
     // Undo the old effects, then apply the new ones; restore on validation failure.
-    if (wasShop) await this.shiftStock(invoice.items as any, 1);
-    else if (!isSale) await this.shiftStock(invoice.items as any, -1, true);
+    if (wasShopSale) await this.shiftStock(invoice.items as any, 1);
+    else if (wasShopPurchase) await this.shiftStock(invoice.items as any, -1, true);
     let prepared: Awaited<ReturnType<InvoicesService['prepareItems']>>;
     try {
-      prepared = await this.prepareItems(dto.items, isSale && !willFactory);
+      prepared = await this.prepareItems(dto.items, willShopSale);
     } catch (err) {
-      if (wasShop) await this.shiftStock(invoice.items as any, -1);
-      else if (!isSale) await this.shiftStock(invoice.items as any, 1, true);
+      if (wasShopSale) await this.shiftStock(invoice.items as any, -1);
+      else if (wasShopPurchase) await this.shiftStock(invoice.items as any, 1, true);
       throw err;
     }
-    if (!willFactory && isSale) await this.shiftStock(prepared.items, -1);
-    else if (!isSale) await this.shiftStock(prepared.items, 1, true);
+    if (willShopSale) await this.shiftStock(prepared.items, -1);
+    else if (willShopPurchase) await this.shiftStock(prepared.items, 1, true);
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     let credit = this.creditPortion(dto);
@@ -303,9 +420,9 @@ export class InvoicesService {
       if (gap > 0 && splitPaid <= 0 && paidLater + 1 >= gap) credit = dto.finalAmount || credit;
     }
     if (isSale && credit > 0 && !customer) {
-      if (!willFactory) await this.shiftStock(prepared.items, 1);
-      if (wasShop) await this.shiftStock(invoice.items as any, -1);
-      else if (!isSale) await this.shiftStock(invoice.items as any, 1, true);
+      if (willShopSale) await this.shiftStock(prepared.items, 1);
+      if (wasShopSale) await this.shiftStock(invoice.items as any, -1);
+      else if (wasShopPurchase) await this.shiftStock(invoice.items as any, 1, true);
       throw new BadRequestException('برای فروش نسیه، مشتری را انتخاب کنید');
     }
 
@@ -342,10 +459,15 @@ export class InvoicesService {
     });
     await invoice.save();
     await this.syncShippingExpense(invoice, recordedByName);
+    if (isSale && willFactory) await this.attachFactoryPurchase(invoice, recordedByName);
+    else if (isSale && wasFactory) await this.detachFactoryPurchase(invoice);
 
     if (!isSale) {
+      if (invoice.fulfillment === 'factory' && invoice.factorySaleId) {
+        await this.mirrorFactoryCostToSale(invoice);
+      }
       for (const item of prepared.items) {
-        if (item.unitPrice > 0 && Types.ObjectId.isValid(String(item.productId))) {
+        if (willShopPurchase && item.unitPrice > 0 && Types.ObjectId.isValid(String(item.productId))) {
           await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
         }
       }
@@ -367,10 +489,15 @@ export class InvoicesService {
     await this.verifyPassword(user, password);
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
-    const fromFactory = isSale && invoice.fulfillment === 'factory';
+    const fromFactory = invoice.fulfillment === 'factory';
+
+    if (isSale && fromFactory) await this.detachFactoryPurchase(invoice);
+    else if (!isSale && invoice.factorySaleId && Types.ObjectId.isValid(invoice.factorySaleId)) {
+      await this.invoiceModel.updateOne({ _id: invoice.factorySaleId }, { $set: { factoryPurchaseId: '', factoryPurchaseNumber: '' } }).exec();
+    }
 
     if (isSale && !fromFactory) await this.shiftStock(invoice.items as any, 1);
-    else if (!isSale) await this.shiftStock(invoice.items as any, -1, true);
+    else if (!isSale && !fromFactory) await this.shiftStock(invoice.items as any, -1, true);
     if (invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)) {
       await this.expenseModel.deleteOne({ _id: invoice.shippingExpenseId }).exec();
     }
@@ -592,7 +719,7 @@ export class InvoicesService {
     let sales = 0;
     for (const inv of invoices) {
       const purchase = inv.type === 'purchase';
-      if (!purchase && inv.fulfillment === 'factory') continue;
+      if (inv.fulfillment === 'factory') continue;
       if (purchase) purchases++;
       else sales++;
       for (const item of inv.items || []) {

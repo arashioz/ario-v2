@@ -4,6 +4,7 @@ import { Sheet } from '../ui/Sheet';
 import { AmountInput } from '../ui/AmountInput';
 import { JalaliDateField } from '../ui/JalaliDatePicker';
 import { dateToYmd } from '../../lib/jalali';
+import { suppliersService, type SupplierListItem } from '../../services/suppliers.service';
 import { invoicesService, apiErrorMessage } from '../../services/invoices.service';
 import type { Invoice, CreateInvoiceInput } from '../../services/invoices.service';
 import { productsService } from '../../services/products.service';
@@ -28,6 +29,7 @@ interface Row {
   priceBy: 'unit' | 'kg';
   qtyText?: string;
   received: boolean;
+  factoryUnitCost: number;
 }
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -35,7 +37,7 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const saleAlt = (p?: Product | null) => {
   const sellBy = p?.sellBy || 'stock';
   const kgRatio = p?.weightPerUnitKg || (p?.hasDualUnit ? p.unitRatio || 0 : 0);
-  if (sellBy === 'kg' && kgRatio > 0 && kgRatio !== 1) return { lock: true, ratio: kgRatio, label: 'کیلوگرم' };
+  if (sellBy === 'kg') return { lock: true, ratio: kgRatio || 1, label: 'کیلوگرم' };
   if (sellBy === 'other' && (p?.salePerStock || 0) > 0) return { lock: true, ratio: p!.salePerStock!, label: p?.saleUnit || 'واحد' };
   return { lock: false, ratio: kgRatio, label: 'کیلوگرم' };
 };
@@ -65,10 +67,14 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const [payMode, setPayMode] = useState<PayMode>('pos');
   const [upfront, setUpfront] = useState(0);
   const [fromCompany, setFromCompany] = useState(false);
+  const [supplierName, setSupplierName] = useState('');
+  const [supplierPhone, setSupplierPhone] = useState('');
+  const [suppliers, setSuppliers] = useState<SupplierListItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [accountId, setAccountId] = useState('');
-  const { bankCards } = useSettings();
+  const settings = useSettings();
+  const { bankCards } = settings;
 
   useEffect(() => {
     if (!invoice) return;
@@ -89,6 +95,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           qtyBy: 'unit' as const,
           priceBy: 'unit' as const,
           received: it.received !== false,
+          factoryUnitCost: it.factoryUnitCost || 0,
         };
       }),
     );
@@ -97,6 +104,9 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
     setFreight(invoice.type === 'purchase' && invoice.shippingPayer === 'me' ? invoice.shippingCost || 0 : 0);
     setNotes(invoice.notes || '');
     setFromCompany(invoice.type === 'sale' && invoice.fulfillment === 'factory');
+    setSupplierName(invoice.type === 'purchase' ? invoice.customerName || '' : '');
+    setSupplierPhone(invoice.type === 'purchase' ? invoice.customerPhone || '' : '');
+    if (invoice.type === 'purchase') suppliersService.list().then(setSuppliers).catch(() => undefined);
     const credit = invoice.creditAmount ?? invoice.remainingDebt ?? 0;
     if (credit > 0 || invoice.paymentMethod === 'credit' || invoice.paymentMethod === 'split') {
       setPayMode('credit');
@@ -124,6 +134,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           altLabel: alt.label,
           qtyBy: alt.lock ? 'kg' : r.qtyBy,
           priceBy: alt.lock ? 'kg' : r.priceBy,
+          factoryUnitCost: r.factoryUnitCost > 0 ? r.factoryUnitCost : invoice?.fulfillment === 'factory' ? p?.buyPrice || 0 : r.factoryUnitCost,
         };
       }),
     );
@@ -169,6 +180,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         priceBy: byAlt ? 'kg' : 'unit',
         qtyText: byAlt ? '1' : undefined,
         received: true,
+        factoryUnitCost: p.buyPrice || 0,
       },
     ]);
   };
@@ -186,6 +198,10 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const canWeigh = (r: Row) => r.ratio > 0 && r.ratio !== 1;
 
   const save = async () => {
+    if (!isSale && !supplierName.trim()) {
+      showNotification({ title: 'تأمین‌کننده', message: 'نام تأمین‌کننده را وارد کنید.', type: 'warning' });
+      return;
+    }
     if (rows.length === 0 || rows.some((r) => r.quantity <= 0)) {
       showNotification({ title: 'اقلام نامعتبر', message: 'حداقل یک قلم با مقدار بیشتر از صفر لازم است.', type: 'warning' });
       return;
@@ -203,10 +219,10 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       type: invoice.type,
       saleType: invoice.saleType,
       customerId: invoice.customerId,
-      customerName: invoice.customerName,
-      customerPhone: invoice.customerPhone,
+      customerName: isSale ? invoice.customerName : supplierName.trim(),
+      customerPhone: isSale ? invoice.customerPhone : supplierPhone.trim(),
       invoiceDate: parsedDate.toISOString(),
-      fulfillment: isSale && fromCompany ? 'factory' : 'shop',
+      fulfillment: isSale ? (fromCompany ? 'factory' : 'shop') : invoice.fulfillment || 'shop',
       items: rows.map((r) => {
         const secondary = r.ratio ? Math.round(r.quantity * r.ratio * 1000) / 1000 : undefined;
         return {
@@ -219,6 +235,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           secondaryQuantity: secondary,
           secondaryUnit: r.secondaryUnit,
           weightKg: r.secondaryUnit === 'کیلوگرم' ? secondary : undefined,
+          ...(isSale && fromCompany ? { factoryUnitCost: Math.round(r.factoryUnitCost || 0) } : {}),
           ...(isSale ? {} : { received: r.received !== false }),
         };
       }),
@@ -267,6 +284,46 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         </div>
       }
     >
+      {!isSale && (
+        <div className="space-y-2">
+          <label className="text-[11px] text-slate-500 block">تأمین‌کننده</label>
+          <input
+            type="text"
+            value={supplierName}
+            onChange={(e) => setSupplierName(e.target.value)}
+            placeholder="نام شرکت یا کارخانه"
+            className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500"
+          />
+          <input
+            type="tel"
+            dir="ltr"
+            value={supplierPhone}
+            onChange={(e) => setSupplierPhone(e.target.value)}
+            placeholder="شماره تماس"
+            className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left focus:outline-none focus:border-emerald-500"
+          />
+          {suppliers.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {suppliers.map((s) => (
+                <button
+                  key={s.name}
+                  type="button"
+                  onClick={() => {
+                    setSupplierName(s.name);
+                    if (s.phone) setSupplierPhone(s.phone);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                    supplierName.trim() === s.name ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-2">
         {rows.map((r, i) => (
           <div key={i} className="border border-slate-100 rounded-2xl p-3 space-y-2">
@@ -366,6 +423,12 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
                 </span>
               </div>
             </div>
+            {isSale && fromCompany && (
+              <div>
+                <span className="text-[10px] text-amber-700 block mb-1">قیمت کارخانه (هر {r.unit}) — روی فاکتور مشتری نمی‌آید</span>
+                <AmountInput value={r.factoryUnitCost || 0} onChange={(v) => updateRow(i, { factoryUnitCost: v })} />
+              </div>
+            )}
           </div>
         ))}
 
@@ -401,7 +464,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         </div>
       )}
 
-      {isSale && (
+      {isSale && (settings.factorySalesEnabled || fromCompany) && (
         <div className="space-y-2">
           <label className="text-[11px] text-slate-500 block">این بار از کجا رفته</label>
           <div className="grid grid-cols-2 gap-1.5">
@@ -414,18 +477,33 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
             </button>
             <button
               type="button"
-              onClick={() => setFromCompany(true)}
-              className={`py-2 rounded-xl text-[11px] font-bold border ${fromCompany ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200'}`}
+              disabled={!settings.factorySalesEnabled && !fromCompany}
+              onClick={() => {
+                setFromCompany(true);
+                setRows((prev) =>
+                  prev.map((r) =>
+                    r.factoryUnitCost > 0
+                      ? r
+                      : { ...r, factoryUnitCost: products.find((p) => p._id === r.productId)?.buyPrice || 0 },
+                  ),
+                );
+              }}
+              className={`py-2 rounded-xl text-[11px] font-bold border disabled:opacity-40 ${fromCompany ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200'}`}
             >
-              از موجودی شرکت
+              از کارخانه
             </button>
           </div>
           <p className="text-[10px] text-slate-400 leading-5">
             {fromCompany
-              ? 'بار از شرکت رفته است. با ذخیره، اگر قبلاً از انبار آریو کم شده باشد برمی‌گردد.'
-              : 'از انبار آریو کم می‌شود. اگر بار واقعاً از شرکت قند رفته، «از موجودی شرکت» را بزنید.'}
+              ? 'از موجودی آریو کم نمی‌شود. قیمت کارخانه بدهی شرکت مادر است و سود فاکتور با آن، مخفی، حساب می‌شود.'
+              : 'از انبار آریو کم می‌شود. اگر بار مستقیم از کارخانه رفته، «از کارخانه» را بزنید.'}
           </p>
         </div>
+      )}
+      {!isSale && invoice.factorySaleId && (
+        <p className="text-[11px] text-amber-800 leading-5 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2">
+          این خریدِ شرکت مادر برای یک فروش مستقیم از کارخانه است و به موجودی آریو اضافه نمی‌شود. مقدار کالا از فاکتور مشتری می‌آید؛ قیمت را اینجا عوض کنید تا سود همان فاکتور به‌روز شود.
+        </p>
       )}
 
       {isSale && (

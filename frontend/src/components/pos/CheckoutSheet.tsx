@@ -6,7 +6,8 @@ import type { Customer, CustomerKind } from '../../services/customers.service';
 import { apiErrorMessage } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS, type AppSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
-import { formatToman, num, searchKey, weight } from '../../lib/format';
+import { formatToman, num, parseDecimal, searchKey, weight } from '../../lib/format';
+import { AmountInput } from '../ui/AmountInput';
 import {
   PaymentTermsForm,
   emptyTerms,
@@ -17,11 +18,29 @@ import {
   type PaymentTerms,
 } from './PaymentTermsForm';
 
+export interface FactoryLine {
+  productId: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  buyPrice: number;
+  sellPrice: number;
+  priceWholesale: number;
+}
+
+/** Wholesale markup the catalog already uses: (عمده − خرید) / خرید. */
+export const wholesaleMarkupPercent = (buy: number, wholesale: number) =>
+  buy > 0 && wholesale > buy ? Math.round(((wholesale - buy) / buy) * 1000) / 10 : 0;
+
 export interface CheckoutResult {
   customer: Customer | null;
   terms: PaymentTerms;
   asProforma: boolean;
   fulfillment: 'shop' | 'factory';
+  /** Parent-company price per unit, keyed by product id. Hidden on the customer invoice. */
+  factoryUnitCosts?: Record<string, number>;
+  /** Customer price per unit after a wholesale markup or a hand-typed price. */
+  factorySellPrices?: Record<string, number>;
 }
 
 interface Props {
@@ -36,6 +55,9 @@ interface Props {
   settings: AppSettings;
   submitting: boolean;
   onSubmit: (r: CheckoutResult) => void;
+  /** Where this cart is shipping from. Factory is only offered when the setting is on. */
+  shipFrom?: 'shop' | 'factory';
+  factoryLines?: FactoryLine[];
 }
 
 const TYPE_CHIP: Record<string, string> = {
@@ -56,10 +78,11 @@ export const CheckoutSheet: React.FC<Props> = ({
   settings,
   submitting,
   onSubmit,
+  shipFrom = 'shop',
+  factoryLines = [],
 }) => {
   const { showNotification } = useNotification();
   const bulk = saleType !== 'retail';
-  const highTonnage = totalKg >= (settings.wholesaleMinKg || 0);
   const [step, setStep] = useState<'customer' | 'payment'>('customer');
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [walkIn, setWalkIn] = useState(false);
@@ -74,7 +97,11 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [terms, setTerms] = useState<PaymentTerms>(emptyTerms());
   const [asProforma, setAsProforma] = useState(false);
   const [fulfillment, setFulfillment] = useState<'shop' | 'factory'>('shop');
+  const [factoryCosts, setFactoryCosts] = useState<Record<string, number>>({});
+  const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
+  const [margins, setMargins] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
+  const factoryOn = !!settings.factorySalesEnabled;
 
   useEffect(() => {
     if (!open) return;
@@ -87,7 +114,11 @@ export const CheckoutSheet: React.FC<Props> = ({
     setWalkPhone('');
     setTerms(emptyTerms(bulk ? 'credit' : 'pos'));
     setAsProforma(bulk && settings.proformaForBulk);
-    setFulfillment('shop');
+    const fromFactory = factoryOn && shipFrom === 'factory';
+    setFulfillment(fromFactory ? 'factory' : 'shop');
+    setFactoryCosts(Object.fromEntries(factoryLines.map((l) => [l.productId, l.buyPrice || 0])));
+    setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
+    setMargins(Object.fromEntries(factoryLines.map((l) => [l.productId, wholesaleMarkupPercent(l.buyPrice, l.priceWholesale)])));
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -112,9 +143,15 @@ export const CheckoutSheet: React.FC<Props> = ({
       .map((x) => x.c);
   }, [customers, query]);
 
+  const pricingFactory = factoryOn && fulfillment === 'factory';
+  const goodsTotal = useMemo(() => {
+    if (!pricingFactory) return subtotal;
+    return factoryLines.reduce((s, l) => s + Math.round(l.quantity * (sellPrices[l.productId] ?? l.sellPrice)), 0);
+  }, [pricingFactory, factoryLines, sellPrices, subtotal]);
+
   if (!open) return null;
 
-  const final = termsFinal(subtotal, terms);
+  const final = termsFinal(goodsTotal, terms);
   const credit = termsCredit(final, terms);
   const walkInNamed = !customer && !!walkName.trim();
   const error = termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
@@ -171,12 +208,14 @@ export const CheckoutSheet: React.FC<Props> = ({
         setSaving(false);
       }
     }
-    const shipFrom = highTonnage ? fulfillment : 'shop';
+    const fromFactory = factoryOn && fulfillment === 'factory';
     onSubmit({
       customer: buyer,
       terms,
-      asProforma: shipFrom === 'shop' && bulk && asProforma && !!buyer,
-      fulfillment: shipFrom,
+      asProforma: !fromFactory && bulk && asProforma && !!buyer,
+      fulfillment: fromFactory ? 'factory' : 'shop',
+      factoryUnitCosts: fromFactory ? factoryCosts : undefined,
+      factorySellPrices: fromFactory ? sellPrices : undefined,
     });
   };
 
@@ -185,7 +224,7 @@ export const CheckoutSheet: React.FC<Props> = ({
       <span className="text-slate-500">
         {num(itemCount)} قلم · {weight(totalKg)} · <b className="text-slate-700">{SALE_TYPE_LABELS[saleType]}</b>
       </span>
-      <span className="font-mono font-bold text-slate-800">{formatToman(subtotal)}</span>
+      <span className="font-mono font-bold text-slate-800">{formatToman(goodsTotal)}</span>
     </div>
   );
 
@@ -399,7 +438,7 @@ export const CheckoutSheet: React.FC<Props> = ({
       <PaymentTermsForm
         terms={terms}
         onChange={(patch) => setTerms((t) => ({ ...t, ...patch }))}
-        subtotal={subtotal}
+        subtotal={goodsTotal}
         showShipping={bulk}
         hasCustomer={!!customer || walkInNamed}
         methodHint={bulk && asProforma ? 'هنگام ارسال قابل تغییر است' : undefined}
@@ -408,7 +447,7 @@ export const CheckoutSheet: React.FC<Props> = ({
       <div className="rounded-2xl bg-slate-50 p-3 space-y-1.5 text-xs">
         <div className="flex justify-between text-slate-500">
           <span>جمع اقلام</span>
-          <span className="font-mono">{formatToman(subtotal)}</span>
+          <span className="font-mono">{formatToman(goodsTotal)}</span>
         </div>
         {terms.discount > 0 && (
           <div className="flex justify-between text-rose-600">
@@ -426,13 +465,20 @@ export const CheckoutSheet: React.FC<Props> = ({
           <span>مبلغ نهایی</span>
           <span className="font-mono text-sky-700">{formatToman(final)}</span>
         </div>
-        {highTonnage && (
+        {factoryOn && (
           <button
             type="button"
             onClick={() =>
               setFulfillment((f) => {
                 const next = f === 'shop' ? 'factory' : 'shop';
-                if (next === 'factory') setAsProforma(false);
+                if (next === 'factory') {
+                  setAsProforma(false);
+                  setFactoryCosts((prev) => {
+                    const nextCosts = { ...prev };
+                    for (const l of factoryLines) if (nextCosts[l.productId] == null) nextCosts[l.productId] = l.buyPrice || 0;
+                    return nextCosts;
+                  });
+                }
                 return next;
               })
             }
@@ -444,8 +490,60 @@ export const CheckoutSheet: React.FC<Props> = ({
             </span>
           </button>
         )}
-        {highTonnage && fulfillment === 'factory' && (
-          <p className="text-[10px] text-amber-700 leading-5">از موجودی دفتر کم نمی‌شود.</p>
+        {factoryOn && fulfillment === 'factory' && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[10px] text-amber-800 leading-5">
+              از موجودی آریو کم نمی‌شود. فاکتور مشتری به نام آریو می‌ماند و خرید به حساب شرکت مادر ثبت می‌شود. قیمت کارخانه روی فاکتور مشتری نمی‌آید؛ فقط سود مخفی با آن حساب می‌شود.
+            </p>
+            {factoryLines.map((l) => {
+              const cost = factoryCosts[l.productId] || 0;
+              const sell = sellPrices[l.productId] ?? l.sellPrice;
+              const lineProfit = Math.round(l.quantity * sell) - Math.round(l.quantity * cost);
+              const pct = margins[l.productId] ?? 0;
+              return (
+                <div key={l.productId} className="rounded-xl bg-white border border-amber-100 p-2 space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-700">
+                    {l.name} · {num(l.quantity, 2)} {l.unit}
+                  </div>
+                  <span className="text-[10px] text-slate-500 block">قیمت کارخانه (هر {l.unit})</span>
+                  <AmountInput value={cost} onChange={(v) => setFactoryCosts((prev) => ({ ...prev, [l.productId]: v }))} />
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      inputMode="decimal"
+                      value={pct ? String(pct) : ''}
+                      placeholder="٪"
+                      onChange={(e) => setMargins((prev) => ({ ...prev, [l.productId]: parseDecimal(e.target.value) || 0 }))}
+                      className="w-16 px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-mono text-center"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) }))}
+                      className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
+                    >
+                      سود عمده روی قیمت کارخانه
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری (دلخواه)</span>
+                  <AmountInput value={sell} onChange={(v) => setSellPrices((prev) => ({ ...prev, [l.productId]: v }))} />
+                  <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    سود این ردیف {formatToman(lineProfit)}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex justify-between text-[11px] font-bold text-emerald-800">
+              <span>جمع سود این فاکتور</span>
+              <span className="font-mono">
+                {formatToman(
+                  factoryLines.reduce((s, l) => {
+                    const cost = (factoryCosts[l.productId] || 0) * l.quantity;
+                    const sell = (sellPrices[l.productId] ?? l.sellPrice) * l.quantity;
+                    return s + Math.round(sell - cost);
+                  }, 0),
+                )}
+              </span>
+            </div>
+          </div>
         )}
         {credit > 0 && customer && (
           <div className="flex justify-between text-rose-700">

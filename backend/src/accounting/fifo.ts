@@ -52,6 +52,8 @@ export interface FifoInvoice {
     secondaryQuantity?: number;
     /** false: purchased but not delivered, so it is not a shop lot. */
     received?: boolean;
+    /** Parent-company price per unit on a direct factory sale. Hidden from the customer invoice. */
+    factoryUnitCost?: number;
   }[];
 }
 
@@ -114,6 +116,8 @@ export interface SaleLine {
   revenue: number; // after invoice discount
   cost: number;
   profit: number;
+  /** shop: left Ario stock. factory: parent-company price, stock untouched. */
+  fulfillment: 'shop' | 'factory';
   estimatedKg: number; // kg that had no purchase lot to draw from
   consumptions: Consumption[];
   /** Latest purchase price per kg on the sale date (what it would cost to buy the goods again). */
@@ -201,29 +205,18 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
   const invoiceProfit = new Map<string, InvoiceProfit>();
   const priceChanges: PriceChange[] = [];
 
-  // Look-ahead cost for sales that happened before any recorded purchase (opening stock).
-  const firstLotCost = new Map<string, number>();
-  for (const inv of sorted) {
-    if (inv.type !== 'purchase') continue;
-    const lines = inv.items.filter((it) => it.received !== false);
-    const costs = purchaseLineCosts({ ...inv, items: lines }, products);
-    lines.forEach((it, idx) => {
-      if (costs[idx].kg > 0 && !firstLotCost.has(it.productId)) firstLotCost.set(it.productId, costs[idx].costPerKg);
-    });
-  }
-
-  const fallbackCost = (pid: string) => {
-    const p = products.get(pid);
-    return (
-      lastCost.get(pid) ??
-      firstLotCost.get(pid) ??
-      (p?.buyPrice && p.weightPerUnitKg ? p.buyPrice / p.weightPerUnitKg : 0)
-    );
-  };
+  /**
+   * Price already known on the sale date: the latest purchase on or before that day.
+   * A later, more expensive purchase must not be pulled backwards. Otherwise a sale at 710
+   * against a 670 lot is reported as a loss once today's buy price is higher.
+   */
+  const priceThen = (pid: string) => lastCost.get(pid) ?? 0;
 
   for (const inv of sorted) {
     const id = String(inv._id);
     if (inv.type === 'purchase') {
+      // Company invoice for a direct shipment: it is not stock Ario holds.
+      if (inv.fulfillment === 'factory') continue;
       const lines = inv.items.map((it, idx) => ({ it, idx })).filter((l) => l.it.received !== false);
       const costs = purchaseLineCosts({ ...inv, items: lines.map((l) => l.it) }, products);
       lines.forEach(({ it, idx }, i) => {
@@ -272,9 +265,6 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       continue;
     }
 
-    // Shipped from the factory: the shop never held these goods, so they must not consume its lots.
-    if (inv.fulfillment === 'factory') continue;
-
     // Revenue is the money actually received for the goods, spread over the lines by their price.
     // Delivery charged to the customer passes through to the carrier; it is not sales revenue.
     const shippingCharge = inv.shippingPayer === 'customer' ? inv.shippingCost || 0 : 0;
@@ -287,6 +277,41 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       const pid = it.productId;
       const kg = lineKg(it, products.get(pid));
       const revenue = (it.totalPrice || 0) * discountFactor;
+
+      // Shipped from the factory: cost is the parent-company price, and shop lots stay untouched.
+      if (inv.fulfillment === 'factory') {
+        const factoryUnit = it.factoryUnitCost || 0;
+        const cost = factoryUnit > 0 ? factoryUnit * (it.quantity || 0) : kg * priceThen(pid);
+        const estimatedKg = factoryUnit > 0 ? 0 : kg;
+        if (estimatedKg > 0) ip.estimated = true;
+        const perKg = kg > 0 ? cost / kg : 0;
+        saleLines.push({
+          invoiceId: id,
+          invoiceNumber: inv.invoiceNumber,
+          date: inv.invoiceDate,
+          customerId: inv.customerId ? String(inv.customerId) : null,
+          customerName: inv.customerName,
+          productId: pid,
+          productName: it.productName,
+          quantity: it.quantity,
+          unit: it.unit,
+          kg,
+          revenue,
+          cost,
+          profit: revenue - cost,
+          fulfillment: 'factory',
+          estimatedKg,
+          consumptions: [{ lotId: null, lotInvoiceNumber: null, lotDate: null, kg, costPerKg: perKg }],
+          replacementCostPerKg: perKg,
+          tradingProfit: revenue - cost,
+          inflationProfit: 0,
+        });
+        ip.revenue += revenue;
+        ip.cost += cost;
+        ip.kg += kg;
+        continue;
+      }
+
       const consumptions: Consumption[] = [];
       let need = kg;
       let cost = 0;
@@ -310,14 +335,16 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
 
       let estimatedKg = 0;
       if (need > EPS) {
-        const c = fallbackCost(pid);
-        cost += need * c;
+        const c = priceThen(pid);
+        if (c > 0) {
+          cost += need * c;
+          consumptions.push({ lotId: null, lotInvoiceNumber: null, lotDate: null, kg: need, costPerKg: c });
+        }
         estimatedKg = need;
-        consumptions.push({ lotId: null, lotInvoiceNumber: null, lotDate: null, kg: need, costPerKg: c });
         ip.estimated = true;
       }
 
-      const replacement = fallbackCost(pid);
+      const replacement = priceThen(pid);
 
       saleLines.push({
         invoiceId: id,
@@ -333,6 +360,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
         revenue,
         cost,
         profit: revenue - cost,
+        fulfillment: 'shop',
         estimatedKg,
         consumptions,
         replacementCostPerKg: replacement,

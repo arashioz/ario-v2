@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CompanyPayment, CompanyPaymentSchema } from './schemas/company-payment.schema';
 import { SupplierDebt, SupplierDebtSchema } from './schemas/supplier-debt.schema';
 import { CashTransaction, CashTransactionSchema } from './schemas/cash-transaction.schema';
+import { CashboxAdjustment, CashboxAdjustmentSchema } from './schemas/cashbox-adjustment.schema';
 import { HistoryController } from './history.controller';
 import { HistoryService } from './history.service';
 import { CashbookService } from './cashbook.service';
@@ -17,6 +18,7 @@ import { SupplierPayment, SupplierPaymentSchema } from '../suppliers/schemas/sup
       { name: CompanyPayment.name, schema: CompanyPaymentSchema },
       { name: SupplierDebt.name, schema: SupplierDebtSchema },
       { name: CashTransaction.name, schema: CashTransactionSchema },
+      { name: CashboxAdjustment.name, schema: CashboxAdjustmentSchema },
       { name: Invoice.name, schema: InvoiceSchema },
       { name: CustomerTransaction.name, schema: CustomerTransactionSchema },
       { name: Expense.name, schema: ExpenseSchema },

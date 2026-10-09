@@ -26,6 +26,8 @@ export interface Cashbook {
   byKind: { kind: string; label: string; direction: 'in' | 'out'; amount: number; count: number }[];
   byChannel: { channel: CashChannel; in: number; out: number; net: number }[];
   byMethod: { method: string; in: number; out: number; net: number }[];
+  /** Standing correction per drawer. Applied only to the all-time balance. */
+  adjustments: { method: string; amount: number; note: string }[];
   /** کارت‌به‌کارت received per shop account; accountId '' = not recorded. */
   byAccount: { accountId: string; in: number; count: number }[];
   byDay: { date: string; in: number; out: number }[];
@@ -41,6 +43,12 @@ export interface LegacyLedger {
 export const cashbookService = {
   async cashbook(from?: string, to?: string): Promise<Cashbook> {
     return (await api.get('/history/cashbook', { params: { from, to } })).data;
+  },
+  async setBalance(method: 'cash' | 'pos' | 'transfer', balance: number, note?: string): Promise<Cashbook> {
+    return (await api.put('/history/cashbox/balance', { method, balance, note })).data;
+  },
+  async clearBalance(method: 'cash' | 'pos' | 'transfer'): Promise<Cashbook> {
+    return (await api.delete(`/history/cashbox/balance/${method}`)).data;
   },
   async legacy(type?: string, limit = 300): Promise<LegacyLedger> {
     return (await api.get('/history/legacy-ledger', { params: { type, limit } })).data;

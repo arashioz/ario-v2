@@ -52,6 +52,12 @@ export class InvoiceItemDto {
   @IsOptional()
   @IsBoolean()
   received?: boolean;
+
+  /** Parent-company price per unit. Only used when the sale ships from the factory. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  factoryUnitCost?: number;
 }
 
 export class SplitDetailsDto {
