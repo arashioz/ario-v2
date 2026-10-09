@@ -295,7 +295,17 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             <div className="space-y-2">
               <span className="text-xs font-medium text-slate-700 block">ریز اقلام فاکتور:</span>
               <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
-                {invoice.items.map((item, index) => (
+                {invoice.items.map((item, index) => {
+                  const lineKg =
+                    item.weightKg && item.weightKg > 0
+                      ? item.weightKg
+                      : item.secondaryUnit === 'کیلوگرم' && item.secondaryQuantity
+                        ? item.secondaryQuantity
+                        : item.unit === 'کیلوگرم'
+                          ? item.quantity
+                          : 0;
+                  const perKg = lineKg > 0 ? Math.round(item.totalPrice / lineKg) : 0;
+                  return (
                   <div key={index} className="p-3 bg-white space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-slate-800">
@@ -319,8 +329,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                       </span>
                       <span>فی: {formatToman(item.unitPrice)}</span>
                     </div>
+                    {perKg > 0 && item.unit !== 'کیلوگرم' && (
+                      <div className="text-[11px] text-slate-500 font-mono">فی هر کیلو: {formatToman(perKg)}</div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

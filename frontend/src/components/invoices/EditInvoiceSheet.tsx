@@ -466,20 +466,13 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
       {isSale && (settings.factorySalesEnabled || fromCompany) && (
         <div className="space-y-2">
-          <label className="text-[11px] text-slate-500 block">این بار از کجا رفته</label>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => setFromCompany(false)}
-              className={`py-2 rounded-xl text-[11px] font-bold border ${!fromCompany ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200'}`}
-            >
-              از موجودی آریو
-            </button>
-            <button
-              type="button"
-              disabled={!settings.factorySalesEnabled && !fromCompany}
-              onClick={() => {
-                setFromCompany(true);
+          <button
+            type="button"
+            onClick={() => {
+              if (!settings.factorySalesEnabled && !fromCompany) return;
+              const next = !fromCompany;
+              setFromCompany(next);
+              if (next) {
                 setRows((prev) =>
                   prev.map((r) =>
                     r.factoryUnitCost > 0
@@ -487,16 +480,19 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
                       : { ...r, factoryUnitCost: products.find((p) => p._id === r.productId)?.buyPrice || 0 },
                   ),
                 );
-              }}
-              className={`py-2 rounded-xl text-[11px] font-bold border disabled:opacity-40 ${fromCompany ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200'}`}
-            >
-              از کارخانه
-            </button>
-          </div>
+              }
+            }}
+            className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromCompany ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
+          >
+            <span className="text-xs font-bold text-slate-800">این فاکتور از کارخانه رفته</span>
+            <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${fromCompany ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300'}`}>
+              {fromCompany ? '✓' : ''}
+            </span>
+          </button>
           <p className="text-[10px] text-slate-400 leading-5">
             {fromCompany
-              ? 'از موجودی آریو کم نمی‌شود. قیمت کارخانه بدهی شرکت مادر است و سود فاکتور با آن، مخفی، حساب می‌شود.'
-              : 'از انبار آریو کم می‌شود. اگر بار مستقیم از کارخانه رفته، «از کارخانه» را بزنید.'}
+              ? 'با ذخیره، اگر این فاکتور قبلاً از انبار آریو کم شده باشد همان مقدار به موجودی آریو برمی‌گردد. قیمت کارخانه بدهی شرکت مادر است.'
+              : 'تیک را بزنید و ذخیره کنید تا فاکتور به ارسال از کارخانه تبدیل شود و موجودی‌اش به انبار آریو برگردد.'}
           </p>
         </div>
       )}

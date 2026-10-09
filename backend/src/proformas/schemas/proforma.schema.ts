@@ -26,6 +26,10 @@ export class Proforma {
   @Prop({ type: String, enum: ['retail', 'supermarket', 'wholesale'], default: 'wholesale' })
   saleType: string;
 
+  /** shop: leaves Ario stock when shipped. factory: parent-company shipment, stock stays. */
+  @Prop({ type: String, enum: ['shop', 'factory'], default: 'shop' })
+  fulfillment: string;
+
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Customer', index: true })
   customerId?: MongooseSchema.Types.ObjectId;
 

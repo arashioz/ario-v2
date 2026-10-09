@@ -468,6 +468,8 @@ export class AccountingService {
         cost: r0(l.cost),
         profit: r0(l.profit),
         sellPerKg: l.kg ? r0(l.revenue / l.kg) : 0,
+        costPerKg: l.kg ? r0(l.cost / l.kg) : 0,
+        costPerUnit: l.quantity ? r0(l.cost / l.quantity) : 0,
         lots: l.consumptions.map((c) => ({
           invoiceNumber: c.lotInvoiceNumber,
           kg: r1(c.kg),

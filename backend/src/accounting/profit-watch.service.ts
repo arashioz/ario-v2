@@ -412,14 +412,25 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
       if (l.cost <= 0) continue;
       const margin = (l.profit / l.revenue) * 100;
       const costPerKg = l.cost / l.kg;
+      const costPerUnit = l.quantity ? l.cost / l.quantity : 0;
+      const sellPerUnit = l.quantity ? l.revenue / l.quantity : 0;
+      const unitName = l.unit && l.unit !== 'کیلوگرم' ? l.unit : '';
       const lots = l.consumptions
         .filter((c) => c.lotInvoiceNumber)
         .map((c) => c.lotInvoiceNumber)
         .filter((n, i, a) => a.indexOf(n) === i)
         .slice(0, 3);
       const where = l.fulfillment === 'factory' ? 'از کارخانه — ' : '';
-      const fromLot = lots.length ? ` از فاکتور ${lots.join('، ')}` : '؛ خریدِ قبل از این فروش';
-      const detail = `${where}فروش هر کیلو ${toman(perKg)}، خرید همان زمان هر کیلو ${toman(costPerKg)}${fromLot} — ${margin >= 0 ? 'سود' : 'زیان'} ${fa(Math.abs(margin), 1)}٪ (${toman(l.profit)})`;
+      const fromLot = lots.length ? ` از فاکتور ${lots.join('، ')}` : '';
+      const rates = [
+        unitName ? `فروش هر ${unitName} ${toman(sellPerUnit)}` : '',
+        `فروش هر کیلو ${toman(perKg)}`,
+        unitName ? `خرید هر ${unitName} ${toman(costPerUnit)}` : '',
+        `خرید هر کیلو ${toman(costPerKg)}`,
+      ]
+        .filter(Boolean)
+        .join('، ');
+      const detail = `${where}${rates}${fromLot} — ${margin >= 0 ? 'سود' : 'زیان'} ${fa(Math.abs(margin), 1)}٪ (${toman(l.profit)})`;
       if (margin < LOSS_ERROR) push('sale_loss_big', { ...ref, id: `sale_loss_big:${id}`, impact: l.profit, detail });
       else if (margin < LOSS_WARN) push('sale_loss', { ...ref, id: `sale_loss:${id}`, impact: l.profit, detail });
       else if (margin > HIGH_MARGIN && l.fulfillment !== 'factory') push('sale_high_margin', { ...ref, id: `sale_high_margin:${id}`, impact: l.profit, detail });

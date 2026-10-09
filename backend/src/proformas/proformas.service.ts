@@ -5,6 +5,7 @@ import { Proforma, ProformaDocument } from './schemas/proforma.schema';
 import { ProformaTermsDto, ShipProformaDto } from './dto/proforma.dto';
 import { CreateInvoiceDto } from '../invoices/dto/create-invoice.dto';
 import { InvoicesService } from '../invoices/invoices.service';
+import { SettingsService } from '../settings/settings.service';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 
@@ -17,7 +18,13 @@ export class ProformasService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     private invoices: InvoicesService,
+    private settings: SettingsService,
   ) {}
+
+  private async assertFactory() {
+    const settings = await this.settings.get();
+    if (!settings.factorySalesEnabled) throw new BadRequestException('فروش از کارخانه در تنظیمات خاموش است');
+  }
 
   private async nextNumber(): Promise<string> {
     const d = new Date();
@@ -78,8 +85,10 @@ export class ProformasService {
       shippingPayer,
       shippingCost,
       notes: dto.notes || '',
+      fulfillment: dto.fulfillment === 'factory' ? 'factory' : 'shop',
       finalAmount: 0,
     };
+    if (doc.fulfillment === 'factory') await this.assertFactory();
     doc.finalAmount = this.finalOf(doc);
     this.checkPayment(doc);
 
@@ -131,12 +140,25 @@ export class ProformasService {
     if (t.paidAmount !== undefined) doc.paidAmount = t.paidAmount;
     if (t.discount !== undefined) doc.discount = t.discount;
     if (t.notes !== undefined) doc.notes = t.notes;
+    if (t.fulfillment === 'shop' || t.fulfillment === 'factory') doc.fulfillment = t.fulfillment;
+    if (t.items?.length) {
+      for (const row of t.items) {
+        const item = doc.items.find((i) => i.productId === row.productId);
+        if (!item) continue;
+        item.unitPrice = Math.round(row.unitPrice);
+        item.totalPrice = Math.round(item.quantity * item.unitPrice);
+        if (row.factoryUnitCost != null) item.factoryUnitCost = Math.round(row.factoryUnitCost);
+      }
+      doc.totalAmount = doc.items.reduce((s, i) => s + (i.totalPrice || 0), 0);
+      doc.markModified('items');
+    }
     doc.finalAmount = this.finalOf(doc);
     this.checkPayment(doc);
   }
 
   async update(id: string, terms: ProformaTermsDto) {
     const doc = await this.pending(id);
+    if (terms.fulfillment === 'factory' && doc.fulfillment !== 'factory') await this.assertFactory();
     this.applyTerms(doc, terms);
     return doc.save();
   }
@@ -144,6 +166,7 @@ export class ProformasService {
   /** "ارسال شد": turn the order into a real invoice (stock out, customer debt, shipping expense). */
   async ship(id: string, body: ShipProformaDto, recordedByName: string) {
     const doc = await this.pending(id);
+    if (body.fulfillment === 'factory' || (body.fulfillment === undefined && doc.fulfillment === 'factory')) await this.assertFactory();
     this.applyTerms(doc, body);
     const shippedAt = new Date();
 
@@ -164,7 +187,9 @@ export class ProformasService {
         unitPrice: i.unitPrice,
         totalPrice: i.totalPrice,
         weightKg: i.weightKg,
+        ...(doc.fulfillment === 'factory' ? { factoryUnitCost: Math.round(i.factoryUnitCost || 0) } : {}),
       })),
+      fulfillment: doc.fulfillment === 'factory' ? 'factory' : 'shop',
       totalAmount: doc.totalAmount,
       discount: doc.discount,
       finalAmount: doc.finalAmount,

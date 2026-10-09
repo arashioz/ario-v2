@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
+import { Calendar, Check, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
@@ -145,13 +145,14 @@ export const PosTab: React.FC = () => {
   const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices }: CheckoutResult) => {
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
-      if (fulfillment !== 'factory') return base;
       const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
       return {
         ...base,
         unitPrice,
         totalPrice: Math.round(base.quantity * unitPrice),
-        factoryUnitCost: Math.round(factoryUnitCosts?.[l.product._id] ?? l.product.buyPrice ?? 0),
+        ...(fulfillment === 'factory'
+          ? { factoryUnitCost: Math.round(factoryUnitCosts?.[l.product._id] ?? l.product.buyPrice ?? 0) }
+          : {}),
       };
     });
     const goods = items.reduce((s, it) => s + it.totalPrice, 0);
@@ -168,7 +169,7 @@ export const PosTab: React.FC = () => {
       finalAmount: final,
       totalWeightKg: Math.round(totalKg * 10) / 10,
       ...termsPayload(final, terms),
-      fulfillment: asProforma ? 'shop' as const : fulfillment,
+      fulfillment,
     };
     try {
       setSubmitting(true);
@@ -176,7 +177,10 @@ export const PosTab: React.FC = () => {
         const p = await proformasService.create(input);
         showNotification({
           title: 'پیش‌فاکتور ثبت شد',
-          message: `${p.number} تا زمان ارسال بار در «پیش‌فاکتورها» می‌ماند و از انبار کسر نمی‌شود.`,
+          message:
+            fulfillment === 'factory'
+              ? `${p.number} از کارخانه ثبت شد. با ارسال، از موجودی آریو کم نمی‌شود.`
+              : `${p.number} تا زمان ارسال بار در «پیش‌فاکتورها» می‌ماند و از انبار کسر نمی‌شود.`,
           type: 'success',
         });
         setCreatedProforma(p);
@@ -341,25 +345,16 @@ export const PosTab: React.FC = () => {
 
         <div className={`p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
           {settings.factorySalesEnabled && (
-            <div className="mb-3 grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-white border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setShipFrom('shop')}
-                className={`py-2 rounded-xl text-xs font-bold ${shipFrom !== 'factory' ? 'bg-sky-600 text-white' : 'text-slate-500'}`}
-              >
-                از دفتر
-              </button>
-              <button
-                type="button"
-                onClick={() => setShipFrom('factory')}
-                className={`py-2 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 ${
-                  shipFrom === 'factory' ? 'bg-amber-500 text-white' : 'text-slate-500'
-                }`}
-              >
-                <Factory className="w-3.5 h-3.5" />
-                از کارخانه
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShipFrom((s) => (s === 'factory' ? 'shop' : 'factory'))}
+              className={`mb-3 w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromFactory ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
+            >
+              <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
+              <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${fromFactory ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300'}`}>
+                {fromFactory && <Check className="w-3.5 h-3.5" />}
+              </span>
+            </button>
           )}
           {fromFactory && (
             <div className="mb-3 rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5">

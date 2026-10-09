@@ -8,6 +8,7 @@ export interface Proforma {
   number: string;
   status: ProformaStatus;
   saleType: 'retail' | 'supermarket' | 'wholesale';
+  fulfillment?: 'shop' | 'factory';
   customerId?: string;
   customerName: string;
   customerPhone?: string;
@@ -41,6 +42,8 @@ export interface ProformaTerms {
   paidAmount?: number;
   discount?: number;
   notes?: string;
+  fulfillment?: 'shop' | 'factory';
+  items?: { productId: string; unitPrice: number; factoryUnitCost?: number }[];
 }
 
 export const PROFORMA_STATUS_LABELS: Record<ProformaStatus, string> = {

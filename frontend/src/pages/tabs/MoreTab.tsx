@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
+import React, { useState } from 'react';
+import { IonPage, IonHeader, IonToolbar, IonContent } from '@ionic/react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
@@ -32,8 +32,6 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
-import { cashbookService } from '../../services/cashbook.service';
-import { formatToman } from '../../lib/format';
 
 type Item = {
   path: string;
@@ -238,26 +236,7 @@ export const MoreTab: React.FC = () => {
   const navigate = useNavigate();
   const pwa = usePwaInstall();
   const [open, setOpen] = useState({ money: true, shop: true, security: true });
-  const [drawers, setDrawers] = useState<{ cash: number; transfer: number; pos: number } | null>(null);
   const isAdmin = user?.role === 'admin';
-
-  const loadDrawers = () => {
-    cashbookService
-      .cashbook()
-      .then((book) => {
-        const net = (method: string) => book.byMethod.find((m) => m.method === method)?.net ?? 0;
-        setDrawers({ cash: net('cash'), transfer: net('transfer'), pos: net('pos') });
-      })
-      .catch(() => setDrawers(null));
-  };
-
-  useEffect(() => {
-    loadDrawers();
-  }, []);
-
-  useIonViewWillEnter(() => {
-    loadDrawers();
-  });
 
   const handleInstall = async () => {
     if (pwa.canPrompt) {
@@ -320,40 +299,6 @@ export const MoreTab: React.FC = () => {
               <LogOut className="w-5 h-5" />
             </button>
           </div>
-
-          <button
-            onClick={() => navigate('/cashbox')}
-            className="w-full bg-white rounded-3xl border border-emerald-100 shadow-sm p-3.5 text-right active:scale-[0.99] transition"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                  <Wallet className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-[13px] font-extrabold text-slate-800">صندوق</div>
-                  <div className="text-[11px] text-slate-400">موجودی از اول تا الان</div>
-                </div>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-slate-300" />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ['نقد', drawers?.cash],
-                  ['کارت‌به‌کارت', drawers?.transfer],
-                  ['پوز', drawers?.pos],
-                ] as [string, number | undefined][]
-              ).map(([label, value]) => (
-                <div key={label} className="rounded-2xl bg-slate-50 px-2 py-2">
-                  <div className="text-[10px] text-slate-400">{label}</div>
-                  <div className={`mt-0.5 text-[11px] font-extrabold font-mono leading-5 ${(value ?? 0) < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                    {value == null ? '…' : formatToman(value)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </button>
 
           <Group
             title="حساب و گزارش"

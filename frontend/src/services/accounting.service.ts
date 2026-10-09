@@ -148,6 +148,8 @@ export interface InvoiceProfit extends SalesSummary {
     cost: number;
     profit: number;
     sellPerKg: number;
+    costPerKg: number;
+    costPerUnit: number;
     lots: { invoiceNumber: string | null; kg: number; costPerKg: number; estimated: boolean }[];
   }[];
 }

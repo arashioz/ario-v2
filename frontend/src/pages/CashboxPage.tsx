@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { apiErrorMessage } from '../services/invoices.service';
 import { formatToman } from '../lib/format';
+import { formatJalaliIso as formatJalali } from '../lib/jalali';
 
 type Drawer = 'cash' | 'pos' | 'transfer';
 
@@ -99,7 +100,7 @@ export const CashboxPage: React.FC = () => {
   const cards: { method: Drawer; label: string; hint: string; icon: typeof Banknote; tone: string }[] = [
     { method: 'cash', label: 'موجودی نقد', hint: 'صندوق مغازه', icon: Banknote, tone: 'text-emerald-700 bg-emerald-50' },
     { method: 'transfer', label: 'کارت‌به‌کارت', hint: 'واریز و حواله', icon: ArrowRightLeft, tone: 'text-violet-700 bg-violet-50' },
-    { method: 'pos', label: 'پوز', hint: 'کارتخوان', icon: CreditCard, tone: 'text-sky-700 bg-sky-50' },
+    { method: 'pos', label: 'پوز', hint: 'فقط امروز؛ روزهای قبل به حساب اصلی رفته', icon: CreditCard, tone: 'text-sky-700 bg-sky-50' },
   ];
   const total = cards.reduce((s, c) => s + methodRow(book, c.method).net, 0);
   const allTime = !period.from && !period.to;
@@ -167,6 +168,47 @@ export const CashboxPage: React.FC = () => {
               </div>
               );
             })}
+          </div>
+          <div className="bg-white rounded-2xl border border-sky-100 p-3 space-y-2">
+            <div className="text-[11px] font-bold text-sky-800">مطابقت کارتخوان امروز</div>
+            <p className="text-[10px] text-slate-500 leading-5">
+              این عدد را با گزارش امروز اپ کارتخوان مقایسه کنید. پایان هر روز، مانده پوز خودش صفر می‌شود و به{' '}
+              {book?.mainAccountId ? accountTitle(bankCards, book.mainAccountId) : 'حساب اصلی'} می‌رود.
+            </p>
+            <div className="grid grid-cols-3 gap-2 text-[10px]">
+              <div className="rounded-xl bg-emerald-50 text-emerald-800 px-2 py-1.5">
+                <div>ورود امروز</div>
+                <div className="font-mono font-bold">{formatToman(book?.posToday?.in || 0)}</div>
+              </div>
+              <div className="rounded-xl bg-rose-50 text-rose-800 px-2 py-1.5">
+                <div>خروج امروز</div>
+                <div className="font-mono font-bold">{formatToman(book?.posToday?.out || 0)}</div>
+              </div>
+              <div className="rounded-xl bg-sky-50 text-sky-800 px-2 py-1.5">
+                <div>مانده امروز</div>
+                <div className="font-mono font-bold">{formatToman(book?.posToday?.net || 0)}</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
+            <div className="px-3 py-2 text-[11px] font-bold text-slate-500">لاگ تسویه پوز به حساب اصلی</div>
+            {(book?.posSettlements || []).length === 0 ? (
+              <div className="px-3 py-4 text-xs text-slate-400">در این بازه تسویه‌ای ثبت نشده.</div>
+            ) : (
+              book!.posSettlements.slice(0, 30).map((s) => (
+                <div key={s.date} className="px-3 py-2.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-800">{formatJalali(s.date)}</div>
+                    <div className="text-[10px] text-slate-400">
+                      {s.amount >= 0 ? 'واریز به حساب اصلی' : 'برداشت از حساب اصلی'}
+                    </div>
+                  </div>
+                  <span className={`text-xs font-extrabold font-mono shrink-0 ${s.amount >= 0 ? 'text-violet-700' : 'text-rose-600'}`}>
+                    {formatToman(s.amount)}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
           <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-100">
             <div className="px-3 py-2 text-[11px] font-bold text-slate-500">واریز به کارت‌ها</div>

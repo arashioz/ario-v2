@@ -32,6 +32,11 @@ export interface Cashbook {
   byAccount: { accountId: string; in: number; count: number }[];
   byDay: { date: string; in: number; out: number }[];
   entries: CashEntry[];
+  /** Today's card-reader totals. Finished days are settled off the POS. */
+  posToday: { in: number; out: number; net: number };
+  /** Finished days whose POS net moved to the main bank account. */
+  posSettlements: { date: string; amount: number }[];
+  mainAccountId: string;
 }
 
 export interface LegacyLedger {

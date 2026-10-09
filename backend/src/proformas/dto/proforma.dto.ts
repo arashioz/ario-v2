@@ -1,6 +1,21 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DepositAccountsDto, SplitDetailsDto } from '../../invoices/dto/create-invoice.dto';
+
+/** Sell price (and factory cost) edited on a pending proforma line. */
+export class ProformaItemPriceDto {
+  @IsString()
+  productId: string;
+
+  @IsNumber()
+  @Min(0)
+  unitPrice: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  factoryUnitCost?: number;
+}
 
 /** Delivery / payment details that can change until the order ships. */
 export class ProformaTermsDto {
@@ -40,6 +55,16 @@ export class ProformaTermsDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsEnum(['shop', 'factory'])
+  fulfillment?: 'shop' | 'factory';
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProformaItemPriceDto)
+  items?: ProformaItemPriceDto[];
 }
 
 export class ShipProformaDto extends ProformaTermsDto {

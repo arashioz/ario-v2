@@ -7,9 +7,10 @@ import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SupplierPayment, SupplierPaymentDocument } from '../suppliers/schemas/supplier-payment.schema';
 import { CashTransaction, CashTransactionDocument } from './schemas/cash-transaction.schema';
 import { CashboxAdjustment, CashboxAdjustmentDocument } from './schemas/cashbox-adjustment.schema';
+import { SettingsService } from '../settings/settings.service';
 
 type Channel = 'cash' | 'bank' | 'cheque';
-type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'manager_deposit' | 'supplier_payment' | 'purchase_spot';
+type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'manager_deposit' | 'supplier_payment' | 'purchase_spot' | 'pos_settlement';
 
 export interface CashEntry {
   date: Date;
@@ -33,6 +34,7 @@ const KIND_LABELS: Record<Kind, string> = {
   manager_deposit: 'واریز مدیر',
   supplier_payment: 'پرداخت به شرکت',
   purchase_spot: 'پرداخت نقدی خرید',
+  pos_settlement: 'تسویه روزانه پوز به حساب اصلی',
 };
 
 const LEGACY_LABELS: Record<string, string> = {
@@ -69,6 +71,7 @@ export class CashbookService {
     @InjectModel(SupplierPayment.name) private supplierPaymentModel: Model<SupplierPaymentDocument>,
     @InjectModel(CashTransaction.name) private legacyModel: Model<CashTransactionDocument>,
     @InjectModel(CashboxAdjustment.name) private adjustmentModel: Model<CashboxAdjustmentDocument>,
+    private settings: SettingsService,
   ) {}
 
   async cashbook(query: { from?: string; to?: string }) {
@@ -186,6 +189,43 @@ export class CashbookService {
       return { method: m, in: inflow, out: outflow, net: inflow - outflow };
     });
 
+    const today = tehranDay(new Date());
+    const posDays = new Map<string, { in: number; out: number }>();
+    for (const e of entries) {
+      if (e.method !== 'pos') continue;
+      const d = tehranDay(e.date);
+      const row = posDays.get(d) ?? { in: 0, out: 0 };
+      row[e.direction] += e.amount;
+      posDays.set(d, row);
+    }
+    const todayRow = posDays.get(today) ?? { in: 0, out: 0 };
+    const shopSettings = await this.settings.get();
+    const mainCard = (shopSettings.bankCards || []).find((c) => c.isDefault) || shopSettings.bankCards?.[0];
+    const mainAccountId = mainCard?.id || '';
+    const posSettlements: { date: string; amount: number }[] = [];
+    const posRow = byMethod.find((m) => m.method === 'pos');
+    const transferRow = byMethod.find((m) => m.method === 'transfer');
+    if (posRow && transferRow) {
+      for (const [day, row] of posDays) {
+        if (day >= today) continue;
+        const net = row.in - row.out;
+        if (!net) continue;
+        const at = dayEnd(day);
+        if (!at || !inRange(at)) continue;
+        posSettlements.push({ date: day, amount: net });
+        if (net > 0) {
+          posRow.out += net;
+          transferRow.in += net;
+        } else {
+          posRow.in += -net;
+          transferRow.out += -net;
+        }
+        posRow.net -= net;
+        transferRow.net += net;
+      }
+    }
+    posSettlements.sort((a, b) => b.date.localeCompare(a.date));
+
     const allTime = !query.from && !query.to;
     const saved = await this.adjustmentModel.find().lean();
     const adjustments = saved.map((a) => ({
@@ -217,6 +257,13 @@ export class CashbookService {
       row.count++;
       accounts.set(id, row);
     }
+    for (const s of posSettlements) {
+      if (s.amount <= 0) continue;
+      const row = accounts.get(mainAccountId) ?? { accountId: mainAccountId, in: 0, count: 0 };
+      row.in += s.amount;
+      row.count++;
+      accounts.set(mainAccountId, row);
+    }
 
     const days = new Map<string, { date: string; in: number; out: number }>();
     for (const e of entries) {
@@ -238,6 +285,11 @@ export class CashbookService {
       byAccount: [...accounts.values()].sort((a, b) => b.in - a.in),
       byDay: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)),
       entries: entries.slice(0, 600),
+      /** Card-reader total still sitting on the POS. Finished days are already settled. */
+      posToday: { in: todayRow.in, out: todayRow.out, net: todayRow.in - todayRow.out },
+      /** Each finished day's POS net, moved onto the main bank account. Positive deposits, negative withdraws. */
+      posSettlements,
+      mainAccountId,
     };
   }
 

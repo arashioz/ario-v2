@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, ClipboardList, FileCheck2, Phone, Search, UserPlus, UserRound, Users } from 'lucide-react';
+import { Check, ChevronRight, ClipboardList, FileCheck2, Phone, Search, UserPlus, UserRound, Users } from 'lucide-react';
 import { Sheet } from '../ui/Sheet';
 import { customersService, CUSTOMER_KIND_LABELS } from '../../services/customers.service';
 import type { Customer, CustomerKind } from '../../services/customers.service';
@@ -144,10 +144,11 @@ export const CheckoutSheet: React.FC<Props> = ({
   }, [customers, query]);
 
   const pricingFactory = factoryOn && fulfillment === 'factory';
+  const editingPrices = pricingFactory || (bulk && asProforma);
   const goodsTotal = useMemo(() => {
-    if (!pricingFactory) return subtotal;
+    if (!editingPrices) return subtotal;
     return factoryLines.reduce((s, l) => s + Math.round(l.quantity * (sellPrices[l.productId] ?? l.sellPrice)), 0);
-  }, [pricingFactory, factoryLines, sellPrices, subtotal]);
+  }, [editingPrices, factoryLines, sellPrices, subtotal]);
 
   if (!open) return null;
 
@@ -212,10 +213,10 @@ export const CheckoutSheet: React.FC<Props> = ({
     onSubmit({
       customer: buyer,
       terms,
-      asProforma: !fromFactory && bulk && asProforma && !!buyer,
+      asProforma: bulk && asProforma && !!buyer,
       fulfillment: fromFactory ? 'factory' : 'shop',
       factoryUnitCosts: fromFactory ? factoryCosts : undefined,
-      factorySellPrices: fromFactory ? sellPrices : undefined,
+      factorySellPrices: fromFactory || (bulk && asProforma) ? sellPrices : undefined,
     });
   };
 
@@ -431,8 +432,32 @@ export const CheckoutSheet: React.FC<Props> = ({
       )}
       {bulk && asProforma && customer && (
         <p className="text-[10px] text-amber-800 bg-amber-50 rounded-xl px-3 py-2 leading-5 -mt-2">
-          پیش‌فاکتور از انبار کم نمی‌شود و به حساب مشتری نمی‌رود. وقتی بار را فرستادید در «پیش‌فاکتورها» دکمه «ارسال شد» را بزنید تا ثبت نهایی شود.
+          پیش‌فاکتور از انبار کم نمی‌شود و به حساب مشتری نمی‌رود. قیمت هر قلم را پایین عوض کنید. وقتی بار را فرستادید در «پیش‌فاکتورها» دکمه «ارسال شد» را بزنید.
         </p>
+      )}
+      {factoryOn && (
+        <button
+          type="button"
+          onClick={() =>
+            setFulfillment((f) => {
+              const next = f === 'shop' ? 'factory' : 'shop';
+              if (next === 'factory') {
+                setFactoryCosts((prev) => {
+                  const nextCosts = { ...prev };
+                  for (const l of factoryLines) if (nextCosts[l.productId] == null) nextCosts[l.productId] = l.buyPrice || 0;
+                  return nextCosts;
+                });
+              }
+              return next;
+            })
+          }
+          className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fulfillment === 'factory' ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
+        >
+          <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
+          <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${fulfillment === 'factory' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300'}`}>
+            {fulfillment === 'factory' && <Check className="w-3.5 h-3.5" />}
+          </span>
+        </button>
       )}
 
       <PaymentTermsForm
@@ -465,36 +490,13 @@ export const CheckoutSheet: React.FC<Props> = ({
           <span>مبلغ نهایی</span>
           <span className="font-mono text-sky-700">{formatToman(final)}</span>
         </div>
-        {factoryOn && (
-          <button
-            type="button"
-            onClick={() =>
-              setFulfillment((f) => {
-                const next = f === 'shop' ? 'factory' : 'shop';
-                if (next === 'factory') {
-                  setAsProforma(false);
-                  setFactoryCosts((prev) => {
-                    const nextCosts = { ...prev };
-                    for (const l of factoryLines) if (nextCosts[l.productId] == null) nextCosts[l.productId] = l.buyPrice || 0;
-                    return nextCosts;
-                  });
-                }
-                return next;
-              })
-            }
-            className="w-full flex items-center justify-between pt-1.5 text-[11px] text-slate-500"
-          >
-            <span>ارسال این بار</span>
-            <span className={`font-bold ${fulfillment === 'factory' ? 'text-amber-700' : 'text-slate-700'}`}>
-              {fulfillment === 'factory' ? 'از کارخانه' : 'از دفتر'}
-            </span>
-          </button>
-        )}
-        {factoryOn && fulfillment === 'factory' && (
+        {editingPrices && (
           <div className="space-y-2 pt-1">
-            <p className="text-[10px] text-amber-800 leading-5">
-              از موجودی آریو کم نمی‌شود. فاکتور مشتری به نام آریو می‌ماند و خرید به حساب شرکت مادر ثبت می‌شود. قیمت کارخانه روی فاکتور مشتری نمی‌آید؛ فقط سود مخفی با آن حساب می‌شود.
-            </p>
+            {pricingFactory && (
+              <p className="text-[10px] text-amber-800 leading-5">
+                از موجودی آریو کم نمی‌شود. فاکتور مشتری به نام آریو می‌ماند و خرید به حساب شرکت مادر ثبت می‌شود. قیمت کارخانه روی فاکتور مشتری نمی‌آید؛ فقط سود مخفی با آن حساب می‌شود.
+              </p>
+            )}
             {factoryLines.map((l) => {
               const cost = factoryCosts[l.productId] || 0;
               const sell = sellPrices[l.productId] ?? l.sellPrice;
@@ -505,44 +507,52 @@ export const CheckoutSheet: React.FC<Props> = ({
                   <div className="text-[11px] font-bold text-slate-700">
                     {l.name} · {num(l.quantity, 2)} {l.unit}
                   </div>
-                  <span className="text-[10px] text-slate-500 block">قیمت کارخانه (هر {l.unit})</span>
-                  <AmountInput value={cost} onChange={(v) => setFactoryCosts((prev) => ({ ...prev, [l.productId]: v }))} />
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      inputMode="decimal"
-                      value={pct ? String(pct) : ''}
-                      placeholder="٪"
-                      onChange={(e) => setMargins((prev) => ({ ...prev, [l.productId]: parseDecimal(e.target.value) || 0 }))}
-                      className="w-16 px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-mono text-center"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) }))}
-                      className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
-                    >
-                      سود عمده روی قیمت کارخانه
-                    </button>
-                  </div>
+                  {pricingFactory && (
+                    <>
+                      <span className="text-[10px] text-slate-500 block">قیمت کارخانه (هر {l.unit})</span>
+                      <AmountInput value={cost} onChange={(v) => setFactoryCosts((prev) => ({ ...prev, [l.productId]: v }))} />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          inputMode="decimal"
+                          value={pct ? String(pct) : ''}
+                          placeholder="٪"
+                          onChange={(e) => setMargins((prev) => ({ ...prev, [l.productId]: parseDecimal(e.target.value) || 0 }))}
+                          className="w-16 px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-mono text-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) }))}
+                          className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
+                        >
+                          سود عمده روی قیمت کارخانه
+                        </button>
+                      </div>
+                    </>
+                  )}
                   <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری (دلخواه)</span>
                   <AmountInput value={sell} onChange={(v) => setSellPrices((prev) => ({ ...prev, [l.productId]: v }))} />
-                  <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    سود این ردیف {formatToman(lineProfit)}
-                  </div>
+                  {pricingFactory && (
+                    <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      سود این ردیف {formatToman(lineProfit)}
+                    </div>
+                  )}
                 </div>
               );
             })}
-            <div className="flex justify-between text-[11px] font-bold text-emerald-800">
-              <span>جمع سود این فاکتور</span>
-              <span className="font-mono">
-                {formatToman(
-                  factoryLines.reduce((s, l) => {
-                    const cost = (factoryCosts[l.productId] || 0) * l.quantity;
-                    const sell = (sellPrices[l.productId] ?? l.sellPrice) * l.quantity;
-                    return s + Math.round(sell - cost);
-                  }, 0),
-                )}
-              </span>
-            </div>
+            {pricingFactory && (
+              <div className="flex justify-between text-[11px] font-bold text-emerald-800">
+                <span>جمع سود این فاکتور</span>
+                <span className="font-mono">
+                  {formatToman(
+                    factoryLines.reduce((s, l) => {
+                      const cost = (factoryCosts[l.productId] || 0) * l.quantity;
+                      const sell = (sellPrices[l.productId] ?? l.sellPrice) * l.quantity;
+                      return s + Math.round(sell - cost);
+                    }, 0),
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         )}
         {credit > 0 && customer && (

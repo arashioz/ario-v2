@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Ban, Share2, Truck } from 'lucide-react';
+import { Ban, Check, Share2, Truck } from 'lucide-react';
 import { Sheet } from '../ui/Sheet';
 import { proformasService, PROFORMA_STATUS_LABELS, type Proforma } from '../../services/proformas.service';
 import { apiErrorMessage, SHIPPING_PAYER_LABELS, type Invoice } from '../../services/invoices.service';
@@ -17,6 +17,7 @@ import {
   type PaymentTerms,
 } from '../pos/PaymentTermsForm';
 import { useSettings } from '../../services/settings.service';
+import { AmountInput } from '../ui/AmountInput';
 import { openSms, proformaSms } from '../../lib/sms';
 
 interface Props {
@@ -32,20 +33,36 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
   const [terms, setTerms] = useState<PaymentTerms>(emptyTerms());
   const [busy, setBusy] = useState<'save' | 'ship' | 'cancel' | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [fromFactory, setFromFactory] = useState(false);
+  const [prices, setPrices] = useState<Record<string, { unit: number; cost: number }>>({});
 
   useEffect(() => {
     if (proforma) {
       setTerms(termsFromSaved(proforma));
       setConfirmCancel(false);
+      setFromFactory(proforma.fulfillment === 'factory');
+      setPrices(
+        Object.fromEntries(proforma.items.map((i) => [i.productId, { unit: i.unitPrice, cost: i.factoryUnitCost || 0 }])),
+      );
     }
   }, [proforma]);
 
   if (!proforma) return null;
   const pending = proforma.status === 'pending';
-  const final = termsFinal(proforma.totalAmount, terms);
+  const factoryOn = !!settings.factorySalesEnabled || fromFactory;
+  const goods = proforma.items.reduce((s, i) => s + Math.round(i.quantity * (prices[i.productId]?.unit ?? i.unitPrice)), 0);
+  const final = termsFinal(pending ? goods : proforma.totalAmount, terms);
   const error = termsError(final, terms, true, settings.bankCards);
 
-  const payload = () => termsPayload(final, terms);
+  const payload = () => ({
+    ...termsPayload(final, terms),
+    fulfillment: (fromFactory ? 'factory' : 'shop') as 'factory' | 'shop',
+    items: proforma.items.map((i) => ({
+      productId: i.productId,
+      unitPrice: Math.round(prices[i.productId]?.unit ?? i.unitPrice),
+      factoryUnitCost: Math.round(prices[i.productId]?.cost || 0),
+    })),
+  });
 
   const save = async () => {
     try {
@@ -66,7 +83,10 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
       const { invoice, proforma: p } = await proformasService.ship(proforma._id, payload());
       showNotification({
         title: 'بار ارسال شد',
-        message: `پیش‌فاکتور ${p.number} به فاکتور ${invoice.invoiceNumber} تبدیل و از انبار کسر شد.`,
+        message:
+          fromFactory
+            ? `پیش‌فاکتور ${p.number} به فاکتور ${invoice.invoiceNumber} تبدیل شد. از موجودی آریو کم نشد.`
+            : `پیش‌فاکتور ${p.number} به فاکتور ${invoice.invoiceNumber} تبدیل و از انبار کسر شد.`,
         type: 'success',
       });
       onShipped(invoice, p);
@@ -146,22 +166,66 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
         </button>
       </div>
 
+      {pending && factoryOn && (
+        <button
+          type="button"
+          onClick={() => settings.factorySalesEnabled && setFromFactory((v) => !v)}
+          className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromFactory ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
+        >
+          <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
+          <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${fromFactory ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-slate-300'}`}>
+            {fromFactory && <Check className="w-3.5 h-3.5" />}
+          </span>
+        </button>
+      )}
+      {pending && fromFactory && (
+        <p className="text-[10px] text-amber-800 leading-5 -mt-2">
+          با ارسال، از موجودی آریو کم نمی‌شود و خرید به حساب شرکت مادر می‌نشیند. قیمت فروش و قیمت کارخانه را همین‌جا عوض کنید.
+        </p>
+      )}
+
       <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100">
-        {proforma.items.map((i) => (
-          <div key={i.productId} className="flex items-center justify-between px-3 py-2.5 text-xs">
-            <div>
-              <div className="font-bold text-slate-800">{i.productName}</div>
-              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                {num(i.quantity, 2)} {i.unit} × {formatToman(i.unitPrice)}
-                {i.weightKg ? ` · ${weight(i.weightKg)}` : ''}
+        {proforma.items.map((i) => {
+          const unit = prices[i.productId]?.unit ?? i.unitPrice;
+          const cost = prices[i.productId]?.cost || 0;
+          return (
+            <div key={i.productId} className="px-3 py-2.5 text-xs space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-bold text-slate-800">{i.productName}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                    {num(i.quantity, 2)} {i.unit}
+                    {i.weightKg ? ` · ${weight(i.weightKg)}` : ''}
+                  </div>
+                </div>
+                <span className="font-mono font-bold text-slate-700">{formatToman(Math.round(i.quantity * unit))}</span>
               </div>
+              {pending ? (
+                <>
+                  <span className="text-[10px] text-slate-500 block">قیمت فروش هر {i.unit}</span>
+                  <AmountInput
+                    value={unit}
+                    onChange={(v) => setPrices((prev) => ({ ...prev, [i.productId]: { unit: v, cost: prev[i.productId]?.cost || 0 } }))}
+                  />
+                  {fromFactory && (
+                    <>
+                      <span className="text-[10px] text-slate-500 block">قیمت کارخانه هر {i.unit}</span>
+                      <AmountInput
+                        value={cost}
+                        onChange={(v) => setPrices((prev) => ({ ...prev, [i.productId]: { unit: prev[i.productId]?.unit ?? i.unitPrice, cost: v } }))}
+                      />
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="text-[10px] text-slate-400 font-mono">{formatToman(i.unitPrice)} هر {i.unit}</div>
+              )}
             </div>
-            <span className="font-mono font-bold text-slate-700">{formatToman(i.totalPrice)}</span>
-          </div>
-        ))}
+          );
+        })}
         <div className="flex items-center justify-between px-3 py-2.5 text-xs bg-slate-50">
           <span className="text-slate-500">جمع اقلام · {weight(proforma.totalWeightKg)}</span>
-          <span className="font-mono font-bold text-slate-800">{formatToman(proforma.totalAmount)}</span>
+          <span className="font-mono font-bold text-slate-800">{formatToman(pending ? goods : proforma.totalAmount)}</span>
         </div>
       </div>
 
@@ -169,7 +233,7 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
         <PaymentTermsForm
           terms={terms}
           onChange={(patch) => setTerms((t) => ({ ...t, ...patch }))}
-          subtotal={proforma.totalAmount}
+          subtotal={goods}
           showShipping
           hasCustomer
         />
