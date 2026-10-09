@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
-import { AlertTriangle, Boxes, ChevronDown, Search, TrendingUp, Truck, Weight } from 'lucide-react';
+import { AlertTriangle, Boxes, ChevronDown, RefreshCw, Search, TrendingUp, Truck, Weight } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
+import { apiErrorMessage, invoicesService } from '../services/invoices.service';
+import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
 import { KV, Mini, ReportHeader, StatCard } from '../components/reports/ReportUI';
 import { PRICE_TIER_LABELS } from '../services/accounting.service';
 import type { InventoryItem, InventoryReport, PriceTierKey } from '../services/accounting.service';
@@ -21,9 +24,13 @@ const SORTS: [SortKey, string][] = [
 ];
 
 export const InventoryPage: React.FC = () => {
+  const { user } = useAuth();
+  const { showNotification } = useNotification();
+  const isAdmin = user?.role === 'admin';
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
   const [data, setData] = useState<InventoryReport | null>(null);
   const [error, setError] = useState('');
+  const [rebuilding, setRebuilding] = useState(false);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('stock');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -44,6 +51,25 @@ export const InventoryPage: React.FC = () => {
   const handleRefresh = async (e: CustomEvent<RefresherEventDetail>) => {
     await load();
     e.detail.complete();
+  };
+
+  const rebuild = () => {
+    if (!window.confirm('موجودی ثبت‌شده هر کالا از روی فاکتورهای خرید (منهای فروش از آریو) دوباره نوشته شود؟')) return;
+    setRebuilding(true);
+    invoicesService
+      .rebuildStock()
+      .then(async (res) => {
+        showNotification({
+          title: 'انبار به‌روز شد',
+          message: `${res.changed.toLocaleString('fa-IR')} کالا از ${res.purchases.toLocaleString('fa-IR')} فاکتور خرید اصلاح شد.`,
+          type: 'success',
+        });
+        await load();
+      })
+      .catch((err) => {
+        showNotification({ title: 'انبار به‌روز نشد', message: apiErrorMessage(err, 'محاسبه انبار انجام نشد'), type: 'error' });
+      })
+      .finally(() => setRebuilding(false));
   };
 
   const items = useMemo(() => {
@@ -89,8 +115,18 @@ export const InventoryPage: React.FC = () => {
               <span className="text-sm mb-1.5 text-sky-100">تن</span>
             </div>
             <div className="mt-1 text-[11px] text-sky-100">
-              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا
+              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا · از فاکتورهای خرید
             </div>
+            {isAdmin && (
+              <button
+                disabled={rebuilding}
+                onClick={rebuild}
+                className="mt-3 w-full py-2 rounded-xl bg-white/15 text-white text-[11px] font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin' : ''}`} />
+                {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از فاکتورهای خرید'}
+              </button>
+            )}
             <div className="mt-3 pt-3 border-t border-white/15 flex items-center justify-between">
               <span className="text-[11px] text-sky-100">ارزش موجودی به قیمت خرید</span>
               <span className="text-base font-bold font-mono">{formatToman(t?.stockValue)}</span>
@@ -144,16 +180,23 @@ export const InventoryPage: React.FC = () => {
             />
           </div>
 
-          {allTime && t && t.differenceKg !== null && Math.abs(t.differenceKg) >= 1 && (
+          {allTime && t && t.differenceKg !== null && Math.abs(t.differenceKg) >= 0.05 && (
             <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-800 leading-6">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-1" />
-              <div>
-                <b>اختلاف انبار: {weight(Math.abs(t.differenceKg))}</b>
+              <div className="min-w-0 flex-1">
+                <b>موجودی ثبت‌شده با فاکتورهای خرید یکی نیست</b>
                 <br />
-                کل خرید ({weight(t.purchasedKg)}) منهای کل فروش ({weight(t.soldKg)}) باید برابر موجودی ({weight(t.stockKg)}) باشد.{' '}
-                {t.differenceKg < 0
-                  ? 'موجودی از فاکتورها بیشتر است؛ یعنی بخشی از بار بدون فاکتور خرید وارد انبار شده (موجودی اول دوره یا ثبت‌نشده).'
-                  : 'موجودی از فاکتورها کمتر است؛ یعنی بخشی از بار بدون فاکتور فروش خارج شده یا موجودی دستی کم شده.'}
+                اختلاف روی {num(Math.abs(t.differenceKg), 2)} واحد است. وزن انبار از خود فاکتورهای خرید حساب می‌شود؛ این هشدار فقط وقتی است که تعداد ثبت‌شده کالا با جمع خرید تحویل‌شده منهای فروش از آریو فرق دارد.
+                {isAdmin && (
+                  <button
+                    disabled={rebuilding}
+                    onClick={rebuild}
+                    className="mt-2 w-full py-2 rounded-xl bg-amber-700 text-white text-[11px] font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin' : ''}`} />
+                    {rebuilding ? 'در حال محاسبه…' : 'محاسبه موجودی از فاکتورهای خرید'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -207,7 +250,8 @@ export const InventoryPage: React.FC = () => {
 
 const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () => void }> = ({ item: i, open, onToggle }) => {
   const soldShare = i.purchasedKg ? Math.min(100, (i.soldKg / i.purchasedKg) * 100) : 0;
-  const mismatch = i.exists && Math.abs(i.stockKg - i.fifoRemainingKg) >= 1;
+  const expected = i.expectedUnits ?? 0;
+  const mismatch = i.exists && (i.purchasedKg > 0 || i.soldKg > 0) && Math.abs(i.stockUnits - expected) >= 0.05;
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <button onClick={onToggle} className="w-full p-3 text-right">
@@ -264,8 +308,8 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
           </div>
           {mismatch && (
             <div className="text-[10px] text-amber-700 bg-amber-50 rounded-xl p-2.5 leading-5">
-              طبق فاکتورهای خرید و فروش باید <b className="font-mono">{weight(i.fifoRemainingKg)}</b> مانده باشد ولی موجودی ثبت‌شده{' '}
-              <b className="font-mono">{weight(i.stockKg)}</b> است.
+              طبق فاکتورهای خرید باید <b className="font-mono">{num(expected, 2)} {i.unit || 'واحد'}</b> مانده باشد ولی موجودی ثبت‌شده{' '}
+              <b className="font-mono">{num(i.stockUnits, 2)} {i.unit || 'واحد'}</b> است.
             </div>
           )}
           <div className="text-[11px] font-bold text-slate-600 pt-1">بارهای باقی‌مانده در انبار (قدیمی‌ترین اول فروخته می‌شود)</div>

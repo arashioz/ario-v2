@@ -484,10 +484,18 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   private productRules(f: FifoResult, products: any[], push: (rule: string, x: any) => void) {
-    const purchased = new Map<string, number>();
-    const sold = new Map<string, number>();
-    for (const lot of f.lots) purchased.set(lot.productId, (purchased.get(lot.productId) ?? 0) + lot.kgIn);
-    for (const l of f.saleLines) sold.set(l.productId, (sold.get(l.productId) ?? 0) + l.kg);
+    const purchasedQty = new Map<string, number>();
+    const soldQty = new Map<string, number>();
+    for (const inv of f.invoices) {
+      const purchase = inv.type === 'purchase';
+      if (!purchase && inv.fulfillment === 'factory') continue;
+      for (const it of inv.items) {
+        if (purchase && it.received === false) continue;
+        if (!it.productId) continue;
+        const m = purchase ? purchasedQty : soldQty;
+        m.set(it.productId, (m.get(it.productId) ?? 0) + (it.quantity || 0));
+      }
+    }
 
     for (const p of products) {
       if (p.isActive === false) continue;
@@ -497,16 +505,16 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
       if ((p.stock ?? 0) < 0) {
         push('negative_stock', { ...ref, id: `negative_stock:${pid}`, detail: `موجودی «${p.name}» ${fa(p.stock, 2)} ${p.unit} است` });
       }
-      if (wpu > 0 && (purchased.has(pid) || sold.has(pid))) {
-        const expected = (purchased.get(pid) ?? 0) - (sold.get(pid) ?? 0);
-        const actual = (p.stock ?? 0) * wpu;
+      if (purchasedQty.has(pid) || soldQty.has(pid)) {
+        const expected = (purchasedQty.get(pid) ?? 0) - (soldQty.get(pid) ?? 0);
+        const actual = p.stock ?? 0;
         const gap = actual - expected;
-        if (Math.abs(gap) > Math.max(wpu, 1) + Math.abs(expected) * 0.005) {
+        if (Math.abs(gap) >= 0.05) {
           push('stock_mismatch', {
             ...ref,
             id: `stock_mismatch:${pid}:${Math.round(gap)}`,
-            impact: gap * (f.lastCost.get(pid) ?? 0),
-            detail: `خرید − فروش = ${fa(expected, 1)} کیلو ولی موجودی ثبت‌شده ${fa(actual, 1)} کیلو (${gap > 0 ? 'اضافه' : 'کسری'} ${fa(Math.abs(gap), 1)} کیلو) — موجودی دستی عوض شده یا فاکتوری جا افتاده`,
+            impact: gap * (wpu || 1) * (f.lastCost.get(pid) ?? 0),
+            detail: `از فاکتورهای خرید باید ${fa(expected, 2)} ${p.unit || 'واحد'} باشد ولی موجودی ثبت‌شده ${fa(actual, 2)} است (${gap > 0 ? 'اضافه' : 'کسری'} ${fa(Math.abs(gap), 2)})`,
           });
         }
       }

@@ -42,6 +42,8 @@ export interface InventoryItem {
   weightPerUnitKg: number;
   exists: boolean;
   stockUnits: number;
+  /** Received purchase quantities minus shop sales. Registered stock should match this. */
+  expectedUnits: number;
   stockKg: number;
   stockValue: number;
   currentValue: TierValues;

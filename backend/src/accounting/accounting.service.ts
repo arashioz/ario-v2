@@ -201,6 +201,8 @@ export class AccountingService {
           exists: !!p,
           stockUnits: p?.stock ?? 0,
           stockKg: p ? (p.stock ?? 0) * (p.weightPerUnitKg || 1) : 0,
+          purchasedUnits: 0,
+          soldUnits: 0,
           purchasedKg: 0,
           purchasedAmount: 0,
           purchaseCount: 0,
@@ -240,6 +242,22 @@ export class AccountingService {
       r.soldCost += l.cost;
     }
 
+    // Registered quantity should follow invoice lines: received purchases minus shop sales.
+    // Kilograms on the line often don't equal quantity × weightPerUnitKg, so that conversion
+    // must not be what flags a warehouse error.
+    for (const inv of f.invoices) {
+      const purchase = inv.type === 'purchase';
+      if (!purchase && inv.fulfillment === 'factory') continue;
+      for (const it of inv.items) {
+        if (purchase && it.received === false) continue;
+        if (!it.productId) continue;
+        const r = row(it.productId, it.productName);
+        const q = it.quantity || 0;
+        if (purchase) r.purchasedUnits += q;
+        else r.soldUnits += q;
+      }
+    }
+
     const prices = new Map(
       (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale').lean()).map((p: any) => [String(p._id), p]),
     );
@@ -255,11 +273,15 @@ export class AccountingService {
         const avgRemainingCost = r.fifoRemainingKg > 0 ? r.remainingValue / r.fifoRemainingKg : r.purchasedKg ? r.purchasedAmount / r.purchasedKg : 0;
         const profit = r.soldRevenue - r.soldCost;
         const units = Math.max(0, r.stockUnits || 0);
+        const expectedUnits = (r.purchasedUnits || 0) - (r.soldUnits || 0);
         const p = prices.get(r.productId);
+        // On-hand weight is what the purchase lots still hold, not quantity × a catalog weight.
+        const onHandKg = r.fifoRemainingKg;
         return {
           ...r,
-          stockKg: r1(r.stockKg),
-          stockValue: r0(r.stockKg * avgRemainingCost),
+          expectedUnits: r1(expectedUnits),
+          stockKg: r1(onHandKg),
+          stockValue: r0(r.remainingValue || onHandKg * avgRemainingCost),
           /** On-hand stock at today's sell price of each tier. */
           currentValue: Object.fromEntries(PRICE_TIERS.map((t) => [t, r0(units * tierPrice(p, t))])) as Record<PriceTier, number>,
           purchasedKg: r1(r.purchasedKg),
@@ -300,8 +322,17 @@ export class AccountingService {
         profit: r0(soldProfit),
         marginPercent: pct(soldProfit, sum('soldRevenue')),
         profitPerKg: sum('soldKg') ? r0(soldProfit / sum('soldKg')) : 0,
-        // purchased − sold − on hand; non-zero means stock was changed outside invoices
-        differenceKg: period.from || period.to ? null : r1(sum('purchasedKg') - sum('soldKg') - sum('stockKg')),
+        // How far the registered unit count is from purchase invoices minus shop sales.
+        // A kilogram gap caused only by weightPerUnitKg is not an error.
+        differenceKg:
+          period.from || period.to
+            ? null
+            : r1(
+                items.reduce((s, i: any) => {
+                  const gap = Math.abs((i.stockUnits || 0) - (i.expectedUnits || 0));
+                  return s + (gap >= 0.05 ? gap : 0);
+                }, 0),
+              ),
       },
       items,
     };
