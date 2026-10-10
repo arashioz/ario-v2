@@ -92,6 +92,7 @@ export class ProformasService {
       splitDetails: dto.splitDetails || {},
       depositAccounts: { pos: dto.depositAccounts?.pos || '', transfer: dto.depositAccounts?.transfer || '' },
       paidAmount: dto.paidAmount || 0,
+      dueDays: Math.min(365, Math.max(0, Math.round(dto.dueDays ?? 15))),
       shippingPayer,
       shippingCost,
       notes: dto.notes || '',
@@ -148,6 +149,7 @@ export class ProformasService {
       doc.depositAccounts = { pos: t.depositAccounts.pos || '', transfer: t.depositAccounts.transfer || '' };
     }
     if (t.paidAmount !== undefined) doc.paidAmount = t.paidAmount;
+    if (t.dueDays !== undefined) doc.dueDays = Math.min(365, Math.max(0, Math.round(t.dueDays)));
     if (t.discount !== undefined) doc.discount = t.discount;
     if (t.notes !== undefined) doc.notes = t.notes;
     if (t.branchName !== undefined) doc.branchName = t.branchName.trim();
@@ -226,6 +228,7 @@ export class ProformasService {
       notes: [doc.notes, `پیش‌فاکتور ${doc.number}`].filter(Boolean).join(' — '),
       shippingPayer: doc.shippingPayer,
       shippingCost: doc.shippingCost,
+      dueDays: doc.dueDays,
     };
 
     const invoice = await this.invoices.create(dto, recordedByName, { proformaNumber: doc.number, shippedAt });

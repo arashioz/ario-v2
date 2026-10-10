@@ -72,6 +72,10 @@ export class Proforma {
   @Prop({ default: 0 })
   paidAmount: number;
 
+  /** Days after the invoice date until a credit balance is due. */
+  @Prop({ default: 15 })
+  dueDays: number;
+
   @Prop({ type: String, enum: ['none', 'customer', 'me'], default: 'none' })
   shippingPayer: string;
 

@@ -86,6 +86,7 @@ export const termsPayload = (final: number, t: PaymentTerms) => {
       splitDetails: { pos: t.split.pos, cash: t.split.cash, transfer: t.split.transfer, cheque: t.split.cheque, credit },
       paidAmount: final - credit,
       depositAccounts,
+      dueDays: t.dueDays ?? 15,
       ...shipping,
     };
   }
@@ -108,6 +109,7 @@ export const termsFromSaved = (p: {
   shippingPayer?: ShippingPayer;
   shippingCost?: number;
   depositAccounts?: Partial<Record<CardMethod, string>>;
+  dueDays?: number;
 }): PaymentTerms => {
   const s = { pos: 0, cash: 0, transfer: 0, cheque: 0, credit: 0, ...(p.splitDetails || {}) } as Required<SplitDetails>;
   const base = {
@@ -115,6 +117,7 @@ export const termsFromSaved = (p: {
     discount: p.discount || 0,
     shippingPayer: p.shippingPayer || 'none',
     shippingCost: p.shippingCost || 0,
+    dueDays: p.dueDays ?? 15,
     accounts: { pos: p.depositAccounts?.pos || '', transfer: p.depositAccounts?.transfer || '' },
   };
   if (p.paymentMethod === 'split' && s.credit > 0) return { ...base, paymentMethod: 'credit', split: { ...s, credit: 0 } };

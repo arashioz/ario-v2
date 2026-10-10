@@ -23,6 +23,7 @@ export interface Proforma {
   splitDetails?: SplitDetails;
   depositAccounts?: DepositAccounts;
   paidAmount: number;
+  dueDays?: number;
   shippingPayer: ShippingPayer;
   shippingCost: number;
   notes?: string;
@@ -42,6 +43,7 @@ export interface ProformaTerms {
   depositAccounts?: DepositAccounts;
   paidAmount?: number;
   discount?: number;
+  dueDays?: number;
   notes?: string;
   branchName?: string;
   fulfillment?: 'shop' | 'factory';

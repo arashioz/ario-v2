@@ -52,6 +52,12 @@ export class ProformaTermsDto {
   @Min(0)
   discount?: number;
 
+  /** Days until the credit balance is due. Sent with every proforma save. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  dueDays?: number;
+
   @IsOptional()
   @IsString()
   notes?: string;
