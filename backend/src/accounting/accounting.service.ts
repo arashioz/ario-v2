@@ -10,6 +10,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { runFifo, dayKey, purchaseFreight } from './fifo';
 import { purchaseEntersShop } from '../suppliers/supplier-names';
+import { PricePeriodService } from '../pricing/price-period.service';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
 
 export interface Period {
@@ -68,6 +69,7 @@ export class AccountingService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(CustomerTransaction.name) private txModel: Model<CustomerTransactionDocument>,
     private readonly audit: AuditService,
+    private readonly pricePeriods: PricePeriodService,
   ) {}
 
   /** FIFO over all invoices, cached until any invoice or product changes. */
@@ -1070,12 +1072,13 @@ export class AccountingService {
    */
   async priceChart() {
     const f = await this.fifo();
-    const [products, edits] = await Promise.all([
+    const [products, edits, periods] = await Promise.all([
       this.productModel
         .find({ isActive: { $ne: false } })
         .select('name unit category weightPerUnitKg sellPrice priceRetail priceSupermarket priceWholesale priceHistory stock')
         .lean(),
       this.audit.productPriceEdits(),
+      this.pricePeriods.list(),
     ]);
     const now = Date.now();
     const since30 = dayKey(new Date(now - 30 * 86400000));
@@ -1142,6 +1145,15 @@ export class AccountingService {
             .sort(([a], [b]) => (a < b ? -1 : 1))
             .map(([date, d]) => ({ date, avgPerKg: r0(d.revenue / d.kg), minPerKg: r0(d.min), maxPerKg: r0(d.max), kg: r1(d.kg), count: d.count })),
           list: list.map((x) => ({ date: x.date, price: r0(x.price), perKg: wpu ? r0(x.price / wpu) : null, by: x.by ?? '' })),
+          changes: periods
+            .filter((c) => c.productId === pid)
+            .map((c) => ({
+              date: c.from,
+              unitPrice: r0(c.unitPrice),
+              pricePerKg: r0(c.pricePerKg || (wpu ? c.unitPrice / wpu : 0)),
+              invoiceNumber: c.invoiceNumber,
+              invoiceId: c.invoiceId,
+            })),
           current: {
             retail: r0(retail),
             supermarket: r0(p.priceSupermarket || retail),

@@ -11,10 +11,12 @@ import { AccountingService } from './accounting.service';
 import { AccountingController } from './accounting.controller';
 import { ProfitWatchService } from './profit-watch.service';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { PricingModule } from '../pricing/pricing.module';
 
 @Module({
   imports: [
     InvoicesModule,
+    PricingModule,
     MongooseModule.forFeature([
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Product.name, schema: ProductSchema },

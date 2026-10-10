@@ -241,9 +241,6 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
     }
     return price;
   };
-  const matchesLaterPurchase = (pid: string, day: string, typed: number) =>
-    typed > 0 && (unitBuys.get(pid) ?? []).some((row) => row.day > day && row.unitPrice === typed);
-
   for (const inv of sorted) {
     const id = String(inv._id);
     if (inv.type === 'purchase') {
@@ -316,7 +313,8 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
         const saleDay = dayKey(inv.invoiceDate);
         const typed = Math.round(Number(it.factoryUnitCost) || 0);
         const historical = unitOnOrBefore(pid, saleDay);
-        const factoryUnit = typed > 0 && !matchesLaterPurchase(pid, saleDay, typed) ? typed : historical || typed;
+        // The buy price of this date, not a later price that was written onto the old invoice.
+        const factoryUnit = historical > 0 ? historical : typed;
         const cost = factoryUnit * (it.quantity || 0);
         const estimatedKg = factoryUnit > 0 ? 0 : kg;
         if (estimatedKg > 0) ip.estimated = true;

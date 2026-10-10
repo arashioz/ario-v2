@@ -8,6 +8,7 @@ import { Customer, CustomerSchema } from '../customers/schemas/customer.schema';
 import { CustomersModule } from '../customers/customers.module';
 import { UsersModule } from '../users/users.module';
 import { SuppliersModule } from '../suppliers/suppliers.module';
+import { PricingModule } from '../pricing/pricing.module';
 import { Expense, ExpenseSchema } from '../expenses/schemas/expense.schema';
 
 @Module({
@@ -21,6 +22,7 @@ import { Expense, ExpenseSchema } from '../expenses/schemas/expense.schema';
     CustomersModule,
     UsersModule,
     SuppliersModule,
+    PricingModule,
   ],
   controllers: [InvoicesController],
   providers: [InvoicesService],

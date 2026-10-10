@@ -41,6 +41,7 @@ export interface PriceChartProduct {
   purchases: { date: string; costPerKg: number; invoicePricePerKg: number; kg: number; invoiceNumber: string; invoiceId: string; supplier: string }[];
   sales: { date: string; avgPerKg: number; minPerKg: number; maxPerKg: number; kg: number; count: number }[];
   list: { date: string; price: number; perKg: number | null; by: string }[];
+  changes?: { date: string; unitPrice: number; pricePerKg: number; invoiceNumber: string; invoiceId: string }[];
   current: { retail: number; supermarket: number; wholesale: number; retailPerKg: number; wholesalePerKg: number };
   lastCostPerKg: number | null;
   costChange30Percent: number;

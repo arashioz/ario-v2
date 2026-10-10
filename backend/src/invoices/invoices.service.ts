@@ -1,5 +1,6 @@
 import {
   Injectable,
+  OnApplicationBootstrap,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -17,6 +18,7 @@ import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop } from '../suppliers/supplier-names';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
+import { PricePeriodService, priceOn } from '../pricing/price-period.service';
 
 interface ActingUser {
   id?: string;
@@ -25,7 +27,7 @@ interface ActingUser {
 }
 
 @Injectable()
-export class InvoicesService {
+export class InvoicesService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(Invoice.name)
     private invoiceModel: Model<InvoiceDocument>,
@@ -39,11 +41,42 @@ export class InvoicesService {
     private usersService: UsersService,
     private suppliersService: SuppliersService,
     private settingsService: SettingsService,
+    private pricePeriods: PricePeriodService,
   ) {}
+
+  /** Shop purchases define the price of each date span. Factory shipments then use that span. */
+  async onApplicationBootstrap() {
+    await this.syncPricePeriods().catch(() => undefined);
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /** A date-only string is that Tehran calendar day, not UTC midnight of the day before. */
+  private invoiceInstant(input?: string | Date): Date {
+    if (!input) return new Date();
+    if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) return new Date(`${input}T12:00:00+03:30`);
+    return new Date(input);
+  }
+
+  private async syncPricePeriods() {
+    const periods = await this.pricePeriods.rebuild();
+    const sales = await this.invoiceModel.find({ type: 'sale', fulfillment: 'factory' }).exec();
+    for (const sale of sales) {
+      let changed = false;
+      for (const it of sale.items || []) {
+        const price = priceOn(periods, String(it.productId), sale.invoiceDate);
+        if (!(price > 0) || Math.round(Number(it.factoryUnitCost) || 0) === price) continue;
+        it.factoryUnitCost = price;
+        changed = true;
+      }
+      if (!changed) continue;
+      sale.markModified('items');
+      await sale.save();
+      await this.attachFactoryPurchase(sale, sale.createdByName || '');
+    }
+  }
 
   private async nextInvoiceNumber(isSale: boolean): Promise<string> {
     const d = new Date();
@@ -510,13 +543,13 @@ export class InvoicesService {
       await this.shiftStock(items, 1, true);
       for (const item of items) {
         if (item.unitPrice > 0) {
-          await this.rememberBuyPrice(item.productId, item.unitPrice, new Date(dto.invoiceDate || Date.now()));
+          await this.rememberBuyPrice(item.productId, item.unitPrice, this.invoiceInstant(dto.invoiceDate));
         }
       }
     }
 
     const customerPrevBalance = customer?.balance || 0;
-    const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : new Date();
+    const invoiceDate = dto.invoiceDate ? this.invoiceInstant(dto.invoiceDate) : new Date();
     const dueDays = credit > 0 ? Math.min(365, Math.max(0, Math.round(dto.dueDays ?? 15))) : 15;
     const invoice = new this.invoiceModel({
       invoiceNumber: await this.nextInvoiceNumber(isSale),
@@ -565,6 +598,7 @@ export class InvoicesService {
     }
     if (!isSale) {
       await this.suppliersService.sync(invoice.customerName);
+      if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
       return this.findById(String(invoice._id));
     }
     return invoice;
@@ -622,7 +656,7 @@ export class InvoicesService {
     }
 
     const previousSupplier = invoice.customerName;
-    const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : invoice.invoiceDate;
+    const invoiceDate = dto.invoiceDate ? this.invoiceInstant(dto.invoiceDate) : invoice.invoiceDate;
     const dueDays = credit > 0 ? Math.min(365, Math.max(0, Math.round(dto.dueDays ?? invoice.dueDays ?? 15))) : invoice.dueDays;
     invoice.set({
       saleType: dto.saleType || invoice.saleType,
@@ -666,6 +700,7 @@ export class InvoicesService {
       if (canonicalSupplier(previousSupplier) !== canonicalSupplier(invoice.customerName)) {
         await this.suppliersService.sync(previousSupplier);
       }
+      if (wasShopPurchase || willShopPurchase) await this.syncPricePeriods();
       return this.findById(id);
     }
     if (credit > 0 && customer) {
@@ -681,6 +716,7 @@ export class InvoicesService {
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
     const fromFactory = invoice.fulfillment === 'factory';
+    const shopPurchase = purchaseEntersShop(invoice);
 
     if (isSale && fromFactory) await this.detachFactoryPurchase(invoice);
     else if (!isSale && invoice.factorySaleId && Types.ObjectId.isValid(invoice.factorySaleId)) {
@@ -698,6 +734,7 @@ export class InvoicesService {
       if (invoice.customerId) await this.customersService.alignInvoiceDebts(String(invoice.customerId));
     } else {
       await this.suppliersService.sync(invoice.customerName);
+      if (shopPurchase) await this.syncPricePeriods();
     }
     return { message: `فاکتور ${invoice.invoiceNumber} حذف شد` };
   }
@@ -793,7 +830,7 @@ export class InvoicesService {
   /** Changes the document date only. Lines, stock, and the product buy price stay put. */
   async setInvoiceDate(id: string, invoiceDate: string): Promise<InvoiceDocument> {
     const invoice = await this.findById(id);
-    const next = new Date(invoiceDate);
+    const next = this.invoiceInstant(invoiceDate);
     if (Number.isNaN(+next)) throw new BadRequestException('تاریخ نامعتبر است');
     invoice.invoiceDate = next;
     if ((invoice.creditAmount || 0) > 0 && invoice.dueDays) {
@@ -801,6 +838,7 @@ export class InvoicesService {
     }
     await invoice.save();
     if (invoice.type === 'purchase') await this.suppliersService.sync(invoice.customerName);
+    if (purchaseEntersShop(invoice) || invoice.fulfillment === 'factory') await this.syncPricePeriods();
     return this.findById(id);
   }
 

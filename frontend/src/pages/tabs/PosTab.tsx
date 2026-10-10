@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
@@ -211,6 +211,14 @@ export const PosTab: React.FC = () => {
   };
 
   const tiersBlock = (
+    <div className="space-y-1.5">
+      {(auto || fromFactory || pendingProformas > 0) && (
+        <div className="flex flex-wrap gap-1.5 px-0.5">
+          {auto && <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">خودکار فعال است</span>}
+          {fromFactory && <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-lg">کارخانه فعال است</span>}
+          {pendingProformas > 0 && <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-lg">پیش‌فاکتور فعال است</span>}
+        </div>
+      )}
     <div className="bg-white rounded-3xl p-1.5 border border-sky-100 shadow-sm">
       <div className="grid gap-1 grid-cols-3">
         {TIERS.map((t) => (
@@ -234,6 +242,7 @@ export const PosTab: React.FC = () => {
           {lines.length > 0 && <span className="text-slate-400"> — {nextTierHint}</span>}
         </p>
       )}
+    </div>
     </div>
   );
 
@@ -295,37 +304,41 @@ export const PosTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={toggleAuto}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border active:scale-95 ${
+                  aria-label="خودکار"
+                  title="خودکار"
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center border active:scale-95 ${
                     auto ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
-                  خودکار
+                  <Sparkles className="w-4 h-4" />
                 </button>
               )}
               {settings.factorySalesEnabled && (
                 <button
                   type="button"
                   onClick={() => setShipFrom((v) => (v === 'factory' ? 'shop' : 'factory'))}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border active:scale-95 ${
+                  aria-label="کارخانه"
+                  title="کارخانه"
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center border active:scale-95 ${
                     fromFactory ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
-                  کارخانه
+                  <Factory className="w-4 h-4" />
                 </button>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => navigate('/proformas')}
-                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold border active:scale-95 ${
+                className={`relative w-9 h-9 rounded-2xl flex items-center justify-center border active:scale-95 ${
                   pendingProformas > 0
                     ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30'
                     : 'bg-amber-50 text-amber-700 border-amber-200/60'
                 }`}
-                aria-label="پیش‌فاکتورها"
+                aria-label="پیش‌فاکتور"
+                title="پیش‌فاکتور"
               >
-                <ClipboardList className="w-5 h-5" />
-                پیش‌فاکتور
+                <ClipboardList className="w-4 h-4" />
                 {pendingProformas > 0 && (
                   <span className="absolute -top-2 -left-2 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[11px] font-bold font-mono flex items-center justify-center ring-2 ring-white animate-pulse">
                     {num(pendingProformas)}

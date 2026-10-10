@@ -24,7 +24,7 @@ import { num, percent, weight } from '../lib/format';
 
 type Range = '30' | '90' | '180' | 'all';
 type Unit = 'kg' | 'unit';
-type ViewSeries = 'all' | 'compare' | 'purchase' | 'sale';
+type ViewSeries = 'all' | 'compare' | 'purchase' | 'sale' | 'changes';
 
 const COLORS = { purchase: '#d97706', sale: '#0284c7', list: '#7c3aed' };
 const DAY = 86400000;
@@ -84,6 +84,26 @@ function buildSeries(p: PriceChartProduct, unit: Unit, view: ViewSeries): ChartS
     ],
   };
 
+  const changePoints = [...(p.changes || [])]
+    .sort((a, b) => ts(a.date) - ts(b.date))
+    .map((c) => ({
+      t: ts(c.date),
+      y: unit === 'unit' ? c.unitPrice : c.pricePerKg,
+      note: `${c.invoiceNumber} · قیمت این بازه`,
+    }));
+  if (changePoints.length > 0 && Date.now() - changePoints[changePoints.length - 1].t > 3600000) {
+    const last = changePoints[changePoints.length - 1];
+    changePoints.push({ t: Date.now(), y: last.y, note: 'قیمت فعلی' });
+  }
+  const changeSeries: ChartSeries = {
+    key: 'changes',
+    label: 'تغییر قیمت خرید',
+    color: '#be123c',
+    mode: 'step',
+    points: changePoints,
+  };
+
+  if (view === 'changes') return [changeSeries];
   if (view === 'purchase') return [purchaseSeries];
   if (view === 'sale') return [saleSeries, listSeries];
   if (view === 'compare') return [saleSeries, purchaseSeries];
@@ -291,6 +311,7 @@ export const PriceChartPage: React.FC = () => {
                     ['compare', 'خرید و فروش'],
                     ['purchase', 'فقط خرید'],
                     ['sale', 'فقط فروش'],
+                    ['changes', 'تغییر قیمت'],
                   ]}
                 />
               </div>
@@ -306,6 +327,28 @@ export const PriceChartPage: React.FC = () => {
                 ))}
                 <span className="text-slate-400">سایه آبی: کمترین تا بیشترین فروش روز</span>
               </div>
+
+              {viewSeries === 'changes' && (
+                <div className="space-y-1.5">
+                  {(product.changes || []).length === 0 ? (
+                    <p className="text-[10px] text-slate-400">برای این کالا هنوز تغییر قیمتی ثبت نشده.</p>
+                  ) : (
+                    [...(product.changes || [])].reverse().map((c) => (
+                      <button
+                        key={`${c.invoiceId}-${c.date}`}
+                        onClick={() => openInvoice(c.invoiceId)}
+                        className="w-full flex items-center justify-between gap-2 rounded-xl bg-rose-50 px-2.5 py-2 text-right"
+                      >
+                        <span className="text-[11px] text-slate-700">
+                          {formatJalaliIso(c.date)}
+                          <span className="text-slate-400 font-mono mr-1" dir="ltr">{c.invoiceNumber}</span>
+                        </span>
+                        <span className="text-[11px] font-bold font-mono text-rose-800">{num(unit === 'unit' ? c.unitPrice : c.pricePerKg)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-4 gap-1.5">
                 <Mini label="آخرین خرید" value={product.lastCostPerKg ? num(product.lastCostPerKg * k) : '—'} />
