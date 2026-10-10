@@ -567,6 +567,11 @@ export class SuppliersService implements OnApplicationBootstrap {
 
   async createPayment(dto: CreateSupplierPaymentDto, recordedByName: string) {
     const supplier = canonicalSupplier(dto.supplier || PARENT_COMPANY);
+    const externalRef = dto.externalRef?.trim() || '';
+    if (externalRef) {
+      const existing = await this.paymentModel.findOne({ externalRef }).exec();
+      if (existing) return this.account(existing.supplier);
+    }
     await this.paymentModel.create({
       supplier,
       amount: dto.amount,
@@ -764,7 +769,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     const isParent = supplier === PARENT_COMPANY;
     const company = await this.companyModel.findOne({ name: supplier }).lean();
 
-    const [invoices, payments] = await Promise.all([
+    const [invoices, payments, adjustments] = await Promise.all([
       this.invoiceModel
         .find({ type: 'purchase' })
         .select('invoiceNumber invoiceDate createdAt customerName finalAmount totalWeightKg creditAmount paidAmount remainingDebt isPaid items notes paymentMethod createdByName')
@@ -773,6 +778,7 @@ export class SuppliersService implements OnApplicationBootstrap {
         .find({ supplier })
         .sort({ date: 1, createdAt: 1 })
         .lean(),
+      this.adjustmentModel.find({ supplier }).sort({ date: 1, createdAt: 1 }).lean(),
     ]);
 
     const supplierInvoices = invoices
@@ -782,7 +788,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     interface LedgerRow {
       date: Date;
       order: number;
-      kind: 'purchase' | 'payment' | 'upfront';
+      kind: 'purchase' | 'payment' | 'upfront' | 'adjustment';
       ref: string;
       desc: string;
       method: string;
@@ -847,6 +853,22 @@ export class SuppliersService implements OnApplicationBootstrap {
       });
     }
 
+    for (const a of adjustments) {
+      const debit = a.amount > 0 ? r0(a.amount) : 0;
+      const credit = a.amount < 0 ? r0(-a.amount) : 0;
+      ledger.push({
+        date: new Date(a.date),
+        order: +new Date(a.createdAt ?? a.date),
+        kind: 'adjustment',
+        ref: a.externalRef || `تعدیل-${String(a._id).slice(-6)}`,
+        desc: `${a.title}${a.relatedInvoiceNumber ? ` — ${a.relatedInvoiceNumber}` : ''}`,
+        method: a.kind === 'opening' ? 'افتتاحیه' : 'تعدیل حساب',
+        debit,
+        credit,
+        notes: a.notes || '',
+      });
+    }
+
     ledger.sort((a, b) => +new Date(a.date) - +new Date(b.date) || a.order - b.order);
 
     const faDate = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -875,7 +897,7 @@ export class SuppliersService implements OnApplicationBootstrap {
         idx + 1,
         jalaliDateStr,
         jalaliTimeStr,
-        row.kind === 'purchase' ? 'فاکتور خرید بار' : row.kind === 'upfront' ? 'پرداخت پای بار' : 'واریز وجه',
+        row.kind === 'purchase' ? 'فاکتور خرید بار' : row.kind === 'upfront' ? 'پرداخت پای بار' : row.kind === 'adjustment' ? 'تعدیل حساب' : 'واریز وجه',
         row.ref,
         row.desc,
         row.method,
@@ -900,6 +922,7 @@ export class SuppliersService implements OnApplicationBootstrap {
       ['تلفن و اطلاعات تماس', company?.phone || company?.contactName || '—'],
       ['تعداد اسناد خرید', supplierInvoices.length],
       ['تعداد واریزی‌ها', payments.length],
+      ['تعداد تعدیل‌ها', adjustments.length],
       ['جمع کل مبالغ فاکتورهای خرید (بدهکار)', totalDebit],
       ['جمع کل مبالغ واریز شده و تسویه (بستانکار)', totalCredit],
       ['مانده نهایی حساب (جهت تطبیق مغایرت)', finalBalance],

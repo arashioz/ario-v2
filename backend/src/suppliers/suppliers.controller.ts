@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SuppliersService } from './suppliers.service';
 import { CreateSupplierPaymentDto, UpdateSupplierPaymentDto } from './dto/supplier-payment.dto';
+import { CreateSupplierAdjustmentDto, UpdateSupplierAdjustmentDto } from './dto/supplier-adjustment.dto';
 import { CreateSupplierCompanyDto, ReassignProductsDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -77,5 +78,21 @@ export class SuppliersController {
   @Delete('payments/:id')
   removePayment(@Param('id') id: string) {
     return this.suppliers.removePayment(id);
+  }
+
+  /** Signed memo. Does not delete or rewrite purchases and payments. */
+  @Post('adjustments')
+  createAdjustment(@Body() dto: CreateSupplierAdjustmentDto, @Request() req: any) {
+    return this.suppliers.createAdjustment(dto, req.user?.fullName || req.user?.username || 'کاربر سیستم');
+  }
+
+  @Patch('adjustments/:id')
+  updateAdjustment(@Param('id') id: string, @Body() dto: UpdateSupplierAdjustmentDto) {
+    return this.suppliers.updateAdjustment(id, dto);
+  }
+
+  @Delete('adjustments/:id')
+  removeAdjustment(@Param('id') id: string) {
+    return this.suppliers.removeAdjustment(id);
   }
 }

@@ -22,6 +22,7 @@ export interface SupplierPaymentRow {
   notes: string;
   rawSupplier: string;
   legacy: boolean;
+  externalRef?: string;
   allocations: { invoiceId: string; invoiceNumber: string; amount: number }[];
   unallocated: number;
   createdAt: string;
@@ -53,6 +54,8 @@ export interface SupplierAccount {
     creditTotal: number;
     paymentsTotal: number;
     paymentsCount: number;
+    adjustmentsTotal: number;
+    adjustmentsCount: number;
     totalPaid: number;
     debt: number;
     prepaid: number;
@@ -70,8 +73,33 @@ export interface SupplierAccount {
   byMethod: { method: SupplierPaymentMethod; amount: number; count: number }[];
   payments: SupplierPaymentRow[];
   invoices: SupplierInvoiceRow[];
-  timeline: { kind: 'purchase' | 'payment'; id: string; date: string; amount: number; label: string; balance: number }[];
+  adjustments: SupplierAdjustmentRow[];
+  timeline: { kind: 'purchase' | 'payment' | 'adjustment'; id: string; date: string; amount: number; increasesDebt: boolean; label: string; balance: number }[];
   destinations: string[];
+}
+
+export interface SupplierAdjustmentRow {
+  _id: string;
+  date: string;
+  /** Signed. Positive increases what we owe. */
+  amount: number;
+  kind: 'opening' | 'reconcile';
+  externalRef: string;
+  title: string;
+  notes: string;
+  relatedInvoiceNumber: string;
+  createdAt?: string;
+}
+
+export interface SupplierAdjustmentInput {
+  supplier?: string;
+  date: string;
+  amount: number;
+  kind?: 'opening' | 'reconcile';
+  title: string;
+  notes?: string;
+  relatedInvoiceNumber?: string;
+  externalRef?: string;
 }
 
 export interface SupplierPaymentInput {
@@ -200,6 +228,15 @@ export const suppliersService = {
   },
   async removePayment(id: string): Promise<SupplierAccount> {
     return (await api.delete(`/suppliers/payments/${id}`)).data;
+  },
+  async createAdjustment(input: SupplierAdjustmentInput): Promise<SupplierAccount> {
+    return (await api.post('/suppliers/adjustments', input)).data;
+  },
+  async updateAdjustment(id: string, input: Partial<SupplierAdjustmentInput>): Promise<SupplierAccount> {
+    return (await api.patch(`/suppliers/adjustments/${id}`, input)).data;
+  },
+  async removeAdjustment(id: string): Promise<SupplierAccount> {
+    return (await api.delete(`/suppliers/adjustments/${id}`)).data;
   },
   /** خروجی اکسل صورت‌حساب و مغایرت‌گیری برای شرکت مادر و سایر شرکت‌ها */
   async exportReconciliation(name?: string): Promise<void> {

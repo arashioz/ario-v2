@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Put,
   Body,
   Param,
@@ -10,11 +11,18 @@ import {
   Request,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
+import { IsDateString, IsNotEmpty } from 'class-validator';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+
+class SetInvoiceDateDto {
+  @IsDateString({}, { message: 'تاریخ نامعتبر است' })
+  @IsNotEmpty()
+  invoiceDate: string;
+}
 
 const actorName = (req: any) => req.user?.fullName || req.user?.username || 'کاربر سیستم';
 
@@ -68,6 +76,12 @@ export class InvoicesController {
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: CreateInvoiceDto, @Request() req: any) {
     return this.invoicesService.update(id, dto, actorName(req));
+  }
+
+  /** Date only. Stock, prices, and lines stay as they are. */
+  @Patch(':id/date')
+  setDate(@Param('id') id: string, @Body() body: SetInvoiceDateDto) {
+    return this.invoicesService.setInvoiceDate(id, body.invoiceDate);
   }
 
   @Post(':id/due')

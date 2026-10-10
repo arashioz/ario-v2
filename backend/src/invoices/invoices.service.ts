@@ -372,7 +372,7 @@ export class InvoicesService {
       await this.shiftStock(items, 1, true);
       for (const item of items) {
         if (item.unitPrice > 0 && dto.fulfillment !== 'factory') {
-          await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
+          await this.rememberBuyPrice(item.productId, item.unitPrice, new Date(dto.invoiceDate || Date.now()));
         }
       }
     }
@@ -518,8 +518,8 @@ export class InvoicesService {
         await this.mirrorFactoryCostToSale(invoice);
       }
       for (const item of prepared.items) {
-        if (willShopPurchase && item.unitPrice > 0 && Types.ObjectId.isValid(String(item.productId))) {
-          await this.productModel.updateOne({ _id: item.productId }, { $set: { buyPrice: item.unitPrice } }).exec();
+        if (willShopPurchase && item.unitPrice > 0) {
+          await this.rememberBuyPrice(item.productId, item.unitPrice, invoiceDate);
         }
       }
       await this.suppliersService.sync(invoice.customerName);
@@ -624,6 +624,20 @@ export class InvoicesService {
     return this.findById(id);
   }
 
+  /** A backdated purchase must not overwrite the buy price set by a newer invoice. */
+  private async rememberBuyPrice(productId: unknown, unitPrice: number, invoiceDate: Date) {
+    const id = String(productId || '');
+    if (!(unitPrice > 0) || !Types.ObjectId.isValid(id)) return;
+    const later = await this.invoiceModel.exists({
+      type: 'purchase',
+      fulfillment: { $ne: 'factory' },
+      invoiceDate: { $gt: invoiceDate },
+      items: { $elemMatch: { productId: id, unitPrice: { $gt: 0 } } },
+    });
+    if (later) return;
+    await this.productModel.updateOne({ _id: id }, { $set: { buyPrice: Math.round(unitPrice) } }).exec();
+  }
+
   async setDueDays(id: string, days: number): Promise<InvoiceDocument> {
     const invoice = await this.findById(id);
     if (invoice.type !== 'sale' || !(invoice.creditAmount > 0)) {
@@ -634,6 +648,20 @@ export class InvoicesService {
     invoice.dueDate = new Date(new Date(invoice.invoiceDate || Date.now()).getTime() + dueDays * 86400000);
     await invoice.save();
     return invoice;
+  }
+
+  /** Changes the document date only. Lines, stock, and the product buy price stay put. */
+  async setInvoiceDate(id: string, invoiceDate: string): Promise<InvoiceDocument> {
+    const invoice = await this.findById(id);
+    const next = new Date(invoiceDate);
+    if (Number.isNaN(+next)) throw new BadRequestException('تاریخ نامعتبر است');
+    invoice.invoiceDate = next;
+    if ((invoice.creditAmount || 0) > 0 && invoice.dueDays) {
+      invoice.dueDate = new Date(next.getTime() + invoice.dueDays * 86400000);
+    }
+    await invoice.save();
+    if (invoice.type === 'purchase') await this.suppliersService.sync(invoice.customerName);
+    return this.findById(id);
   }
 
   async findAll(query?: {

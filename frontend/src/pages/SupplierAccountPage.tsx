@@ -21,19 +21,20 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { suppliersService, SUPPLIER_METHOD_LABELS, formatAccountNumber } from '../services/suppliers.service';
-import type { SupplierAccount, SupplierListItem, SupplierPaymentRow, SupplierProfile, SupplierStatement } from '../services/suppliers.service';
+import type { SupplierAccount, SupplierAdjustmentRow, SupplierListItem, SupplierPaymentRow, SupplierProfile, SupplierStatement } from '../services/suppliers.service';
 import { CompanySheet } from '../components/suppliers/CompanySheet';
 import { useNotification } from '../context/NotificationContext';
 import { Empty, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
 import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
 import { SupplierPaymentSheet } from '../components/suppliers/SupplierPaymentSheet';
+import { SupplierAdjustmentSheet } from '../components/suppliers/SupplierAdjustmentSheet';
 import Toman from '../components/ui/Toman';
 import { dateToYmd, formatJalali, ymdToJalali, JALALI_MONTHS, faNum } from '../lib/jalali';
 import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatToman, num, percent, toman, tons } from '../lib/format';
 
-type View = 'payments' | 'invoices' | 'products' | 'month' | 'ledger';
+type View = 'payments' | 'invoices' | 'adjustments' | 'products' | 'month' | 'ledger';
 
 const jDate = (iso: string | null | undefined) => (iso ? formatJalali(dateToYmd(new Date(iso)), { year: true }) : '—');
 
@@ -50,6 +51,7 @@ export const SupplierAccountPage: React.FC = () => {
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('payments');
   const [sheet, setSheet] = useState<{ payment: SupplierPaymentRow | null } | null>(null);
+  const [adjustSheet, setAdjustSheet] = useState<{ row: SupplierAdjustmentRow | null } | null>(null);
   const [editCompany, setEditCompany] = useState(false);
   const [newCompany, setNewCompany] = useState(false);
   const [others, setOthers] = useState<SupplierListItem[] | null>(null);
@@ -167,15 +169,16 @@ export const SupplierAccountPage: React.FC = () => {
   const maxDest = Math.max(1, ...(data?.byDestination ?? []).map((d) => d.amount));
 
   const months = useMemo(() => {
-    const m = new Map<string, { key: string; label: string; purchases: number; payments: number; closing: number }>();
+    const m = new Map<string, { key: string; label: string; purchases: number; payments: number; adjustments: number; closing: number }>();
     const asc = [...(data?.timeline ?? [])].reverse();
     for (const e of asc) {
       const j = ymdToJalali(dateToYmd(new Date(e.date)));
       const key = `${j.jy}-${String(j.jm).padStart(2, '0')}`;
-      if (!m.has(key)) m.set(key, { key, label: `${JALALI_MONTHS[j.jm - 1]} ${faNum(j.jy)}`, purchases: 0, payments: 0, closing: 0 });
+      if (!m.has(key)) m.set(key, { key, label: `${JALALI_MONTHS[j.jm - 1]} ${faNum(j.jy)}`, purchases: 0, payments: 0, adjustments: 0, closing: 0 });
       const r = m.get(key)!;
       if (e.kind === 'purchase') r.purchases += e.amount;
-      else r.payments += e.amount;
+      else if (e.kind === 'payment') r.payments += e.amount;
+      else r.adjustments += e.increasesDebt ? e.amount : -e.amount;
       r.closing = e.balance;
     }
     return [...m.values()].reverse();
@@ -210,6 +213,12 @@ export const SupplierAccountPage: React.FC = () => {
               className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-emerald-600 text-white text-[11px] font-bold active:scale-95"
             >
               <Plus className="w-4 h-4" /> ثبت پرداخت
+            </button>
+            <button
+              onClick={() => setAdjustSheet({ row: null })}
+              className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-amber-600 text-white text-[11px] font-bold active:scale-95"
+            >
+              تعدیل
             </button>
           </div>
         }
@@ -453,6 +462,7 @@ export const SupplierAccountPage: React.FC = () => {
             onChange={setView}
             items={[
               ['payments', `پرداخت‌ها (${num(data?.payments.length ?? 0)})`],
+              ['adjustments', `تعدیل (${num(data?.adjustments.length ?? 0)})`],
               ['invoices', 'فاکتورهای خرید'],
               ['products', `محصولات (${num(profile?.products.length ?? 0)})`],
               ['month', 'ماهانه'],
@@ -493,6 +503,37 @@ export const SupplierAccountPage: React.FC = () => {
                       </div>
                     )}
                     {p.unallocated > 0 && <p className="text-[10px] text-amber-700 mt-1.5">پیش‌پرداخت (بیش از بدهی): {formatToman(p.unallocated)}</p>}
+                  </button>
+                ))
+              )}
+            </div>
+          ) : view === 'adjustments' ? (
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setAdjustSheet({ row: null })}
+                className="w-full py-2.5 rounded-xl bg-amber-50 text-amber-800 text-xs font-bold border border-amber-100"
+              >
+                ثبت تعدیل جدید
+              </button>
+              {(data.adjustments ?? []).length === 0 ? (
+                <Empty>تعدیلی ثبت نشده. با تعدیل، مانده را با دفتر شرکت جور می‌کنید بدون اینکه فاکتور یا واریز پاک شود.</Empty>
+              ) : (
+                data.adjustments.map((a) => (
+                  <button key={a._id} onClick={() => setAdjustSheet({ row: a })} className="w-full text-right bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-800">{a.title}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {jDate(a.date)} · {a.kind === 'opening' ? 'افتتاحیه' : 'مغایرت'}
+                          {a.relatedInvoiceNumber ? ` · ${a.relatedInvoiceNumber}` : ''}
+                        </div>
+                      </div>
+                      <span className={`text-[11px] font-bold shrink-0 ${a.amount > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {formatToman(a.amount)}
+                      </span>
+                    </div>
+                    {a.notes && <p className="text-[10px] text-slate-500 mt-1.5 leading-5">{a.notes}</p>}
                   </button>
                 ))
               )}
@@ -681,6 +722,11 @@ export const SupplierAccountPage: React.FC = () => {
                     <div className="flex justify-between mt-1.5 text-[10px]">
                       <span className="text-amber-700">خرید نسیه {formatToman(m.purchases)}</span>
                       <span className="text-emerald-700">پرداخت {formatToman(m.payments)}</span>
+                      {m.adjustments !== 0 && (
+                        <span className={m.adjustments > 0 ? 'text-rose-700' : 'text-emerald-700'}>
+                          تعدیل {formatToman(m.adjustments)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))
@@ -753,7 +799,11 @@ export const SupplierAccountPage: React.FC = () => {
                 .map((e) => (
                 <button
                   key={`${e.kind}-${e.id}`}
-                  onClick={() => (e.kind === 'purchase' ? openInvoice(e.id) : setSheet({ payment: data.payments.find((p) => p._id === e.id) ?? null }))}
+                  onClick={() => {
+                    if (e.kind === 'purchase') openInvoice(e.id);
+                    else if (e.kind === 'payment') setSheet({ payment: data.payments.find((p) => p._id === e.id) ?? null });
+                    else setAdjustSheet({ row: data.adjustments.find((a) => a._id === e.id) ?? null });
+                  }}
                   className="w-full text-right flex items-center justify-between px-3.5 py-2.5"
                 >
                   <div className="min-w-0">
@@ -762,15 +812,17 @@ export const SupplierAccountPage: React.FC = () => {
                         <>
                           خرید <span className="font-mono">{e.label}</span>
                         </>
-                      ) : (
+                      ) : e.kind === 'payment' ? (
                         <>پرداخت به {e.label}</>
+                      ) : (
+                        <>تعدیل · {e.label}</>
                       )}
                     </div>
                     <div className="text-[10px] text-slate-400">{jDate(e.date)}</div>
                   </div>
                   <div className="text-left shrink-0">
-                    <div className={`text-[11px] font-bold ${e.kind === 'purchase' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      <Toman value={e.kind === 'purchase' ? e.amount : -e.amount} signed />
+                    <div className={`text-[11px] font-bold ${e.increasesDebt ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      <Toman value={e.increasesDebt ? e.amount : -e.amount} signed />
                     </div>
                     <div className="text-[10px] text-slate-400">مانده {formatToman(e.balance)}</div>
                   </div>
@@ -792,6 +844,14 @@ export const SupplierAccountPage: React.FC = () => {
           accounts={company?.accounts}
           debt={data.summary.debt}
           onClose={() => setSheet(null)}
+          onSaved={setData}
+        />
+        <SupplierAdjustmentSheet
+          open={!!adjustSheet}
+          supplier={data.supplier}
+          adjustment={adjustSheet?.row ?? null}
+          debt={data.summary.debt}
+          onClose={() => setAdjustSheet(null)}
           onSaved={setData}
         />
       )}
