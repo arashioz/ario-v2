@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronDown, Clock, FileText, Hourglass, Info, TrendingUp } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronDown, Clock, Eye, EyeOff, FileText, Hourglass, Info, TrendingUp } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
 import type { CreditInvoiceRow, CreditReport } from '../services/accounting.service';
 import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/PeriodPicker';
@@ -198,6 +198,7 @@ export const CreditReportPage: React.FC = () => {
 
 const CreditCard: React.FC<{ inv: CreditInvoiceRow; onOpen: (id: string) => void }> = ({ inv, onOpen }) => {
   const [expanded, setExpanded] = useState(false);
+  const [showProfit, setShowProfit] = useState(false);
   const paidShare = inv.credit ? Math.min(100, (inv.paidLater / inv.credit) * 100) : 0;
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -242,21 +243,35 @@ const CreditCard: React.FC<{ inv: CreditInvoiceRow; onOpen: (id: string) => void
         <div className="mt-2.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
           <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${paidShare}%` }} />
         </div>
-        <div className="flex items-center justify-between mt-2 text-[10px] text-slate-500">
-          <span>
-            سود فاکتور <b className="font-mono text-slate-700">{formatToman(inv.profit)}</b> ({percent(inv.marginPercent)})
-          </span>
-          <ChevronDown className={`w-4 h-4 text-slate-300 transition ${expanded ? 'rotate-180' : ''}`} />
-        </div>
       </button>
+      <div className="flex items-center justify-between px-3 pb-3 -mt-1 text-[10px] text-slate-500">
+        <button
+          type="button"
+          onClick={() => setShowProfit((v) => !v)}
+          className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-500"
+          aria-pressed={showProfit}
+        >
+          {showProfit ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+          {showProfit ? (
+            <span>
+              سود فاکتور <b className="font-mono text-slate-700">{formatToman(inv.profit)}</b> ({percent(inv.marginPercent)})
+            </span>
+          ) : (
+            <span>سود فاکتور</span>
+          )}
+        </button>
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="p-1" aria-label="جزئیات فاکتور">
+          <ChevronDown className={`w-4 h-4 text-slate-300 transition ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
 
       {expanded && (
         <div className="px-3.5 pb-3.5 pt-3 border-t border-slate-100 space-y-2.5">
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <KV k="مبلغ فاکتور" v={formatToman(inv.amount)} />
             <KV k="پرداخت همان روز" v={formatToman(inv.upfront)} />
-            <KV k="سود به‌دست‌آمده" v={formatToman(inv.realizedProfit)} vClass="text-emerald-700" />
-            <KV k="سود در انتظار وصول" v={formatToman(inv.unrealizedProfit)} vClass="text-amber-700" />
+            <KV k="سود به‌دست‌آمده" v={showProfit ? formatToman(inv.realizedProfit) : '—'} vClass="text-emerald-700" />
+            <KV k="سود در انتظار وصول" v={showProfit ? formatToman(inv.unrealizedProfit) : '—'} vClass="text-amber-700" />
           </div>
 
           <div className="text-[11px] font-bold text-slate-600">روند پرداخت و سود</div>
@@ -268,7 +283,11 @@ const CreditCard: React.FC<{ inv: CreditInvoiceRow; onOpen: (id: string) => void
                 key={i}
                 color="bg-emerald-500"
                 title={`${jDate(p.date)} · ${METHOD[p.method ?? ''] ?? 'پرداخت'}`}
-                detail={`${formatToman(p.amount)} دریافت شد · سود محقق ${formatToman(p.profit)}`}
+                detail={
+                  showProfit
+                    ? `${formatToman(p.amount)} دریافت شد · سود محقق ${formatToman(p.profit)}`
+                    : `${formatToman(p.amount)} دریافت شد`
+                }
               />
             ))}
             {inv.remaining > 0 && (

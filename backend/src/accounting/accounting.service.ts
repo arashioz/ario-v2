@@ -288,18 +288,21 @@ export class AccountingService {
         // Current stock valued at the FIFO cost of the lots still on hand.
         const avgRemainingCost = r.fifoRemainingKg > 0 ? r.remainingValue / r.fifoRemainingKg : r.purchasedKg ? r.purchasedAmount / r.purchasedKg : 0;
         const profit = r.soldRevenue - r.soldCost;
-        const units = Math.max(0, r.stockUnits || 0);
         const expectedUnits = (r.purchasedUnits || 0) - (r.soldUnits || 0);
         const p = prices.get(r.productId);
         // On-hand weight is what the purchase lots still hold, not quantity × a catalog weight.
         const onHandKg = r.fifoRemainingKg;
+        // Sell-today value must cover this same weight. Pricing product.stock instead
+        // drops packages that are still in the lots, so purchase value looks higher than supermarket.
+        const wpu = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
+        const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits);
         return {
           ...r,
           expectedUnits: r1(expectedUnits),
           stockKg: r1(onHandKg),
           stockValue: r0(r.remainingValue || onHandKg * avgRemainingCost),
-          /** On-hand stock at today's sell price of each tier. */
-          currentValue: Object.fromEntries(PRICE_TIERS.map((t) => [t, r0(units * tierPrice(p, t))])) as Record<PriceTier, number>,
+          /** Same on-hand goods at today's sell price of each tier. */
+          currentValue: Object.fromEntries(PRICE_TIERS.map((t) => [t, r0(onHandUnits * tierPrice(p, t))])) as Record<PriceTier, number>,
           purchasedKg: r1(r.purchasedKg),
           purchasedAmount: r0(r.purchasedAmount),
           avgBuyPerKg: r.purchasedKg ? r0(r.purchasedAmount / r.purchasedKg) : 0,
@@ -320,7 +323,7 @@ export class AccountingService {
     const sum = (k: string) => items.reduce((s, i: any) => s + (i[k] || 0), 0);
     const soldProfit = sum('soldRevenue') - sum('soldCost');
     // Only positive stock carries value; cost of the same units so "profit if sold today" compares like with like.
-    const heldCost = items.reduce((s, i) => s + (i.stockUnits > 0 ? i.stockValue : 0), 0);
+    const heldCost = items.reduce((s, i) => s + ((i.stockKg || 0) > 0 ? i.stockValue : 0), 0);
     const currentValue = Object.fromEntries(
       PRICE_TIERS.map((t) => [t, r0(items.reduce((s, i) => s + i.currentValue[t], 0))]),
     ) as Record<PriceTier, number>;
