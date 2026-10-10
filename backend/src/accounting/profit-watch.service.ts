@@ -413,7 +413,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
           id: `estimated_cost:${id}`,
           detail:
             l.fulfillment === 'factory'
-              ? 'قیمت کارخانه این ردیف وارد نشده؛ سود از روی آخرین خرید مغازه تخمین زده شد'
+              ? 'قیمت کارخانه این ردیف وارد نشده؛ بهای تمام‌شده صفر حساب شده و از لیست قیمت کالا استفاده نشده'
               : `${fa(l.estimatedKg, 1)} کیلو از ${fa(l.kg, 1)} کیلو قبل از این فروش بار خرید ندارد. با قیمت خریدهای بعدی حساب نمی‌شود.`,
         });
       }

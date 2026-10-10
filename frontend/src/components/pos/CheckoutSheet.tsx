@@ -28,10 +28,6 @@ export interface FactoryLine {
   priceWholesale: number;
 }
 
-/** Wholesale markup the catalog already uses: (عمده − خرید) / خرید. */
-export const wholesaleMarkupPercent = (buy: number, wholesale: number) =>
-  buy > 0 && wholesale > buy ? Math.round(((wholesale - buy) / buy) * 1000) / 10 : 0;
-
 export interface CheckoutResult {
   customer: Customer | null;
   terms: PaymentTerms;
@@ -121,7 +117,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setBranch('');
     setFactoryCosts({});
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
-    setMargins(Object.fromEntries(factoryLines.map((l) => [l.productId, wholesaleMarkupPercent(l.buyPrice, l.priceWholesale)])));
+    setMargins({});
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
