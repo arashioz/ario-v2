@@ -37,6 +37,7 @@ export interface SupplierInvoiceRow {
   upfront: number;
   paid: number;
   remaining: number;
+  fulfillment?: 'shop' | 'factory';
   settledAt: string | null;
   ageDays: number;
   payments: { paymentId: string; date: string; amount: number }[];
@@ -148,6 +149,16 @@ export interface SupplierProfile {
 
 export type SupplierCompanyInput = Partial<Omit<SupplierCompany, '_id'>> & { name?: string };
 
+export interface SupplierStatement {
+  supplier: string;
+  from: string | null;
+  to: string | null;
+  opening: { debit: number; credit: number };
+  period: { debit: number; credit: number };
+  closing: { debit: number; credit: number };
+  products: { productId: string; name: string; unit: string; quantity: number; kg: number; amount: number; invoices: number }[];
+}
+
 export const PARENT_COMPANY = 'شرکت قند بلالی';
 
 /** "IR19 0120 …" / "6219 8619 …" for display. */
@@ -173,6 +184,11 @@ export const suppliersService = {
   async removeCompany(id: string): Promise<{ message: string }> {
     return (await api.delete(`/suppliers/companies/${id}`)).data;
   },
+  async statement(name: string | undefined, from?: string, to?: string): Promise<SupplierStatement> {
+    const res = await api.get('/suppliers/statement', { params: { name, from, to } });
+    return res.data;
+  },
+
   async account(name?: string): Promise<SupplierAccount> {
     return (await api.get('/suppliers/account', { params: { name } })).data;
   },

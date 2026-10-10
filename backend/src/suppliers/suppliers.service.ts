@@ -3,7 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import { SupplierPayment, SupplierPaymentDocument } from './schemas/supplier-payment.schema';
+import { SupplierAdjustment, SupplierAdjustmentDocument } from './schemas/supplier-adjustment.schema';
 import { CreateSupplierPaymentDto, UpdateSupplierPaymentDto } from './dto/supplier-payment.dto';
+import { CreateSupplierAdjustmentDto, UpdateSupplierAdjustmentDto } from './dto/supplier-adjustment.dto';
 import { canonicalSupplier, clean, PARENT_COMPANY, setRegisteredSuppliers } from './supplier-names';
 import { SupplierCompany, SupplierCompanyDocument } from './schemas/supplier-company.schema';
 import { CreateSupplierCompanyDto, SupplierBankAccountDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
@@ -53,6 +55,7 @@ export class SuppliersService implements OnApplicationBootstrap {
 
   constructor(
     @InjectModel(SupplierPayment.name) private paymentModel: Model<SupplierPaymentDocument>,
+    @InjectModel(SupplierAdjustment.name) private adjustmentModel: Model<SupplierAdjustmentDocument>,
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
     @InjectModel(SupplierCompany.name) private companyModel: Model<SupplierCompanyDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
@@ -158,12 +161,14 @@ export class SuppliersService implements OnApplicationBootstrap {
   async account(name?: string) {
     const { supplier, invoices, payments, open, allocationsByPayment } = await this.sync(name || PARENT_COMPANY);
 
+    const adjustments = await this.adjustmentModel.find({ supplier }).sort({ date: 1, createdAt: 1 }).exec();
     const purchasesTotal = invoices.reduce((s, i) => s + i.finalAmount, 0);
     const creditTotal = invoices.reduce((s, i) => s + Math.max(0, i.creditAmount || 0), 0);
     const paidOnSpot = purchasesTotal - creditTotal;
     const paymentsTotal = payments.reduce((s, p) => s + p.amount, 0);
+    const adjustmentsTotal = adjustments.reduce((s, a) => s + a.amount, 0);
     const allocated = open.reduce((s, o) => s + o.paid, 0);
-    const debt = creditTotal - paymentsTotal;
+    const debt = creditTotal - paymentsTotal + adjustmentsTotal;
 
     const group = (key: (p: SupplierPaymentDocument) => string) => {
       const m = new Map<string, { key: string; amount: number; count: number; lastDate: Date }>();
@@ -184,13 +189,22 @@ export class SuppliersService implements OnApplicationBootstrap {
     const events = [
       ...invoices
         .filter((i) => (i.creditAmount || 0) > 0)
-        .map((i) => ({ kind: 'purchase' as const, id: String(i._id), date: i.invoiceDate, order: +new Date(i.createdAt ?? i.invoiceDate), amount: i.creditAmount, label: i.invoiceNumber })),
-      ...payments.map((p) => ({ kind: 'payment' as const, id: String(p._id), date: p.date, order: +new Date(p.createdAt ?? p.date), amount: p.amount, label: p.destination || 'نامشخص' })),
+        .map((i) => ({ kind: 'purchase' as const, id: String(i._id), date: i.invoiceDate, order: +new Date(i.createdAt ?? i.invoiceDate), amount: i.creditAmount, increasesDebt: true, label: i.invoiceNumber })),
+      ...payments.map((p) => ({ kind: 'payment' as const, id: String(p._id), date: p.date, order: +new Date(p.createdAt ?? p.date), amount: p.amount, increasesDebt: false, label: p.destination || 'نامشخص' })),
+      ...adjustments.map((a) => ({
+        kind: 'adjustment' as const,
+        id: String(a._id),
+        date: a.date,
+        order: +new Date(a.createdAt ?? a.date),
+        amount: Math.abs(a.amount),
+        increasesDebt: a.amount > 0,
+        label: a.title,
+      })),
     ].sort((a, b) => +new Date(a.date) - +new Date(b.date) || (a.kind === b.kind ? a.order - b.order : a.kind === 'purchase' ? -1 : 1));
     let balance = 0;
     const timeline = events.map((e) => {
-      balance += e.kind === 'purchase' ? e.amount : -e.amount;
-      return { kind: e.kind, id: e.id, date: e.date, amount: r0(e.amount), label: e.label, balance: r0(balance) };
+      balance += e.increasesDebt ? e.amount : -e.amount;
+      return { kind: e.kind, id: e.id, date: e.date, amount: r0(e.amount), increasesDebt: e.increasesDebt, label: e.label, balance: r0(balance) };
     });
 
     return {
@@ -203,6 +217,8 @@ export class SuppliersService implements OnApplicationBootstrap {
         creditTotal: r0(creditTotal),
         paymentsTotal: r0(paymentsTotal),
         paymentsCount: payments.length,
+        adjustmentsTotal: r0(adjustmentsTotal),
+        adjustmentsCount: adjustments.length,
         totalPaid: r0(paidOnSpot + paymentsTotal),
         debt: r0(Math.max(0, debt)),
         prepaid: r0(Math.max(0, -debt)),
@@ -237,6 +253,7 @@ export class SuppliersService implements OnApplicationBootstrap {
             notes: p.notes,
             rawSupplier: p.rawSupplier,
             legacy: !!p.legacyId,
+            externalRef: p.externalRef || '',
             allocations: allocs.map((a) => ({ invoiceId: String(a.invoiceId), invoiceNumber: a.invoiceNumber, amount: a.amount })),
             unallocated: r0(p.amount - allocs.reduce((s, a) => s + a.amount, 0)),
             createdAt: p.createdAt,
@@ -254,13 +271,115 @@ export class SuppliersService implements OnApplicationBootstrap {
           upfront: r0(Math.max(0, o.inv.finalAmount - (o.inv.creditAmount || 0))),
           paid: r0(o.paid),
           remaining: r0(o.left),
+          fulfillment: o.inv.fulfillment === 'factory' ? 'factory' : 'shop',
           settledAt: o.settledAt,
           ageDays: Math.floor((Date.now() - +new Date(o.inv.invoiceDate)) / 86400000),
           payments: o.pays.map((x) => ({ ...x, amount: r0(x.amount) })),
         }))
         .reverse(),
+      adjustments: adjustments
+        .map((a) => ({
+          _id: String(a._id),
+          date: a.date,
+          amount: a.amount,
+          kind: a.kind,
+          externalRef: a.externalRef || '',
+          title: a.title,
+          notes: a.notes || '',
+          relatedInvoiceNumber: a.relatedInvoiceNumber || '',
+          createdAt: a.createdAt,
+        }))
+        .reverse(),
       timeline: timeline.reverse(),
       destinations: [...new Set(payments.map((p) => p.destination).filter(Boolean))],
+    };
+  }
+
+  /**
+   * دفتر معین تأمین‌کننده.
+   * خرید نسیه بستانکار است (بدهی ما زیاد می‌شود) و پرداخت بدهکار است (بدهی کم می‌شود).
+   * ماندهٔ مثبت بستانکار است؛ ماندهٔ منفی بدهکار (پیش‌پرداخت).
+   */
+  async statement(name: string | undefined, from?: string, to?: string) {
+    const supplier = canonicalSupplier(name || PARENT_COMPANY);
+    const [{ invoices, payments }, adjustments] = await Promise.all([
+      this.sync(supplier),
+      this.adjustmentModel.find({ supplier }).exec(),
+    ]);
+    const keyOf = (d: Date | string) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+    const start = (from || '').slice(0, 10);
+    const end = (to || '').slice(0, 10);
+    const side = (signed: number) => (signed >= 0 ? { credit: r0(signed), debit: 0 } : { credit: 0, debit: r0(-signed) });
+    const before = (day: string) => !!start && day < start;
+    const inside = (day: string) => (!start || day >= start) && (!end || day <= end);
+
+    let opening = 0;
+    let periodCredit = 0;
+    let periodDebit = 0;
+    for (const inv of invoices) {
+      const day = keyOf(inv.invoiceDate);
+      const credit = Math.max(0, inv.creditAmount || 0);
+      if (before(day)) opening += credit;
+      else if (inside(day)) periodCredit += credit;
+    }
+    for (const p of payments) {
+      const day = keyOf(p.date);
+      if (before(day)) opening -= p.amount;
+      else if (inside(day)) periodDebit += p.amount;
+    }
+    for (const a of adjustments) {
+      const day = keyOf(a.date);
+      if (before(day)) opening += a.amount;
+      else if (inside(day)) {
+        if (a.amount >= 0) periodCredit += a.amount;
+        else periodDebit += -a.amount;
+      }
+    }
+    const closing = opening + periodCredit - periodDebit;
+
+    const docs = await this.invoiceModel
+      .find({ type: 'purchase' })
+      .select('invoiceDate customerName fulfillment items')
+      .lean();
+    const products = new Map<string, { productId: string; name: string; unit: string; quantity: number; kg: number; amount: number; invoices: number }>();
+    for (const inv of docs) {
+      if (canonicalSupplier(inv.customerName) !== supplier) continue;
+      if (!inside(keyOf(inv.invoiceDate))) continue;
+      const seen = new Set<string>();
+      for (const it of inv.items || []) {
+        const id = String(it.productId || it.productName || '');
+        if (!id) continue;
+        const row = products.get(id) ?? {
+          productId: id,
+          name: it.productName,
+          unit: it.unit || '',
+          quantity: 0,
+          kg: 0,
+          amount: 0,
+          invoices: 0,
+        };
+        row.quantity += it.quantity || 0;
+        row.kg += it.weightKg || 0;
+        row.amount += it.totalPrice || 0;
+        if (!seen.has(id)) {
+          row.invoices++;
+          seen.add(id);
+        }
+        products.set(id, row);
+      }
+    }
+
+    return {
+      supplier,
+      from: start || null,
+      to: end || null,
+      opening: side(opening),
+      period: { credit: r0(periodCredit), debit: r0(periodDebit) },
+      closing: side(closing),
+      products: [...products.values()]
+        .map((p) => ({ ...p, quantity: Math.round(p.quantity * 1000) / 1000, kg: Math.round(p.kg * 10) / 10, amount: r0(p.amount) }))
+        .sort((a, b) => b.amount - a.amount),
     };
   }
 
@@ -298,6 +417,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     const names = new Set<string>([PARENT_COMPANY, ...companies.map((c) => c.name)]);
     for (const n of await this.invoiceModel.distinct('customerName', { type: 'purchase' })) names.add(canonicalSupplier(n));
     for (const n of await this.paymentModel.distinct('supplier')) names.add(canonicalSupplier(n));
+    for (const n of await this.adjustmentModel.distinct('supplier')) names.add(canonicalSupplier(n));
 
     const out: any[] = [];
     for (const name of names) {
@@ -421,6 +541,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     if (company.name !== oldName) {
       await this.invoiceModel.updateMany({ type: 'purchase', customerName: oldName }, { $set: { customerName: company.name } }, { timestamps: false });
       await this.paymentModel.updateMany({ supplier: oldName }, { $set: { supplier: company.name } });
+      await this.adjustmentModel.updateMany({ supplier: oldName }, { $set: { supplier: company.name } });
       await this.productModel.updateMany({ supplierName: oldName }, { $set: { supplierName: company.name } });
       await this.refreshRegistered();
       await this.sync(company.name);
@@ -435,7 +556,8 @@ export class SuppliersService implements OnApplicationBootstrap {
     if (company.name === PARENT_COMPANY) throw new BadRequestException('شرکت مادر قابل حذف نیست');
     const used =
       (await this.invoiceModel.exists({ type: 'purchase', customerName: company.name })) ||
-      (await this.paymentModel.exists({ supplier: company.name }));
+      (await this.paymentModel.exists({ supplier: company.name })) ||
+      (await this.adjustmentModel.exists({ supplier: company.name }));
     if (used) throw new BadRequestException('این شرکت فاکتور یا پرداخت دارد؛ به‌جای حذف، غیرفعالش کنید');
     await company.deleteOne();
     await this.productModel.updateMany({ supplierName: company.name }, { $set: { supplierName: '' } });
@@ -453,6 +575,7 @@ export class SuppliersService implements OnApplicationBootstrap {
       destination: dto.destination?.trim() || '',
       destinationAccount: dto.destinationAccount?.trim() || '',
       notes: dto.notes?.trim() || '',
+      ...(dto.externalRef?.trim() ? { externalRef: dto.externalRef.trim() } : {}),
       createdByName: recordedByName,
     });
     return this.account(supplier);
@@ -477,6 +600,59 @@ export class SuppliersService implements OnApplicationBootstrap {
     const p = await this.findPayment(id);
     await p.deleteOne();
     return this.account(p.supplier);
+  }
+
+  async createAdjustment(dto: CreateSupplierAdjustmentDto, recordedByName: string) {
+    if (!dto.amount) throw new BadRequestException('مبلغ تعدیل نمی‌تواند صفر باشد');
+    const supplier = canonicalSupplier(dto.supplier || PARENT_COMPANY);
+    const externalRef = dto.externalRef?.trim() || '';
+    if (externalRef) {
+      const existing = await this.adjustmentModel.findOne({ externalRef }).exec();
+      if (existing) return this.account(existing.supplier);
+    }
+    await this.adjustmentModel.create({
+      supplier,
+      date: new Date(dto.date),
+      amount: r0(dto.amount),
+      kind: dto.kind || 'reconcile',
+      ...(externalRef ? { externalRef } : {}),
+      title: dto.title.trim(),
+      notes: dto.notes?.trim() || '',
+      relatedInvoiceNumber: dto.relatedInvoiceNumber?.trim() || '',
+      createdByName: recordedByName,
+    });
+    return this.account(supplier);
+  }
+
+  async updateAdjustment(id: string, dto: UpdateSupplierAdjustmentDto) {
+    const row = await this.findAdjustment(id);
+    const previous = row.supplier;
+    if (dto.supplier) row.supplier = canonicalSupplier(dto.supplier);
+    if (dto.date) row.date = new Date(dto.date);
+    if (dto.amount !== undefined) {
+      if (!dto.amount) throw new BadRequestException('مبلغ تعدیل نمی‌تواند صفر باشد');
+      row.amount = r0(dto.amount);
+    }
+    if (dto.kind) row.kind = dto.kind;
+    if (dto.title !== undefined) row.title = dto.title.trim();
+    if (dto.notes !== undefined) row.notes = dto.notes.trim();
+    if (dto.relatedInvoiceNumber !== undefined) row.relatedInvoiceNumber = dto.relatedInvoiceNumber.trim();
+    await row.save();
+    if (previous !== row.supplier) await this.sync(previous);
+    return this.account(row.supplier);
+  }
+
+  async removeAdjustment(id: string) {
+    const row = await this.findAdjustment(id);
+    await row.deleteOne();
+    return this.account(row.supplier);
+  }
+
+  private async findAdjustment(id: string) {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('تعدیل یافت نشد');
+    const row = await this.adjustmentModel.findById(id).exec();
+    if (!row) throw new NotFoundException('تعدیل یافت نشد');
+    return row;
   }
 
   private async findPayment(id: string) {

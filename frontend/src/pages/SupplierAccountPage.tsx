@@ -20,10 +20,8 @@ import {
   Truck,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { accountingService } from '../services/accounting.service';
-import type { ProfitReport } from '../services/accounting.service';
 import { suppliersService, SUPPLIER_METHOD_LABELS, formatAccountNumber } from '../services/suppliers.service';
-import type { SupplierAccount, SupplierListItem, SupplierPaymentRow, SupplierProfile } from '../services/suppliers.service';
+import type { SupplierAccount, SupplierListItem, SupplierPaymentRow, SupplierProfile, SupplierStatement } from '../services/suppliers.service';
 import { CompanySheet } from '../components/suppliers/CompanySheet';
 import { useNotification } from '../context/NotificationContext';
 import { Empty, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
@@ -31,6 +29,8 @@ import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
 import { SupplierPaymentSheet } from '../components/suppliers/SupplierPaymentSheet';
 import Toman from '../components/ui/Toman';
 import { dateToYmd, formatJalali, ymdToJalali, JALALI_MONTHS, faNum } from '../lib/jalali';
+import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
+import type { Period } from '../components/ui/PeriodPicker';
 import { formatToman, num, percent, toman, tons } from '../lib/format';
 
 type View = 'payments' | 'invoices' | 'products' | 'month' | 'ledger';
@@ -43,8 +43,10 @@ export const SupplierAccountPage: React.FC = () => {
   const { showNotification } = useNotification();
   const name = params.get('name') || undefined;
   const [data, setData] = useState<SupplierAccount | null>(null);
-  const [profit, setProfit] = useState<ProfitReport | null>(null);
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
+  const [channel, setChannel] = useState<'all' | 'shop' | 'factory'>('all');
+  const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
+  const [statement, setStatement] = useState<SupplierStatement | null>(null);
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('payments');
   const [sheet, setSheet] = useState<{ payment: SupplierPaymentRow | null } | null>(null);
@@ -65,8 +67,6 @@ export const SupplierAccountPage: React.FC = () => {
       const p = await suppliersService.profile(name);
       setProfile(p);
       setData(p.account);
-      if (p.isParent) setProfit(await accountingService.profit({}).catch(() => null));
-      else setProfit(null);
       if (p.isParent) setOthers((await suppliersService.list()).filter((c) => !c.isParent));
     } catch {
       setError('دریافت حساب شرکت ناموفق بود');
@@ -139,6 +139,21 @@ export const SupplierAccountPage: React.FC = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    suppliersService
+      .statement(name, period.from, period.to)
+      .then((s) => {
+        if (alive) setStatement(s);
+      })
+      .catch(() => {
+        if (alive) setStatement(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [name, period]);
 
   const { open: openInvoice, modal } = useInvoiceOpener(load);
 
@@ -241,24 +256,7 @@ export const SupplierAccountPage: React.FC = () => {
             </div>
           </div>
 
-          {profile?.isParent && profit?.channels && (
-            <div className="grid grid-cols-3 gap-2">
-              {(
-                [
-                  ['جمع سود', profit.channels.shop.profit + profit.channels.factory.profit, profit.channels.shop.revenue + profit.channels.factory.revenue, 'bg-emerald-50 border-emerald-100 text-emerald-950'],
-                  ['سود دفتر', profit.channels.shop.profit, profit.channels.shop.revenue, 'bg-sky-50 border-sky-100 text-sky-950'],
-                  ['سود کارخانه', profit.channels.factory.profit, profit.channels.factory.revenue, 'bg-amber-50 border-amber-100 text-amber-950'],
-                ] as const
-              ).map(([label, value, revenue, tone]) => (
-                <div key={label} className={`rounded-2xl border p-2.5 ${tone}`}>
-                  <div className="text-[11px] font-bold">{label}</div>
-                  <div className="text-[13px] font-bold font-mono mt-1">{formatToman(value)}</div>
-                  <div className="text-[10px] mt-0.5 opacity-80">فروش {formatToman(revenue)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {profile?.isParent && data?.purchaseChannels && (
+          {data?.purchaseChannels && (
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
@@ -501,7 +499,27 @@ export const SupplierAccountPage: React.FC = () => {
             </div>
           ) : view === 'invoices' ? (
             <div className="space-y-2.5">
-              {data.invoices.map((i) => {
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    ['all', 'همه'],
+                    ['shop', 'رسیده به دفتر'],
+                    ['factory', 'از کارخانه'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setChannel(id)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border ${channel === id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {data.invoices
+                .filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel)
+                .map((i) => {
                 const share = i.credit ? Math.min(100, (i.paid / i.credit) * 100) : 100;
                 return (
                   <button key={i.invoiceId} onClick={() => openInvoice(i.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
@@ -512,7 +530,7 @@ export const SupplierAccountPage: React.FC = () => {
                           <span className="font-mono">{i.invoiceNumber}</span>
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {jDate(i.date)} · {num(i.kg)} کیلو · <Toman value={i.amount} />
+                          {jDate(i.date)} · {i.fulfillment === 'factory' ? 'کارخانه' : 'دفتر'} · {num(i.kg)} کیلو · <Toman value={i.amount} />
                         </div>
                       </div>
                       {i.remaining > 0 ? (
@@ -669,8 +687,70 @@ export const SupplierAccountPage: React.FC = () => {
               )}
             </div>
           ) : (
+            <div className="space-y-2.5">
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">دفتر معین</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">خرید نسیه بستانکار است و پرداخت بدهکار</div>
+                  </div>
+                  <PeriodPicker value={period} onChange={setPeriod} />
+                </div>
+                {statement && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          ['مانده تا قبل از بازه', statement.opening],
+                          ['گردش بازه', statement.period],
+                          ['مانده تا پایان بازه', statement.closing],
+                        ] as const
+                      ).map(([label, side]) => (
+                        <div key={label} className={`rounded-xl border p-2.5 ${label === 'گردش بازه' ? 'col-span-2' : ''} border-slate-100 bg-slate-50`}>
+                          <div className="text-[10px] text-slate-500">{label}</div>
+                          {label === 'گردش بازه' ? (
+                            <div className="flex justify-between mt-1 text-[12px] font-bold">
+                              <span className="text-rose-700">بستانکار {formatToman(side.credit)}</span>
+                              <span className="text-emerald-700">بدهکار {formatToman(side.debit)}</span>
+                            </div>
+                          ) : (
+                            <div className={`text-[12px] font-bold mt-1 ${side.credit > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                              {side.credit > 0 ? `بستانکار ${formatToman(side.credit)}` : side.debit > 0 ? `بدهکار ${formatToman(side.debit)}` : 'تسویه'}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-bold text-slate-700">کالاهای خریداری‌شده در همین بازه</div>
+                      {statement.products.length === 0 ? (
+                        <p className="text-[11px] text-slate-400">در این بازه خریدی از این شرکت نیست.</p>
+                      ) : (
+                        statement.products.map((p) => (
+                          <div key={p.productId} className="flex items-center justify-between gap-2 py-1.5 border-t border-slate-100">
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-bold text-slate-800 truncate">{p.name}</div>
+                              <div className="text-[10px] text-slate-400">
+                                {num(p.quantity)} {p.unit || 'عدد'} · {num(p.kg)} کیلو · {num(p.invoices)} فاکتور
+                              </div>
+                            </div>
+                            <div className="text-[11px] font-bold text-slate-800 shrink-0">{formatToman(p.amount)}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
-              {data.timeline.map((e) => (
+              {data.timeline
+                .filter((e) => {
+                  const day = dateToYmd(new Date(e.date));
+                  if (period.from && day < period.from) return false;
+                  if (period.to && day > period.to) return false;
+                  return true;
+                })
+                .map((e) => (
                 <button
                   key={`${e.kind}-${e.id}`}
                   onClick={() => (e.kind === 'purchase' ? openInvoice(e.id) : setSheet({ payment: data.payments.find((p) => p._id === e.id) ?? null }))}
@@ -696,6 +776,7 @@ export const SupplierAccountPage: React.FC = () => {
                   </div>
                 </button>
               ))}
+            </div>
             </div>
           )}
         </div>

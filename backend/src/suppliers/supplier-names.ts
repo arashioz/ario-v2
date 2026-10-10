@@ -23,6 +23,7 @@ export function setRegisteredSuppliers(names: string[]) {
 export function canonicalSupplier(name: string | null | undefined): string {
   const s = clean(name ?? '');
   if (registered.has(s)) return s;
-  if (!s || s === 'شرکت' || s.startsWith('شرکت ') || s.includes('بلالی')) return PARENT_COMPANY;
+  // Only the parent company's own aliases. Other names that merely start with «شرکت» stay their own account.
+  if (!s || s === 'شرکت' || s.startsWith('شرکت بنام') || s.startsWith('شرکت به نام') || s.includes('بلالی')) return PARENT_COMPANY;
   return s;
 }

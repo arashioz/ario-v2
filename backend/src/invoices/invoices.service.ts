@@ -325,7 +325,8 @@ export class InvoicesService {
     if (!sale || sale.type !== 'sale') return;
     sale.items.forEach((it, i) => {
       const src = purchase.items[i];
-      if (src && String(src.productId) === String(it.productId)) {
+      // A later edit of the company purchase must not replace the price that was frozen on the sale.
+      if (src && String(src.productId) === String(it.productId) && !(Number(it.factoryUnitCost) > 0)) {
         it.factoryUnitCost = Math.max(0, Math.round(src.unitPrice || 0));
       }
     });

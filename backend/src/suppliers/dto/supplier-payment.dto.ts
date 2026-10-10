@@ -29,6 +29,10 @@ export class CreateSupplierPaymentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  externalRef?: string;
 }
 
 export class UpdateSupplierPaymentDto {

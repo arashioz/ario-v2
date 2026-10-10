@@ -512,7 +512,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
               </div>
             )}
 
-            {/* Price and Add button */}
+            {/* Price and Add button. Package price and kilo price stay in step with the weight of one package. */}
             <div className="grid grid-cols-2 gap-2 pt-1">
               <div>
                 <label className="text-[11px] font-medium text-slate-600 mb-1 block">
@@ -524,8 +524,18 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                   className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold focus:outline-none focus:border-emerald-500"
                 />
               </div>
+              {Number(itemRatio) > 1 && (
+                <div>
+                  <label className="text-[11px] font-medium text-slate-600 mb-1 block">قیمت هر کیلو (تومان)</label>
+                  <MoneyTextInput
+                    value={String(Math.round((Number(itemBuyPrice) || 0) / (Number(itemRatio) || 1)))}
+                    onChange={(raw) => setItemBuyPrice(String(Math.round((Number(raw) || 0) * (Number(itemRatio) || 1))))}
+                    className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              )}
 
-              <div className="flex items-end">
+              <div className={`flex items-end ${Number(itemRatio) > 1 ? 'col-span-2' : ''}`}>
                 <button
                   type="button"
                   onClick={handleAddItem}

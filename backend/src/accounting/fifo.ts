@@ -216,14 +216,6 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
    */
   const priceThen = (pid: string) => lastCost.get(pid) ?? 0;
 
-  // Company purchase raised for a direct shipment. Its line price is the factory field.
-  const factoryPurchaseBySale = new Map<string, FifoInvoice>();
-  for (const inv of sorted) {
-    if (inv.type === 'purchase' && inv.fulfillment === 'factory' && inv.factorySaleId) {
-      factoryPurchaseBySale.set(String(inv.factorySaleId), inv);
-    }
-  }
-
   for (const inv of sorted) {
     const id = String(inv._id);
     if (inv.type === 'purchase') {
@@ -290,18 +282,10 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       const kg = lineKg(it, products.get(pid));
       const revenue = (it.totalPrice || 0) * discountFactor;
 
-      // Shipped from the factory: cost is only the factory price that was typed.
-      // The product catalog (buyPrice / list) is never a stand-in, even when this field is empty.
+      // Shipped from the factory: cost is the factory price saved on the sale that day.
+      // A later rise in the price list, or a purchase edited afterwards, must not turn that sale into a loss.
       if (inv.fulfillment === 'factory') {
-        const purchase = factoryPurchaseBySale.get(id);
-        const purchaseLine = purchase?.items.find((p) => String(p.productId) === String(pid));
-        const purchaseUnit = Math.round(Number(purchaseLine?.unitPrice) || 0);
-        const typed = Math.round(Number(it.factoryUnitCost) || 0);
-        const purchaseNewer =
-          !!purchase &&
-          new Date(purchase.updatedAt || purchase.createdAt || 0).getTime() >=
-            new Date(inv.updatedAt || inv.createdAt || 0).getTime();
-        const factoryUnit = purchaseUnit > 0 && (purchaseNewer || typed <= 0) ? purchaseUnit : typed;
+        const factoryUnit = Math.round(Number(it.factoryUnitCost) || 0);
         const cost = factoryUnit * (it.quantity || 0);
         const estimatedKg = factoryUnit > 0 ? 0 : kg;
         if (estimatedKg > 0) ip.estimated = true;

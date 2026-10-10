@@ -21,6 +21,12 @@ export class SuppliersController {
     return this.suppliers.account(name);
   }
 
+  /** دفتر معین: مانده تا قبل از بازه، گردش بدهکار و بستانکار، و خرید هر کالا در همان بازه. */
+  @Get('statement')
+  statement(@Query('name') name?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.suppliers.statement(name, from, to);
+  }
+
   @Get('profile')
   profile(@Query('name') name?: string): Promise<Record<string, any>> {
     return this.suppliers.profile(name);

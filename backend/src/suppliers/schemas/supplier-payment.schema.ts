@@ -48,6 +48,10 @@ export class SupplierPayment {
   @Prop({ trim: true, default: '' })
   rawSupplier: string;
 
+  /** Stable key so an import can be run twice without a second payment. */
+  @Prop({ trim: true, unique: true, sparse: true })
+  externalRef?: string;
+
   @Prop({ index: true, sparse: true })
   legacyId?: string;
 
