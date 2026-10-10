@@ -38,7 +38,8 @@ export const PosTab: React.FC = () => {
   const [dateOpen, setDateOpen] = useState(false);
 
   const [lines, setLines] = useState<CartLine[]>([]);
-  const fromFactory = false;
+  const [shipFrom, setShipFrom] = useState<'shop' | 'factory'>('shop');
+  const fromFactory = shipFrom === 'factory' && !!settings.factorySalesEnabled;
   const [editing, setEditing] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
@@ -297,6 +298,17 @@ export const PosTab: React.FC = () => {
                   }`}
                 >
                   خودکار
+                </button>
+              )}
+              {settings.factorySalesEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setShipFrom((v) => (v === 'factory' ? 'shop' : 'factory'))}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border active:scale-95 ${
+                    fromFactory ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200'
+                  }`}
+                >
+                  کارخانه
                 </button>
               )}
             </div>

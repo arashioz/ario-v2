@@ -110,12 +110,19 @@ export const SupplierAdjustmentSheet: React.FC<Props> = ({ open, supplier, adjus
       footer={
         <div className="flex gap-2">
           {adjustment && (
-            <button type="button" onClick={remove} disabled={saving} className="px-3 py-3 rounded-2xl border border-rose-200 text-rose-600 text-xs font-bold">
+            <button
+              type="button"
+              onClick={remove}
+              disabled={saving}
+              className={`px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1 ${confirmDelete ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600'}`}
+            >
               <Trash2 className="w-4 h-4" />
+              {confirmDelete ? 'حذف شود؟' : 'حذف تعدیل'}
             </button>
           )}
-          <button type="button" onClick={save} disabled={saving} className="flex-1 py-3 rounded-2xl bg-amber-600 text-white text-sm font-bold disabled:opacity-50">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : confirmDelete ? 'برای حذف تعدیل دوباره بزنید' : adjustment ? 'ذخیره تعدیل' : 'ثبت تعدیل'}
+          <button type="button" onClick={save} disabled={saving} className="flex-1 py-2.5 rounded-2xl bg-amber-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {adjustment ? 'ذخیره تعدیل' : 'ثبت تعدیل'}
           </button>
         </div>
       }

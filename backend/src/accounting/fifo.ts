@@ -216,6 +216,30 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
    */
   const priceThen = (pid: string) => lastCost.get(pid) ?? 0;
 
+  // Shop purchase price of each product, in invoice order. Factory shipments are not a price list.
+  const unitBuys = new Map<string, { day: string; unitPrice: number }[]>();
+  for (const inv of sorted) {
+    if (inv.type !== 'purchase' || inv.fulfillment === 'factory') continue;
+    const day = dayKey(inv.invoiceDate);
+    for (const it of inv.items || []) {
+      const unitPrice = Math.round(Number(it.unitPrice) || 0);
+      if (unitPrice <= 0 || it.received === false) continue;
+      const rows = unitBuys.get(it.productId) ?? [];
+      rows.push({ day, unitPrice });
+      unitBuys.set(it.productId, rows);
+    }
+  }
+  const unitOnOrBefore = (pid: string, day: string) => {
+    let price = 0;
+    for (const row of unitBuys.get(pid) ?? []) {
+      if (row.day > day) break;
+      price = row.unitPrice;
+    }
+    return price;
+  };
+  const matchesLaterPurchase = (pid: string, day: string, typed: number) =>
+    typed > 0 && (unitBuys.get(pid) ?? []).some((row) => row.day > day && row.unitPrice === typed);
+
   for (const inv of sorted) {
     const id = String(inv._id);
     if (inv.type === 'purchase') {
@@ -282,10 +306,13 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       const kg = lineKg(it, products.get(pid));
       const revenue = (it.totalPrice || 0) * discountFactor;
 
-      // Shipped from the factory: cost is the factory price saved on the sale that day.
-      // A later rise in the price list, or a purchase edited afterwards, must not turn that sale into a loss.
+      // Shipped from the factory. A price typed for that sale stands.
+      // If that saved price is actually a shop purchase from a later day, use the purchase price on the sale date.
       if (inv.fulfillment === 'factory') {
-        const factoryUnit = Math.round(Number(it.factoryUnitCost) || 0);
+        const saleDay = dayKey(inv.invoiceDate);
+        const typed = Math.round(Number(it.factoryUnitCost) || 0);
+        const historical = unitOnOrBefore(pid, saleDay);
+        const factoryUnit = typed > 0 && !matchesLaterPurchase(pid, saleDay, typed) ? typed : historical || typed;
         const cost = factoryUnit * (it.quantity || 0);
         const estimatedKg = factoryUnit > 0 ? 0 : kg;
         if (estimatedKg > 0) ip.estimated = true;

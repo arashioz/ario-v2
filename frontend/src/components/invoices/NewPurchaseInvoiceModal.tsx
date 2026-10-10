@@ -249,6 +249,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
         finalAmount,
         totalWeightKg,
         paymentMethod,
+        fulfillment: 'shop' as const,
         notes: notes.trim(),
         shippingPayer: freightNum > 0 ? ('me' as const) : ('none' as const),
         shippingCost: freightNum,

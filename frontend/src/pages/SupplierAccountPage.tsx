@@ -836,6 +836,7 @@ export const SupplierAccountPage: React.FC = () => {
       </IonContent>
 
       {data && (
+        <>
         <SupplierPaymentSheet
           open={!!sheet}
           supplier={data.supplier}
@@ -854,6 +855,7 @@ export const SupplierAccountPage: React.FC = () => {
           onClose={() => setAdjustSheet(null)}
           onSaved={setData}
         />
+        </>
       )}
       <CompanySheet
         open={newCompany}
