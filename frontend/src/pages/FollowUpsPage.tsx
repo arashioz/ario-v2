@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { followUpsService, REASON_LABELS, RESULT_LABELS } from '../services/followups.service';
 import type { DueResponse, DueReason, FollowUpLog } from '../services/followups.service';
 import { DueRow } from '../components/followups/DueRow';
+import { CustomerSegments } from '../components/followups/CustomerSegments';
 import { FollowUpSheet } from '../components/followups/FollowUpSheet';
 import type { FollowUpTarget } from '../components/followups/FollowUpSheet';
 import { formatToman } from '../lib/format';
@@ -14,7 +15,7 @@ type Filter = 'all' | DueReason;
 
 export const FollowUpsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [view, setView] = useState<'due' | 'log'>('due');
+  const [view, setView] = useState<'segments' | 'due' | 'log'>('segments');
   const [filter, setFilter] = useState<Filter>('all');
   const [due, setDue] = useState<DueResponse | null>(null);
   const [logs, setLogs] = useState<FollowUpLog[]>([]);
@@ -51,7 +52,7 @@ export const FollowUpsPage: React.FC = () => {
             </button>
             <div>
               <h1 className="text-sm font-bold text-slate-800">پیگیری مشتریان</h1>
-              <p className="text-[10px] text-slate-400">لیست تماس خودکار بر اساس بدهی، قول پرداخت و خرید اخیر</p>
+              <p className="text-[10px] text-slate-400">دسته‌بندی مشتری و ارسال لیست قیمت</p>
             </div>
           </div>
         </IonToolbar>
@@ -63,10 +64,11 @@ export const FollowUpsPage: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3 space-y-3 max-w-md mx-auto pb-8">
-          <div className="grid grid-cols-2 p-1 bg-slate-200/70 rounded-2xl">
+          <div className="grid grid-cols-3 p-1 bg-slate-200/70 rounded-2xl">
             {([
-              ['due', `منتظر تماس (${(due?.counts.total ?? 0).toLocaleString('fa-IR')})`],
-              ['log', 'تماس‌های ثبت‌شده'],
+              ['segments', 'دسته‌ها'],
+              ['due', `تماس (${(due?.counts.total ?? 0).toLocaleString('fa-IR')})`],
+              ['log', 'ثبت‌شده'],
             ] as const).map(([k, label]) => (
               <button
                 key={k}
@@ -78,7 +80,9 @@ export const FollowUpsPage: React.FC = () => {
             ))}
           </div>
 
-          {view === 'due' ? (
+          {view === 'segments' ? (
+            <CustomerSegments />
+          ) : view === 'due' ? (
             <>
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
                 {filters.map((f) => (

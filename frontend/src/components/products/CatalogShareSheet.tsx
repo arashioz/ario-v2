@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Copy, ExternalLink, Share2 } from 'lucide-react';
+import { Copy, ExternalLink, MessageSquare, Share2 } from 'lucide-react';
 import { Sheet } from '../ui/Sheet';
+import { productsService } from '../../services/products.service';
 import type { CatalogTier } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
+import { catalogLinkSms, openSms, priceListSms } from '../../lib/sms';
+import { useSettings } from '../../services/settings.service';
 
 const TIERS: { key: CatalogTier; label: string; hint: string }[] = [
   { key: 'retail', label: 'مصرف‌کننده (تکی)', hint: 'برای مشتری‌های عادی' },
@@ -17,6 +20,7 @@ export const catalogUrl = (tier: CatalogTier) =>
 export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
   const [tier, setTier] = useState<CatalogTier>('retail');
   const { showNotification } = useNotification();
+  const settings = useSettings();
   const url = catalogUrl(tier);
 
   const copy = async () => {
@@ -27,6 +31,17 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
   const share = async () => {
     if (navigator.share) await navigator.share({ title: 'کاتالوگ محصولات', url }).catch(() => undefined);
     else await copy();
+  };
+
+  const smsLink = () => openSms(undefined, catalogLinkSms(settings.shopName, tier, url));
+
+  const smsList = async () => {
+    const catalog = await productsService.getCatalog(tier).catch(() => null);
+    if (!catalog) {
+      showNotification({ title: 'لیست قیمت', message: 'کاتالوگ دریافت نشد.', type: 'error' });
+      return;
+    }
+    await openSms(undefined, priceListSms(catalog.shopName, tier, url, catalog.products));
   };
 
   return (
@@ -52,6 +67,25 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
 
       <div className="bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-[11px] font-mono text-slate-600 break-all" dir="ltr">
         {url}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={smsLink}
+          className="flex items-center justify-center gap-1.5 py-3 rounded-2xl bg-emerald-600 text-white text-[11px] font-bold active:scale-95"
+        >
+          <MessageSquare className="w-4 h-4" />
+          پیامک لینک
+        </button>
+        <button
+          type="button"
+          onClick={() => void smsList()}
+          className="flex items-center justify-center gap-1.5 py-3 rounded-2xl bg-emerald-50 text-emerald-800 text-[11px] font-bold active:scale-95"
+        >
+          <MessageSquare className="w-4 h-4" />
+          پیامک متن قیمت
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

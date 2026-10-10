@@ -3,7 +3,7 @@ import { Ban, Check, Share2, Truck } from 'lucide-react';
 import { Sheet } from '../ui/Sheet';
 import { customersService } from '../../services/customers.service';
 import { proformasService, PROFORMA_STATUS_LABELS, type Proforma } from '../../services/proformas.service';
-import { apiErrorMessage, invoicesService, SHIPPING_PAYER_LABELS, type Invoice } from '../../services/invoices.service';
+import { apiErrorMessage, SHIPPING_PAYER_LABELS, type Invoice } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
 import { formatJalaliIso as formatJalali } from '../../lib/jalali';
@@ -207,27 +207,7 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
       {pending && factoryOn && (
         <button
           type="button"
-          onClick={() => {
-            if (!settings.factorySalesEnabled) return;
-            if (fromFactory) {
-              setFromFactory(false);
-              return;
-            }
-            setFromFactory(true);
-            if (!proforma) return;
-            void invoicesService.lastPurchasePrices(proforma.items.map((i) => i.productId)).then((last) => {
-              setPrices((prev) => {
-                const next = { ...prev };
-                for (const item of proforma.items) {
-                  const current = next[item.productId]?.cost || 0;
-                  const price = Math.round(last[item.productId] || 0);
-                  if (current > 0 || price <= 0) continue;
-                  next[item.productId] = { unit: next[item.productId]?.unit ?? item.unitPrice, cost: price };
-                }
-                return next;
-              });
-            });
-          }}
+          onClick={() => settings.factorySalesEnabled && setFromFactory((v) => !v)}
           className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromFactory ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
         >
           <span className="text-xs font-bold text-slate-800">ارسال از کارخانه</span>
@@ -238,7 +218,7 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
       )}
       {pending && fromFactory && (
         <p className="text-[10px] text-amber-800 leading-5 -mt-2">
-          با ارسال، از موجودی آریو کم نمی‌شود. قیمت خرید از آخرین فاکتور خرید همین کالا آمده. اگر لازم است همین‌جا عوضش کنید.
+          با ارسال، از موجودی آریو کم نمی‌شود. سود با قیمت کارخانه و قیمت فروشی که همین‌جا می‌نویسید حساب می‌شود.
         </p>
       )}
 

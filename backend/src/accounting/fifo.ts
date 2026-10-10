@@ -281,7 +281,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
       // Shipped from the factory: cost is the parent-company price, and shop lots stay untouched.
       if (inv.fulfillment === 'factory') {
         const factoryUnit = it.factoryUnitCost || 0;
-        const cost = factoryUnit > 0 ? factoryUnit * (it.quantity || 0) : kg * priceThen(pid);
+        const cost = factoryUnit * (it.quantity || 0);
         const estimatedKg = factoryUnit > 0 ? 0 : kg;
         if (estimatedKg > 0) ip.estimated = true;
         const perKg = kg > 0 ? cost / kg : 0;

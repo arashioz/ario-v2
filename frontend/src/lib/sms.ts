@@ -200,6 +200,39 @@ export function sampleSms(key: SmsTemplateKey, s: AppSettings, template: string)
   return renderSms(template, base);
 }
 
+const TIER_FA = { retail: 'تک‌فروشی', supermarket: 'سوپرمارکت', wholesale: 'عمده' } as const;
+
+/** Short SMS: shop name plus the public catalog link for one price tier. */
+export function catalogLinkSms(shop: string, tier: keyof typeof TIER_FA, url: string) {
+  return `${shop || 'فروشگاه آریو'}\nکاتالوگ ${TIER_FA[tier]}:\n${url}`;
+}
+
+/** Text price list. Long catalogs keep the link and as many lines as a message can hold. */
+export function priceListSms(
+  shop: string,
+  tier: keyof typeof TIER_FA,
+  url: string,
+  products: { name: string; unit: string; price: number; pricePerKg: number; inStock: boolean }[],
+) {
+  const header = `${shop || 'فروشگاه آریو'}\nلیست قیمت ${TIER_FA[tier]}\n${url}`;
+  const lines = products
+    .filter((p) => p.inStock && p.price > 0)
+    .map((p) => {
+      const kg = p.pricePerKg > 0 ? ` (${formatToman(p.pricePerKg)} کیلو)` : '';
+      return `${p.name}: ${formatToman(p.price)}/${p.unit || 'عدد'}${kg}`;
+    });
+  const full = `${header}\n\n${lines.join('\n')}`;
+  if (full.length <= 1400) return full;
+  const kept: string[] = [];
+  let size = header.length;
+  for (const line of lines) {
+    if (size + line.length + 1 > 1100) break;
+    kept.push(line);
+    size += line.length + 1;
+  }
+  return `${header}\n\n${kept.join('\n')}\nبقیه کالاها در لینک بالا`;
+}
+
 /** Copy the text and open the phone's SMS app addressed to `phone`. */
 export async function openSms(phone: string | undefined, text: string) {
   try {

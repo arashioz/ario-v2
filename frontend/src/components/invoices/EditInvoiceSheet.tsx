@@ -131,7 +131,6 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
   useEffect(() => {
     if (!products.length || invoice?.type === 'purchase') return;
-    let cancelled = false;
     setRows((prev) =>
       prev.map((r) => {
         const p = products.find((x) => x._id === r.productId);
@@ -149,20 +148,6 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         };
       }),
     );
-    if (invoice?.fulfillment !== 'factory') return;
-    invoicesService.lastPurchasePrices(invoice.items.map((it) => it.productId)).then((last) => {
-      if (cancelled) return;
-      setRows((prev) =>
-        prev.map((r) => {
-          if (r.factoryUnitCost > 0) return r;
-          const price = Math.round(last[r.productId] || 0);
-          return { ...r, factoryUnitCost: price > 0 ? price : products.find((p) => p._id === r.productId)?.buyPrice || 0 };
-        }),
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
   }, [products]);
 
   const total = useMemo(() => rows.reduce((s, r) => s + Math.round(r.quantity * r.unitPrice), 0), [rows]);
@@ -205,7 +190,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         priceBy: byAlt ? 'kg' : 'unit',
         qtyText: byAlt ? '1' : undefined,
         received: true,
-        factoryUnitCost: p.buyPrice || 0,
+        factoryUnitCost: 0,
       },
     ]);
   };
@@ -517,18 +502,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
             type="button"
             onClick={() => {
               if (!settings.factorySalesEnabled && !fromCompany) return;
-              const next = !fromCompany;
-              setFromCompany(next);
-              if (!next) return;
-              void invoicesService.lastPurchasePrices(rows.map((r) => r.productId)).then((last) => {
-                setRows((prev) =>
-                  prev.map((r) => {
-                    if (r.factoryUnitCost > 0) return r;
-                    const price = Math.round(last[r.productId] || 0);
-                    return { ...r, factoryUnitCost: price > 0 ? price : products.find((p) => p._id === r.productId)?.buyPrice || 0 };
-                  }),
-                );
-              });
+              setFromCompany(!fromCompany);
             }}
             className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${fromCompany ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}
           >

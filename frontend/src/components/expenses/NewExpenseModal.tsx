@@ -70,19 +70,6 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
   ];
   const quickDepositTags = ['واریز درآمد دیگر', 'بازگشت برداشت', 'تسویه بدهی مدیر'];
 
-  const unlockPersonal = () => {
-    if (sessionStorage.getItem('ario_profit_unlocked') === '1') return true;
-    const pass = window.prompt('برای حساب مدیر، رمز عبور را وارد کنید:');
-    if (pass !== 'arash5Gs200') {
-      if (pass !== null) {
-        showNotification({ title: 'رمز اشتباه', message: 'رمز عبور وارد شده نادرست است.', type: 'error' });
-      }
-      return false;
-    }
-    sessionStorage.setItem('ario_profit_unlocked', '1');
-    return true;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rawAmount <= 0) {
@@ -166,7 +153,7 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         </div>
 
         {/* Switcher: Withdrawal vs Store Expense */}
-        <div className="mt-3 p-1.5 bg-slate-100 rounded-2xl grid grid-cols-3 gap-1">
+        <div className={`mt-3 p-1.5 bg-slate-100 rounded-2xl grid gap-1 ${sessionStorage.getItem('ario_profit_unlocked') === '1' ? 'grid-cols-3' : 'grid-cols-1'}`}>
           <button
             type="button"
             onClick={() => setKind('store')}
@@ -177,26 +164,30 @@ export const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
             <TrendingDown className="w-3.5 h-3.5" />
             هزینه
           </button>
-          <button
-            type="button"
-            onClick={() => unlockPersonal() && setKind('withdrawal')}
-            className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
-              kind === 'withdrawal' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            <Wallet className="w-3.5 h-3.5" />
-            برداشت
-          </button>
-          <button
-            type="button"
-            onClick={() => unlockPersonal() && setKind('deposit')}
-            className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
-              kind === 'deposit' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
-            }`}
-          >
-            <ArrowDownLeft className="w-3.5 h-3.5" />
-            واریز
-          </button>
+          {sessionStorage.getItem('ario_profit_unlocked') === '1' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setKind('withdrawal')}
+                className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+                  kind === 'withdrawal' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                برداشت
+              </button>
+              <button
+                type="button"
+                onClick={() => setKind('deposit')}
+                className={`py-2.5 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+                  kind === 'deposit' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                <ArrowDownLeft className="w-3.5 h-3.5" />
+                واریز
+              </button>
+            </>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="mt-3 space-y-3">

@@ -14,7 +14,6 @@ import {
   Search,
   Wallet,
   ArrowDownLeft,
-  TrendingUp,
   Truck,
   Users,
   Lightbulb,
@@ -26,8 +25,6 @@ import {
   PieChart,
   Lock,
   Unlock,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { expensesService } from '../services/expenses.service';
@@ -48,7 +45,8 @@ export const ExpensesPage: React.FC = () => {
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [reveal, setReveal] = useState(false);
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,13 +55,10 @@ export const ExpensesPage: React.FC = () => {
       sessionStorage.setItem('ario_profit_unlocked', '1');
       setPasswordError('');
       setPasswordInput('');
-      showNotification({
-        title: 'احراز هویت موفق',
-        message: 'بخش سود مغازه و برداشت شخصی مدیر باز شد.',
-        type: 'success',
-      });
+      setAsking(false);
+      setReveal(true);
     } else {
-      setPasswordError('رمز عبور وارد شده نادرست است.');
+      setPasswordError('نادرست');
     }
   };
 
@@ -72,11 +67,9 @@ export const ExpensesPage: React.FC = () => {
     sessionStorage.removeItem('ario_profit_unlocked');
     setPasswordInput('');
     setPasswordError('');
-    showNotification({
-      title: 'قفل شد',
-      message: 'بخش سود مغازه و برداشت شخصی مجدداً قفل شد.',
-      type: 'info',
-    });
+    setAsking(false);
+    setReveal(false);
+    setActiveTab('all');
   };
 
   const [expenses, setExpenses] = useState<ExpenseItem[]>([]);
@@ -140,6 +133,7 @@ export const ExpensesPage: React.FC = () => {
   // Filter list
   const filteredExpenses = expenses.filter((e) => {
     const personal = e.type === 'deposit' || e.type === 'withdrawal' || e.isPersonalWithdrawal;
+    if (!isUnlocked && personal) return false;
     if (activeTab === 'withdrawals' && !personal) {
       return false;
     }
@@ -222,22 +216,8 @@ export const ExpensesPage: React.FC = () => {
           <IonRefresherContent />
         </IonRefresher>
 
-        <div className="p-3 space-y-3 max-w-lg mx-auto pb-8" dir="rtl">
+        <div className={`p-3 space-y-3 max-w-lg mx-auto pb-8 ${reveal ? 'animate-slide-up' : ''}`} dir="rtl">
           <div className="flex items-center gap-2">
-            {isUnlocked ? (
-              <button
-                onClick={handleLock}
-                className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-purple-50 text-purple-700 text-[11px] font-bold border border-purple-100 active:scale-95"
-              >
-                <Unlock className="w-3.5 h-3.5" />
-                قفل
-              </button>
-            ) : (
-              <span className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-slate-100 text-slate-500 text-[11px] font-bold">
-                <Lock className="w-3.5 h-3.5" />
-                قفل است
-              </span>
-            )}
             <button
               onClick={loadData}
               disabled={loading}
@@ -261,162 +241,31 @@ export const ExpensesPage: React.FC = () => {
             <span className="text-[11px] text-slate-500">بازه گزارش</span>
             <PeriodPicker value={period} onChange={setPeriod} />
           </div>
-          {/* ============================================================== */}
-          {/* THREE CORE METRICS REQUESTED BY USER (PROTECTED BY PASSWORD)   */}
-          {/* 1. چقدر مغازم سود کرده (بدون کم کردن برداشت مدیر)             */}
-          {/* 2. چقدر برداشت کردم (مجموع برداشت‌های شخصی مدیر)               */}
-          {/* 3. از سود کم کنه (سود باقی‌مانده پس از برداشت)                  */}
-          {/* ============================================================== */}
-          {!isUnlocked ? (
-            <div className="bg-white rounded-3xl p-5 border border-purple-100 shadow-sm text-center">
-              <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto mb-3 border border-purple-100">
-                <Lock className="w-7 h-7" />
-              </div>
-              <h3 className="text-sm font-black text-slate-800">
-                سود مغازه و برداشت شخصی مدیر
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
-                مشاهده سود خالص مغازه، تراز مالی و مبالغ برداشت‌های شخصی مدیر با رمز عبور محافظت شده است.
-              </p>
-
-              <form onSubmit={handleUnlock} className="mt-4 max-w-xs mx-auto space-y-2.5">
-                <div className="relative">
-                  <input
-                    type={showPasswordText ? 'text' : 'password'}
-                    value={passwordInput}
-                    onChange={(e) => {
-                      setPasswordInput(e.target.value);
-                      setPasswordError('');
-                    }}
-                    placeholder="رمز عبور را وارد کنید"
-                    className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-center font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition"
-                    dir="ltr"
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordText(!showPasswordText)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                    tabIndex={-1}
-                  >
-                    {showPasswordText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                {passwordError && (
-                  <p className="text-[11px] text-rose-600 font-bold">{passwordError}</p>
-                )}
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-md shadow-purple-600/25 active:scale-95 transition flex items-center justify-center gap-1.5"
-                >
-                  <Unlock className="w-4 h-4" />
-                  <span>نمایش سود و برداشت‌ها</span>
-                </button>
+          <div className="bg-white rounded-3xl border border-slate-100 p-4 flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={() => (isUnlocked ? handleLock() : setAsking(true))}
+              className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-500 border border-slate-200 flex items-center justify-center active:scale-95"
+            >
+              {isUnlocked ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
+            </button>
+            {asking && !isUnlocked && (
+              <form onSubmit={handleUnlock} className="w-full max-w-[220px]">
+                <input
+                  type="password"
+                  autoFocus
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError('');
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-2xl bg-slate-50 border text-center font-mono text-sm focus:outline-none ${passwordError ? 'border-rose-400' : 'border-slate-200 focus:border-slate-400'}`}
+                  dir="ltr"
+                  autoComplete="current-password"
+                />
               </form>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-3">
-                {/* CARD 1: سود خالص واقعی مغازه */}
-                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-4 text-white shadow-xl shadow-emerald-700/20 relative overflow-hidden border border-emerald-400/30">
-                  <div className="absolute -left-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-                  <div className="flex items-start justify-between relative z-10">
-                    <div>
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/40 text-emerald-100 text-[11px] font-extrabold backdrop-blur-md mb-2">
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        <span>سود خالص مغازه (بدون کم کردن برداشت‌های مدیر)</span>
-                      </div>
-                      <h2 className="text-2xl font-black font-mono tracking-tight text-white">
-                        {(report?.profitAnalysis?.netStoreProfit || 0).toLocaleString('fa-IR')}
-                        <span className="text-xs font-normal text-emerald-100 mr-1.5">تومان</span>
-                      </h2>
-                      <p className="text-[11px] text-emerald-100/90 mt-1 font-medium leading-relaxed">
-                        «چقدر مغازم سود کرده»: سود ناخالص فروشگاه منهای کلیه هزینه‌های جاری مغازه (ارسال، قبوض، حقوق پرسنل).
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CARD 2: مجموع برداشت‌های شخصی مدیر */}
-                <div className="bg-gradient-to-br from-purple-700 to-indigo-800 rounded-2xl p-4 text-white shadow-xl shadow-purple-800/20 relative overflow-hidden border border-purple-400/30">
-                  <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-                  <div className="flex items-start justify-between relative z-10">
-                    <div className="w-full">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/40 text-purple-100 text-[11px] font-extrabold backdrop-blur-md">
-                          <Wallet className="w-3.5 h-3.5 text-purple-200" />
-                          <span>مجموع برداشت‌های شخصی مدیر</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => {
-                              setEntryKind('deposit');
-                              setIsNewModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center gap-1"
-                          >
-                            <ArrowDownLeft className="w-3 h-3" />
-                            واریز
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEntryKind('withdrawal');
-                              setIsNewModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center gap-1"
-                          >
-                            <Plus className="w-3 h-3" />
-                            برداشت
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 mt-1">
-                        <div>
-                          <div className="text-[10px] text-purple-200">برداشت</div>
-                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerWithdrawals || 0).toLocaleString('fa-IR')}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-purple-200">واریز</div>
-                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerDeposits || 0).toLocaleString('fa-IR')}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-purple-200">مانده بدهی</div>
-                          <div className="text-sm font-black font-mono">{(report?.profitAnalysis?.managerDebt || 0).toLocaleString('fa-IR')}</div>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-purple-100/90 mt-2">واریز و درآمد دیگر از بدهی برداشت کم می‌شود.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CARD 3: سود نهایی پس از کسر برداشت شخصی مدیر */}
-                <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-500">
-                      سود انباشته پس از کسر مانده بدهی مدیر:
-                    </span>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      سود مغازه منهای برداشت، به‌اضافه واریزها
-                    </p>
-                  </div>
-                  <div className="text-left font-mono">
-                    <span
-                      className={`text-lg font-black ${
-                        (report?.profitAnalysis?.retainedProfit || 0) >= 0
-                          ? 'text-emerald-600'
-                          : 'text-amber-600'
-                      }`}
-                    >
-                      {(report?.profitAnalysis?.retainedProfit || 0).toLocaleString('fa-IR')}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mr-1">تومان</span>
-                  </div>
-                </div>
-              </div>
-
+            )}
+          </div>
               {/* Detailed Financial Overview Accordion / Summary */}
               <div className="bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -529,14 +378,11 @@ export const ExpensesPage: React.FC = () => {
                   <span className="text-sky-700 font-bold">ریز سود ←</span>
                 </button>
               </div>
-            </>
-          )}
-
           {/* Tab Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {[
               { id: 'all', label: 'همه هزینه‌ها' },
-              { id: 'withdrawals', label: 'برداشت و واریز مدیر' },
+              ...(isUnlocked ? [{ id: 'withdrawals', label: 'برداشت و واریز مدیر' }] : []),
               { id: 'store', label: 'هزینه‌های جاری مغازه' },
               { id: 'shipping', label: 'ارسال بار' },
               { id: 'salary', label: 'حقوق پرسنل' },
@@ -576,26 +422,11 @@ export const ExpensesPage: React.FC = () => {
                 تاریخچه تراکنش‌ها ({filteredExpenses.length})
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
-                مجموع این فیلتر:{' '}
-                {activeTab === 'withdrawals' && !isUnlocked
-                  ? 'محافظت‌شده'
-                  : `${filteredExpenses
-                      .reduce((sum, e) => sum + ((e.isPersonalWithdrawal || e.type === 'withdrawal') && !isUnlocked ? 0 : (e.amount || 0)), 0)
-                      .toLocaleString('fa-IR')} تومان`}
+                مجموع این فیلتر: {filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString('fa-IR')} تومان
               </span>
             </div>
 
-            {activeTab === 'withdrawals' && !isUnlocked ? (
-              <div className="bg-white rounded-2xl p-6 text-center border border-purple-100 space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <p className="text-xs font-bold text-slate-700">لیست برداشت‌های شخصی مدیر قفل است</p>
-                <p className="text-[10px] text-slate-400">
-                  برای مشاهده ریز برداشت‌های شخصی مدیر، لطفاً ابتدا رمز عبور را در کادر بالا وارد نمایید.
-                </p>
-              </div>
-            ) : filteredExpenses.length === 0 ? (
+            {filteredExpenses.length === 0 ? (
               <div className="bg-white rounded-2xl p-6 text-center border border-slate-200 space-y-2">
                 <AlertCircle className="w-10 h-10 text-slate-300 mx-auto" />
                 <p className="text-xs font-bold text-slate-600">هیچ رکوردی با این شرایط یافت نشد.</p>

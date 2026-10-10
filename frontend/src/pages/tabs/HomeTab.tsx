@@ -17,7 +17,8 @@ import { invoicesService } from '../../services/invoices.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import { accountingService } from '../../services/accounting.service';
 import type { AccountingDashboard } from '../../services/accounting.service';
-import { jalaliMonthRange, todayYmd, ymdToJalali } from '../../lib/jalali';
+import { formatJalali, jalaliMonthRange, todayYmd, ymdToJalali } from '../../lib/jalali';
+import { JalaliDateSheet } from '../../components/ui/JalaliDatePicker';
 import { formatToman, num, percent, tons, weight } from '../../lib/format';
 import { suppliersService } from '../../services/suppliers.service';
 import type { SupplierAccount } from '../../services/suppliers.service';
@@ -62,13 +63,15 @@ export const HomeTab: React.FC = () => {
   const [chartDay, setChartDay] = useState<number | null>(null);
   const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
   const [showProfit, setShowProfit] = useState(() => localStorage.getItem('ario-show-profit') === '1');
+  const [homeDate, setHomeDate] = useState(todayYmd);
+  const [dateOpen, setDateOpen] = useState(false);
 
   // Chart Metric Mode: 'toman' vs 'tonnage'
   const [chartMode, setChartMode] = useState<'toman' | 'tonnage'>('toman');
 
   const loadAllStats = useCallback(async () => {
     try {
-      const today = todayYmd();
+      const today = homeDate;
       const j = ymdToJalali(today);
       const [cStats, pStats, iStats, aStats, sAcc] = await Promise.all([
         customersService.getCustomerStats().catch(() => null),
@@ -85,7 +88,7 @@ export const HomeTab: React.FC = () => {
     } catch (e) {
       console.warn('Stats load error', e);
     }
-  }, []);
+  }, [homeDate]);
 
   useEffect(() => {
     loadAllStats();
@@ -169,6 +172,14 @@ export const HomeTab: React.FC = () => {
 
         <div className="p-3.5 space-y-4 max-w-md mx-auto pb-8">
           <PendingProformasBanner refreshKey={refreshKey} />
+
+          <button
+            type="button"
+            onClick={() => setDateOpen(true)}
+            className="w-full text-center text-xs font-medium text-slate-500 py-0.5 active:opacity-70"
+          >
+            {formatJalali(homeDate, { weekday: true })}
+          </button>
 
           {/* Inventory Top Banner: Tonnage & Tomans (موجودی انبار تناژی و تومانی) */}
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 p-4 text-white shadow-lg shadow-sky-500/20 space-y-3">
@@ -398,7 +409,7 @@ export const HomeTab: React.FC = () => {
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-sky-600" />
-                کار امروز
+                {homeDate === todayYmd() ? 'کار امروز' : `کار ${formatJalali(homeDate, { year: false })}`}
               </h3>
               <button onClick={() => navigate('/credit-report')} className="text-[11px] font-bold text-sky-700">
                 گزارش نسیه
@@ -489,6 +500,15 @@ export const HomeTab: React.FC = () => {
         </div>
 
         {/* New Customer Modal */}
+        <JalaliDateSheet
+          open={dateOpen}
+          value={homeDate}
+          title="تاریخ"
+          max={todayYmd()}
+          onClose={() => setDateOpen(false)}
+          onSelect={setHomeDate}
+        />
+
         <NewCustomerModal
           isOpen={isNewCustomerOpen}
           onClose={() => setIsNewCustomerOpen(false)}

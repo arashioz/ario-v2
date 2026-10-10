@@ -232,30 +232,14 @@ export class InvoicesService {
     return found;
   }
 
-  private async buyPrices(productIds: string[]): Promise<Record<string, number>> {
-    const ids = [...new Set(productIds.map((id) => String(id || '')).filter((id) => Types.ObjectId.isValid(id)))];
-    if (!ids.length) return {};
-    const products = await this.productModel.find({ _id: { $in: ids } }).select('buyPrice').lean().exec();
-    return Object.fromEntries(products.map((p) => [String(p._id), Math.max(0, Math.round(p.buyPrice || 0))]));
-  }
-
   /**
    * Direct factory sale: the parent company invoiced Ario, the goods never entered the shop,
    * and the customer invoice is what Ario sends. Stock is untouched on both sides.
    */
   private async attachFactoryPurchase(sale: InvoiceDocument, recordedByName: string) {
-    const missing = (sale.items || [])
-      .filter((it) => Math.round(it.factoryUnitCost || 0) <= 0 && it.productId)
-      .map((it) => String(it.productId));
-    const lastPurchase = await this.lastShopPurchasePrices(missing);
-    const catalog = await this.buyPrices(missing.filter((id) => !lastPurchase[id]));
     const items = [];
     for (const it of sale.items || []) {
-      let unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
-      if (unitPrice <= 0 && it.productId) {
-        unitPrice = lastPurchase[String(it.productId)] || catalog[String(it.productId)] || 0;
-        if (unitPrice > 0) it.factoryUnitCost = unitPrice;
-      }
+      const unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
       items.push({
         productId: it.productId,
         productName: it.productName,
@@ -314,53 +298,8 @@ export class InvoicesService {
     await this.suppliersService.sync(PARENT_COMPANY);
   }
 
-  /** Factory purchases saved at 0. Fill them from the latest shop purchase, then the catalog buy price. */
   async repairFactoryPurchasePrices(): Promise<number> {
-    const purchases = await this.invoiceModel.find({ type: 'purchase', fulfillment: 'factory' }).exec();
-    const missing: string[] = [];
-    for (const purchase of purchases) {
-      for (const it of purchase.items || []) {
-        if ((it.unitPrice || 0) <= 0 && it.productId) missing.push(String(it.productId));
-      }
-    }
-    const lastPurchase = await this.lastShopPurchasePrices(missing);
-    const catalog = await this.buyPrices(missing.filter((id) => !lastPurchase[id]));
-    let fixed = 0;
-    for (const purchase of purchases) {
-      let changed = false;
-      for (const it of purchase.items || []) {
-        if ((it.unitPrice || 0) > 0) continue;
-        const price = lastPurchase[String(it.productId || '')] || catalog[String(it.productId || '')] || 0;
-        if (price <= 0) continue;
-        it.unitPrice = price;
-        it.totalPrice = Math.round((it.quantity || 0) * price);
-        changed = true;
-      }
-      if (!changed) continue;
-      const total = (purchase.items || []).reduce((s, it) => s + (it.totalPrice || 0), 0);
-      purchase.totalAmount = total;
-      purchase.finalAmount = total;
-      purchase.creditAmount = total;
-      purchase.paidAmount = 0;
-      purchase.remainingDebt = total;
-      purchase.isPaid = total <= 0;
-      purchase.markModified('items');
-      await purchase.save();
-      if (purchase.factorySaleId) {
-        const sale = await this.invoiceModel.findById(purchase.factorySaleId).exec();
-        if (sale) {
-          for (const src of purchase.items || []) {
-            const line = (sale.items || []).find((i) => String(i.productId) === String(src.productId));
-            if (line && !(line.factoryUnitCost || 0)) line.factoryUnitCost = src.unitPrice;
-          }
-          sale.markModified('items');
-          await sale.save();
-        }
-      }
-      await this.suppliersService.sync(purchase.customerName || PARENT_COMPANY);
-      fixed++;
-    }
-    return fixed;
+    return 0;
   }
 
   private async detachFactoryPurchase(sale: InvoiceDocument) {

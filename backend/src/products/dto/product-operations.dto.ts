@@ -49,8 +49,8 @@ export class BulkPriceUpdateDto {
 
   @IsString()
   @IsNotEmpty()
-  @IsIn(['percentage', 'fixed', 'profit'])
-  type: 'percentage' | 'fixed' | 'profit';
+  @IsIn(['percentage', 'fixed', 'profit', 'base', 'round'])
+  type: 'percentage' | 'fixed' | 'profit' | 'base' | 'round';
 
   @IsNumber()
   value: number; // مثلا 10 یا 5000 (یا منفی برای تخفیف)

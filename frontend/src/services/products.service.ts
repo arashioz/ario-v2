@@ -120,7 +120,7 @@ export interface UpdateStockInput {
 
 export interface BulkPriceUpdateInput {
   category?: string;
-  type: 'percentage' | 'fixed' | 'profit';
+  type: 'percentage' | 'fixed' | 'profit' | 'base' | 'round';
   value: number;
   reason?: string;
   preview?: boolean;
@@ -141,6 +141,7 @@ export interface BulkPricePreviewItem {
   afterWholesale: number;
   profitBefore: number;
   profitAfter: number;
+  buyAfter?: number;
   skipped?: string;
 }
 

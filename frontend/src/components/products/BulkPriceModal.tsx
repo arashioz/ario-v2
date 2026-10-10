@@ -40,14 +40,14 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
   const { showNotification } = useNotification();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [type, setType] = useState<'percentage' | 'fixed' | 'profit'>('profit');
+  const [type, setType] = useState<'percentage' | 'fixed' | 'profit' | 'base' | 'round'>('profit');
   const [value, setValue] = useState<string>('6');
   const [roundTo, setRoundTo] = useState<(typeof ROUNDS)[number]['id']>(1000);
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<BulkPricePreviewItem[]>([]);
 
   const numValue = parseSignedDecimal(value);
-  const ready = value !== '' && value !== '-' && value !== '.' && !Number.isNaN(numValue);
+  const ready = type === 'round' || (value !== '' && value !== '-' && value !== '.' && !Number.isNaN(numValue));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -61,7 +61,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
         .previewBulkPrices({
           category: selectedCategory === 'all' ? undefined : selectedCategory,
           type,
-          value: numValue,
+          value: type === 'round' ? 0 : numValue,
           roundTo,
         })
         .then((items) => {
@@ -87,7 +87,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
       buy += (p.buy || 0) * qty;
       now += (p.profitBefore || 0) * qty;
       next += ((p.skipped ? p.profitBefore : p.profitAfter) || 0) * qty;
-      if (!p.skipped && (p.before !== p.after || p.beforeSupermarket !== p.afterSupermarket || p.beforeWholesale !== p.afterWholesale)) {
+      if (!p.skipped && (p.before !== p.after || p.beforeSupermarket !== p.afterSupermarket || p.beforeWholesale !== p.afterWholesale || (p.buyAfter != null && p.buyAfter !== p.buy))) {
         changing++;
       }
     }
@@ -102,7 +102,15 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
     }
     const targetDesc = selectedCategory === 'all' ? 'همه کالاها' : `دسته «${selectedCategory}»`;
     const changeDesc =
-      type === 'profit' ? `${numValue} درصد سود روی خرید` : type === 'percentage' ? `${numValue} درصد روی قیمت فعلی` : formatToman(numValue);
+      type === 'round'
+        ? `گرد به ${roundTo.toLocaleString('fa-IR')}`
+        : type === 'base'
+          ? `${numValue} درصد روی قیمت پایه`
+          : type === 'profit'
+            ? `${numValue} درصد سود روی خرید`
+            : type === 'percentage'
+              ? `${numValue} درصد روی قیمت فعلی`
+              : formatToman(numValue);
     if (!window.confirm(`قیمت تکی، سوپر و عمدهٔ ${targetDesc} (${sums.changing} کالا) با ${changeDesc} عوض شود؟`)) return;
 
     setIsSubmitting(true);
@@ -110,7 +118,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
       const res = await productsService.bulkUpdatePrices({
         category: selectedCategory === 'all' ? undefined : selectedCategory,
         type,
-        value: numValue,
+        value: type === 'round' ? 0 : numValue,
         roundTo,
         reason: reason.trim() || undefined,
       });
@@ -169,6 +177,8 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
                 ['profit', 'سود روی خرید'],
                 ['percentage', 'درصد روی قیمت'],
                 ['fixed', 'مبلغ ثابت'],
+                ['base', 'قیمت پایه'],
+                ['round', 'قیمت رند'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -182,10 +192,17 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
             ))}
           </div>
 
+          {type !== 'round' && (
           <div className="bg-white rounded-2xl border border-slate-200 p-3 space-y-2">
             <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
               {type === 'fixed' ? <Coins className="w-3.5 h-3.5" /> : <Percent className="w-3.5 h-3.5" />}
-              {type === 'profit' ? 'درصد سود روی قیمت خرید' : type === 'percentage' ? 'چند درصد قیمت فعلی عوض شود' : 'مبلغ اضافه یا کم، تومان'}
+              {type === 'base'
+                ? 'چند درصد قیمت خرید (پایه) عوض شود'
+                : type === 'profit'
+                  ? 'درصد سود روی قیمت خرید'
+                  : type === 'percentage'
+                    ? 'چند درصد قیمت فعلی عوض شود'
+                    : 'مبلغ اضافه یا کم، تومان'}
             </label>
             <div className="relative">
               <input
@@ -200,11 +217,17 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
               {type !== 'fixed' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">٪</span>}
             </div>
             <p className="text-[10px] text-slate-400 leading-5">
-              {type === 'profit'
-                ? 'مثلاً ۳٫۲ یعنی قیمت تکی = خرید × ۱٫۰۳۲. سوپر و عمده همان نسبت قبلی‌شان با تکی را حفظ می‌کنند و از خرید پایین‌تر نمی‌روند.'
-                : 'اعشار مجاز است. برای کاهش، منفی بگذار.'}
+              {type === 'base'
+                ? 'قیمت خرید عوض می‌شود و تکی، سوپر و عمده با همان نسبت سود قبلی، روی قیمت پایهٔ جدید حساب می‌شوند.'
+                : type === 'profit'
+                  ? 'مثلاً ۳٫۲ یعنی قیمت تکی = خرید × ۱٫۰۳۲. سوپر و عمده همان نسبت قبلی‌شان با تکی را حفظ می‌کنند و از خرید پایین‌تر نمی‌روند.'
+                  : 'اعشار مجاز است. برای کاهش، منفی بگذار.'}
             </p>
           </div>
+          )}
+          {type === 'round' && (
+            <p className="text-[10px] text-slate-500 leading-5">قیمت خرید و هر سه قیمت فروش، بدون تغییر سود، به نزدیک‌ترین پله گرد می‌شوند.</p>
+          )}
 
           <div className="space-y-1">
             <span className="text-[11px] font-bold text-slate-600">گرد کردن قیمت جدید</span>
@@ -249,6 +272,9 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
                       <>
                         <p className="text-[11px] text-slate-500 mt-1">
                           خرید <b className="font-mono text-slate-700">{formatToman(item.buy)}</b>
+                          {item.buyAfter != null && item.buyAfter !== item.buy && (
+                            <b className="font-mono text-violet-700"> ← {formatToman(item.buyAfter)}</b>
+                          )}
                           <span className="mx-1">·</span>
                           سود تکی{' '}
                           <b className={`font-mono ${profitColor(item.profitBefore)}`}>

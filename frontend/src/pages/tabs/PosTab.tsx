@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2, Wand2 } from 'lucide-react';
+import { Calendar, ClipboardList, FileCheck2, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
 import { proformasService, type Proforma } from '../../services/proformas.service';
-import { SALE_TYPE_LABELS, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
+import { SALE_TYPE_LABELS, SALE_TYPE_TONE, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { InvoiceDateModal } from '../../components/pos/InvoiceDateModal';
@@ -149,7 +149,7 @@ export const PosTab: React.FC = () => {
         unitPrice,
         totalPrice: Math.round(base.quantity * unitPrice),
         ...(fulfillment === 'factory'
-          ? { factoryUnitCost: Math.round(factoryUnitCosts?.[l.product._id] ?? l.product.buyPrice ?? 0) }
+          ? { factoryUnitCost: Math.round(factoryUnitCosts?.[l.product._id] || 0) }
           : {}),
       };
     });
@@ -218,7 +218,7 @@ export const PosTab: React.FC = () => {
               setTierMode('manual');
             }}
             className={`py-2 rounded-2xl text-[11px] font-bold transition ${
-              saleType === t ? (auto ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200' : 'bg-sky-600 text-white shadow') : 'text-slate-500'
+              saleType === t ? `${SALE_TYPE_TONE[t].solid} shadow` : 'text-slate-500'
             }`}
           >
             {SALE_TYPE_LABELS[t]}
@@ -286,56 +286,46 @@ export const PosTab: React.FC = () => {
       <IonHeader className="ion-no-border">
         <IonToolbar className="bg-white/95 backdrop-blur-md px-4 py-2 border-b border-sky-100">
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 flex items-center gap-2">
+            <div className="min-w-0">
               <h1 className="text-sm font-semibold text-slate-800">فروش</h1>
               {settings.autoSaleType && (
                 <button
-                  role="switch"
-                  aria-checked={auto}
+                  type="button"
                   onClick={toggleAuto}
-                  className={`flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full text-[11px] font-bold border transition ${
-                    auto ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-slate-50 text-slate-500 border-slate-200'
+                  className={`mt-1 px-3 py-1 rounded-xl text-[11px] font-bold border active:scale-95 ${
+                    auto ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
-                  <Wand2 className="w-3.5 h-3.5" />
                   خودکار
-                  <span className={`relative w-8 h-[18px] rounded-full transition ${auto ? 'bg-violet-600' : 'bg-slate-300'}`}>
-                    <span
-                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${
-                        auto ? 'left-[2px]' : 'left-[16px]'
-                      }`}
-                    />
-                  </span>
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => navigate('/proformas')}
-                className={`relative flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold border active:scale-95 ${
-                  pendingProformas > 0
-                    ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30'
-                    : 'bg-amber-50 text-amber-700 border-amber-200/60'
-                }`}
-                aria-label="پیش‌فاکتورها"
-              >
-                <ClipboardList className="w-5 h-5" />
-                پیش‌فاکتور
-                {pendingProformas > 0 && (
-                  <span className="absolute -top-2 -left-2 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[11px] font-bold font-mono flex items-center justify-center ring-2 ring-white animate-pulse">
-                    {num(pendingProformas)}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setDateOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-sky-50 text-sky-700 text-xs font-medium border border-sky-200/60 active:scale-95"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{invoiceDate === todayYmd() ? 'امروز' : formatJalali(invoiceDate, { year: false })}</span>
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/proformas')}
+              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-bold border active:scale-95 ${
+                pendingProformas > 0
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30'
+                  : 'bg-amber-50 text-amber-700 border-amber-200/60'
+              }`}
+              aria-label="پیش‌فاکتورها"
+            >
+              <ClipboardList className="w-5 h-5" />
+              پیش‌فاکتور
+              {pendingProformas > 0 && (
+                <span className="absolute -top-2 -left-2 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[11px] font-bold font-mono flex items-center justify-center ring-2 ring-white animate-pulse">
+                  {num(pendingProformas)}
+                </span>
+              )}
+            </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setDateOpen(true)}
+            className="w-full mt-1.5 flex items-center justify-center gap-1.5 text-[15px] font-bold text-slate-800 active:opacity-70"
+          >
+            <Calendar className="w-4 h-4 text-sky-600" />
+            {formatJalali(invoiceDate, { weekday: true })}
+          </button>
         </IonToolbar>
       </IonHeader>
 

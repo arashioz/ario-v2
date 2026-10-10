@@ -4,7 +4,7 @@ import type { RefresherEventDetail } from '@ionic/react';
 import { ClipboardList, Truck } from 'lucide-react';
 import { proformasService, PROFORMA_STATUS_LABELS, type Proforma, type ProformaStatus } from '../services/proformas.service';
 import { SHIPPING_PAYER_LABELS, type Invoice } from '../services/invoices.service';
-import { SALE_TYPE_LABELS } from '../services/settings.service';
+import { SALE_TYPE_LABELS, SALE_TYPE_TONE } from '../services/settings.service';
 import { Empty, ReportHeader, Segments } from '../components/reports/ReportUI';
 import { ProformaSheet } from '../components/proformas/ProformaSheet';
 import { InvoiceDetailModal } from '../components/invoices/InvoiceDetailModal';
@@ -84,11 +84,13 @@ export const ProformasPage: React.FC = () => {
             </Empty>
           )}
 
-          {list?.map((p) => (
+          {list?.map((p) => {
+            const tone = SALE_TYPE_TONE[p.saleType] || SALE_TYPE_TONE.retail;
+            return (
             <button
               key={p._id}
               onClick={() => setSelected(p)}
-              className="w-full bg-white rounded-2xl p-3 border border-slate-100 shadow-sm text-right active:scale-[0.99] transition space-y-2"
+              className={`w-full rounded-2xl p-3 border shadow-sm text-right active:scale-[0.99] transition space-y-2 ${tone.card}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -103,7 +105,7 @@ export const ProformasPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5 text-[10px]">
-                <span className="px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-bold">{SALE_TYPE_LABELS[p.saleType]}</span>
+                <span className={`px-2 py-0.5 rounded-full font-bold ${tone.badge}`}>{SALE_TYPE_LABELS[p.saleType]}</span>
                 <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-bold">{weight(p.totalWeightKg)}</span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{num(p.items.length)} قلم</span>
                 {p.shippingPayer !== 'none' && (
@@ -129,7 +131,8 @@ export const ProformasPage: React.FC = () => {
                 </div>
               )}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         <ProformaSheet

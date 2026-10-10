@@ -60,6 +60,7 @@ export const ProductsPage: React.FC = () => {
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
 
   const [isBulkPriceOpen, setIsBulkPriceOpen] = useState(false);
+  const [priceBy, setPriceBy] = useState<'unit' | 'kg'>('unit');
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const replaceProduct = (updated: Product) =>
@@ -254,6 +255,22 @@ export const ProductsPage: React.FC = () => {
               قیمت گروهی
             </button>
           </div>
+          <div className="grid grid-cols-2 gap-1 p-1 bg-white rounded-2xl border border-slate-200">
+            {(
+              [
+                ['unit', 'قیمت بسته'],
+                ['kg', 'قیمت کیلو'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setPriceBy(id)}
+                className={`py-2 rounded-xl text-[11px] font-bold ${priceBy === id ? 'bg-slate-800 text-white' : 'text-slate-500'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           {/* Search Box */}
           <div className="relative flex items-center">
@@ -384,7 +401,7 @@ export const ProductsPage: React.FC = () => {
 
                     {/* Prices and Stock Grid */}
                     <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-100 space-y-2">
-                      <PriceTiers product={product} />
+                      <PriceTiers product={product} by={priceBy} />
                       {kgPerUnit(product) > 0 && product.unit !== 'کیلوگرم' && (
                         <p className="text-[10px] text-slate-400">
                           هر {product.unit} {num(kgPerUnit(product), 2)} کیلوگرم

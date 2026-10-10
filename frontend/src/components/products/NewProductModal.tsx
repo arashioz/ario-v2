@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { productImageUrl, productsService } from '../../services/products.service';
 import { resizeImage } from '../../lib/image';
-import { formatToman, weight } from '../../lib/format';
+import { weight } from '../../lib/format';
 import type { Product, CreateProductInput } from '../../services/products.service';
 import { suppliersService } from '../../services/suppliers.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -103,10 +103,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
 
   const formKg =
     hasDualUnit && secondaryUnit === 'کیلوگرم' ? Number(unitRatio) || 0 : unit === 'کیلوگرم' ? 1 : 0;
-  const kgHint = (v: string) =>
-    formKg > 0 && formKg !== 1 && Number(v) > 0 ? (
-      <span className="text-[10px] text-slate-400 block font-mono">هر کیلو {formatToman(Math.round(Number(v) / formKg))}</span>
-    ) : null;
 
   const [roundStep, setRoundStep] = useState(500);
   const roundMoney = (n: number, step = roundStep) => {
@@ -640,27 +636,54 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
             </div>
 
             <div className="space-y-1 text-right">
-              <label className="text-[11px] text-slate-500">قیمت خرید</label>
-              <MoneyTextInput
-                value={buyPrice}
-                onChange={(v) => {
-                  setBuyPrice(v);
-                  const buy = Number(v);
-                  if (!buy) return;
-                  const retail = priceFromPct(buy, pctRetail);
-                  const supermarket = priceFromPct(buy, pctSuper);
-                  const wholesale = priceFromPct(buy, pctWhole);
-                  if (retail !== null) setSellPrice(retail);
-                  else if (Number(sellPrice) > 0) setPctRetail(marginOf(buy, Number(sellPrice)));
-                  if (supermarket !== null) setPriceSupermarket(supermarket);
-                  else if (Number(priceSupermarket) > 0) setPctSuper(marginOf(buy, Number(priceSupermarket)));
-                  if (wholesale !== null) setPriceWholesale(wholesale);
-                  else if (Number(priceWholesale) > 0) setPctWhole(marginOf(buy, Number(priceWholesale)));
-                }}
-                placeholder="۰"
-                className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
-              />
-              {kgHint(buyPrice)}
+              <label className="text-[11px] text-slate-500">قیمت خرید (پایه)</label>
+              <div className={`grid gap-1.5 ${formKg > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-slate-400 block">هر {unit || 'بسته'}</span>
+                  <MoneyTextInput
+                    value={buyPrice}
+                    onChange={(v) => {
+                      setBuyPrice(v);
+                      const buy = Number(v);
+                      if (!buy) return;
+                      const retail = priceFromPct(buy, pctRetail);
+                      const supermarket = priceFromPct(buy, pctSuper);
+                      const wholesale = priceFromPct(buy, pctWhole);
+                      if (retail !== null) setSellPrice(retail);
+                      else if (Number(sellPrice) > 0) setPctRetail(marginOf(buy, Number(sellPrice)));
+                      if (supermarket !== null) setPriceSupermarket(supermarket);
+                      else if (Number(priceSupermarket) > 0) setPctSuper(marginOf(buy, Number(priceSupermarket)));
+                      if (wholesale !== null) setPriceWholesale(wholesale);
+                      else if (Number(priceWholesale) > 0) setPctWhole(marginOf(buy, Number(priceWholesale)));
+                    }}
+                    placeholder="۰"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
+                  />
+                </label>
+                {formKg > 1 && (
+                  <label className="space-y-1">
+                    <span className="text-[10px] text-slate-400 block">هر کیلو</span>
+                    <MoneyTextInput
+                      value={Number(buyPrice) ? String(Math.round(Number(buyPrice) / formKg)) : ''}
+                      onChange={(v) => {
+                        const perKg = Number(v) || 0;
+                        const buy = perKg ? String(Math.round(perKg * formKg)) : '';
+                        setBuyPrice(buy);
+                        const n = Number(buy);
+                        if (!n) return;
+                        const retail = priceFromPct(n, pctRetail);
+                        const supermarket = priceFromPct(n, pctSuper);
+                        const wholesale = priceFromPct(n, pctWhole);
+                        if (retail !== null) setSellPrice(retail);
+                        if (supermarket !== null) setPriceSupermarket(supermarket);
+                        if (wholesale !== null) setPriceWholesale(wholesale);
+                      }}
+                      placeholder="۰"
+                      className="w-full px-3 py-2 text-xs rounded-xl bg-emerald-50 border border-emerald-200 outline-none font-mono text-slate-800"
+                    />
+                  </label>
+                )}
+              </div>
             </div>
 
             {(
@@ -670,49 +693,66 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 ['عمده', priceWholesale, setPriceWholesale, pctWhole, setPctWhole, false],
               ] as const
             ).map(([label, price, setPrice, pct, setPct, required]) => (
-              <div key={label} className="grid grid-cols-[4.5rem_1fr_1.4fr] gap-1.5 items-end">
-                <span className="text-[11px] font-bold text-slate-700 pb-2">
+              <div key={label} className="space-y-1">
+                <span className="text-[11px] font-bold text-slate-700">
                   {label}
                   {required && <span className="text-rose-500"> *</span>}
                 </span>
-                <label className="space-y-1 text-right">
-                  <span className="text-[10px] text-slate-400 block">درصد سود</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={pct}
-                    onChange={(e) => {
-                      const next = cleanPct(e.target.value);
-                      if (next === '' || next.endsWith('.')) {
-                        setPct(next);
-                        return;
-                      }
-                      const rounded = String(roundHalfPct(Number(next) || 0));
-                      setPct(next.includes('.') ? next : rounded);
-                      const priced = priceFromPct(Number(buyPrice), rounded);
-                      if (priced !== null) setPrice(priced);
-                    }}
-                    onBlur={() => {
-                      if (pct === '' || pct === '.') return;
-                      setPct(String(roundHalfPct(Number(pct) || 0)));
-                    }}
-                    placeholder="مثلاً ۶"
-                    className="w-full px-2 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800 text-center"
-                  />
-                </label>
-                <label className="space-y-1 text-right">
-                  <span className="text-[10px] text-slate-400 block">مبلغ (تومان)</span>
-                  <MoneyTextInput
-                    value={price}
-                    onChange={(v) => {
-                      setPrice(v);
-                      setPct(marginOf(Number(buyPrice), Number(v)));
-                    }}
-                    placeholder="۰"
-                    className="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
-                  />
-                </label>
-                <div className="col-span-3 -mt-1">{kgHint(price)}</div>
+                <div className={`grid gap-1.5 items-end ${formKg > 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  <label className="space-y-1 text-right">
+                    <span className="text-[10px] text-slate-400 block">درصد سود</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={pct}
+                      onChange={(e) => {
+                        const next = cleanPct(e.target.value);
+                        if (next === '' || next.endsWith('.')) {
+                          setPct(next);
+                          return;
+                        }
+                        const rounded = String(roundHalfPct(Number(next) || 0));
+                        setPct(next.includes('.') ? next : rounded);
+                        const priced = priceFromPct(Number(buyPrice), rounded);
+                        if (priced !== null) setPrice(priced);
+                      }}
+                      onBlur={() => {
+                        if (pct === '' || pct === '.') return;
+                        setPct(String(roundHalfPct(Number(pct) || 0)));
+                      }}
+                      placeholder="۶"
+                      className="w-full px-2 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800 text-center"
+                    />
+                  </label>
+                  <label className="space-y-1 text-right">
+                    <span className="text-[10px] text-slate-400 block">هر {unit || 'بسته'}</span>
+                    <MoneyTextInput
+                      value={price}
+                      onChange={(v) => {
+                        setPrice(v);
+                        setPct(marginOf(Number(buyPrice), Number(v)));
+                      }}
+                      placeholder="۰"
+                      className="w-full px-2.5 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
+                    />
+                  </label>
+                  {formKg > 1 && (
+                    <label className="space-y-1 text-right">
+                      <span className="text-[10px] text-slate-400 block">هر کیلو</span>
+                      <MoneyTextInput
+                        value={Number(price) ? String(Math.round(Number(price) / formKg)) : ''}
+                        onChange={(v) => {
+                          const perKg = Number(v) || 0;
+                          const next = perKg ? String(Math.round(perKg * formKg)) : '';
+                          setPrice(next);
+                          setPct(marginOf(Number(buyPrice), Number(next)));
+                        }}
+                        placeholder="۰"
+                        className="w-full px-2.5 py-2 text-xs rounded-xl bg-emerald-50 border border-emerald-200 outline-none font-mono text-slate-800"
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             ))}
 

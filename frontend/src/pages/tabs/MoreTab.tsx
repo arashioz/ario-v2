@@ -83,7 +83,7 @@ const REPORTS: Item[] = [
   {
     path: '/expenses',
     title: 'خرج و برداشت',
-    desc: 'هزینه مغازه، برداشت شخصی و سود مانده',
+    desc: 'هزینه‌های مغازه',
     icon: PieChart,
     tone: 'bg-violet-100 text-violet-600',
   },
@@ -93,6 +93,13 @@ const REPORTS: Item[] = [
     desc: 'موجودی نقد، کارت‌به‌کارت و پوز',
     icon: Wallet,
     tone: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    path: '/follow-ups',
+    title: 'پیگیری مشتریان',
+    desc: 'دسته‌بندی مشتری و ارسال لیست قیمت',
+    icon: PhoneCall,
+    tone: 'bg-emerald-100 text-emerald-600',
   },
   {
     path: '/inflation',
@@ -145,13 +152,6 @@ const SHOP: Item[] = [
     desc: 'چک دریافتی و پرداختی، و سررسید',
     icon: Wallet,
     tone: 'bg-indigo-100 text-indigo-600',
-  },
-  {
-    path: '/follow-ups',
-    title: 'پیگیری مشتری',
-    desc: 'کسانی که باید امروز زنگ بزنیم',
-    icon: PhoneCall,
-    tone: 'bg-emerald-100 text-emerald-600',
   },
   {
     path: '/customers-map',

@@ -13,28 +13,30 @@ const TIERS = [
   ['wholesale', 'عمده'],
 ] as const;
 
-/** Every sale tier as both package price and per-kg price. */
-export const PriceTiers: React.FC<{ product: Product }> = ({ product }) => {
-  const hasKg = kgPerUnit(product) > 0;
+/** Every sale tier as both package price and per-kg price. `by` picks which column is the main one. */
+export const PriceTiers: React.FC<{ product: Product; by?: 'unit' | 'kg' }> = ({ product, by = 'unit' }) => {
+  const hasKg = kgPerUnit(product) > 0 && product.unit !== 'کیلوگرم';
+  const kilo = by === 'kg' && hasKg;
   return (
     <table className="w-full text-[11px]">
       <thead>
         <tr className="text-slate-400">
           <th className="text-right font-normal pb-1">قیمت</th>
-          <th className="text-left font-normal pb-1">هر {product.unit}</th>
-          {hasKg && <th className="text-left font-normal pb-1">هر کیلو</th>}
+          <th className={`text-left font-normal pb-1 ${kilo ? '' : 'font-bold text-slate-500'}`}>هر {product.unit}</th>
+          {hasKg && <th className={`text-left font-normal pb-1 ${kilo ? 'font-bold text-slate-500' : ''}`}>هر کیلو</th>}
         </tr>
       </thead>
       <tbody>
         {TIERS.map(([key, label]) => {
           const price = tierPrice(product, key);
+          const perKg = pricePerKg(price, product);
           return (
             <tr key={key} className="border-t border-slate-100">
               <td className="py-1 text-slate-500">{label}</td>
-              <td className="py-1 text-left font-mono font-bold text-sky-800">{formatToman(price)}</td>
+              <td className={`py-1 text-left font-mono ${kilo ? 'text-slate-400' : 'font-bold text-sky-800'}`}>{formatToman(price)}</td>
               {hasKg && (
-                <td className="py-1 text-left font-mono font-semibold text-slate-600">
-                  {formatToman(pricePerKg(price, product))}
+                <td className={`py-1 text-left font-mono ${kilo ? 'font-bold text-emerald-800' : 'font-semibold text-slate-600'}`}>
+                  {formatToman(perKg)}
                 </td>
               )}
             </tr>

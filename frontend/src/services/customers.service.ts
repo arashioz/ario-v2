@@ -123,7 +123,7 @@ export const customersService = {
     filter?: 'all' | 'debtors' | 'settled' | 'creditors';
     kind?: CustomerKind;
   }): Promise<Customer[]> {
-    const res = await api.get('/customers', { params });
+    const res = await api.get('/customers', { params, timeout: 60000 });
     return res.data;
   },
 
@@ -147,7 +147,7 @@ export const customersService = {
   },
 
   async getCustomerStats(): Promise<CustomerStats> {
-    const res = await api.get('/customers/stats');
+    const res = await api.get('/customers/stats', { timeout: 60000 });
     return res.data;
   },
 

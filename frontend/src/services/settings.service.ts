@@ -267,6 +267,28 @@ export const SALE_TYPE_LABELS: Record<SaleType, string> = {
   wholesale: 'عمده بنکداری',
 };
 
+/** Card colors so a supermarket order and a wholesale order are obvious at a glance. */
+export const SALE_TYPE_TONE: Record<SaleType, { card: string; badge: string; solid: string; note: string }> = {
+  retail: {
+    card: 'bg-white border-sky-100',
+    badge: 'bg-sky-50 text-sky-700',
+    solid: 'bg-sky-600 text-white',
+    note: 'bg-sky-50 text-sky-800',
+  },
+  supermarket: {
+    card: 'bg-emerald-50 border-emerald-200',
+    badge: 'bg-emerald-600 text-white',
+    solid: 'bg-emerald-600 text-white',
+    note: 'bg-emerald-50 text-emerald-900',
+  },
+  wholesale: {
+    card: 'bg-violet-50 border-violet-200',
+    badge: 'bg-violet-600 text-white',
+    solid: 'bg-violet-600 text-white',
+    note: 'bg-violet-50 text-violet-900',
+  },
+};
+
 /** Price tier a cart of this weight gets automatically. */
 export const saleTypeForKg = (kg: number, s: Pick<AppSettings, 'supermarketMinKg' | 'wholesaleMinKg'>): SaleType =>
   kg >= s.wholesaleMinKg ? 'wholesale' : kg >= s.supermarketMinKg ? 'supermarket' : 'retail';

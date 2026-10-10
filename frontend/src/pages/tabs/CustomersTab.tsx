@@ -6,6 +6,7 @@ import {
   IonContent,
   IonRefresher,
   IonRefresherContent,
+  useIonViewWillEnter,
 } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
 import { useSearchParams } from 'react-router-dom';
@@ -139,28 +140,38 @@ export const CustomersTab: React.FC = () => {
   const [view, setView] = useState<'customers' | 'payments'>('customers');
   const [paymentsRefresh, setPaymentsRefresh] = useState(0);
 
+  const requestId = React.useRef(0);
+
   const loadData = useCallback(async () => {
+    const id = ++requestId.current;
     try {
+      setLoading(true);
       const [list, statsData] = await Promise.all([
         customersService.getCustomers({ search, filter, ...(filter === 'debtors' ? {} : { kind }) }),
         customersService.getCustomerStats(),
       ]);
+      if (id !== requestId.current) return;
       setCustomers(list);
       setStats(statsData);
     } catch {
+      if (id !== requestId.current) return;
       showNotification({
         title: 'خطا در بارگذاری داده‌ها',
         message: 'عدم امکان برقراری ارتباط با سرور',
         type: 'error',
       });
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [search, filter, kind, showNotification]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useIonViewWillEnter(() => {
+    loadData();
+  });
 
   const handleRefresh = async (event: CustomEvent<RefresherEventDetail>) => {
     await loadData();
@@ -513,6 +524,9 @@ export const CustomersTab: React.FC = () => {
                   </div>
                 </div>
               ))}
+              <p className="text-center text-[11px] text-slate-400 pt-2">
+                {customers.length.toLocaleString('fa-IR')} نفر{filter === 'debtors' ? ' بدهکار' : ''} در این لیست
+              </p>
             </div>
           )}
           </>

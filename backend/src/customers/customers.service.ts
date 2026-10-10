@@ -108,6 +108,7 @@ export class CustomersService implements OnModuleInit {
     kind?: string;
   }) {
     await this.ensureReconciled();
+    await this.attachMissingSaleDebts();
     const filterObj: any = { isActive: true };
     // Customers created before walk-ins existed have no kind and are shops.
     if (query?.kind === 'walkin') filterObj.kind = 'walkin';
@@ -257,6 +258,65 @@ export class CustomersService implements OnModuleInit {
       });
     }
     await this.reconcilePromise;
+  }
+
+  private missingDebtAt = 0;
+  private missingDebtPromise: Promise<void> | null = null;
+
+  /**
+   * A credit sale can exist on a customer while no debt row was posted, so the
+   * debtors list keeps the old balance and that customer never appears.
+   */
+  private attachMissingSaleDebts(): Promise<void> {
+    if (this.missingDebtPromise && Date.now() - this.missingDebtAt < 20000) return this.missingDebtPromise;
+    this.missingDebtAt = Date.now();
+    this.missingDebtPromise = this.runAttachMissingSaleDebts().catch((err) => {
+      this.missingDebtAt = 0;
+      throw err;
+    });
+    return this.missingDebtPromise;
+  }
+
+  private async runAttachMissingSaleDebts(): Promise<void> {
+    const open = await this.invoiceModel
+      .find({ type: 'sale', remainingDebt: { $gt: 0 }, customerId: { $ne: null } })
+      .select('_id customerId remainingDebt invoiceNumber invoiceDate')
+      .lean()
+      .exec();
+    if (!open.length) return;
+    const posted = await this.transactionModel
+      .find({ type: 'debt', invoiceId: { $in: open.map((inv) => inv._id) } })
+      .select('invoiceId')
+      .lean()
+      .exec();
+    const have = new Set(posted.map((tx) => String(tx.invoiceId)));
+    const missing = open.filter((inv) => inv.customerId && !have.has(String(inv._id)) && Math.round(inv.remainingDebt || 0) > 0);
+    const byCustomer = new Map<string, typeof missing>();
+    for (const inv of missing) {
+      const id = String(inv.customerId);
+      const rows = byCustomer.get(id) || [];
+      rows.push(inv);
+      byCustomer.set(id, rows);
+    }
+    for (const [customerId, invoices] of byCustomer) {
+      for (const inv of invoices) {
+        const amount = Math.round(inv.remainingDebt || 0);
+        if (amount <= 0) continue;
+        const balance = await this.changeBalance(customerId, amount);
+        await this.transactionModel.create({
+          customer: customerId,
+          type: 'debt',
+          amount,
+          balanceAfter: balance,
+          paymentMethod: 'cash',
+          description: `نسیه فاکتور ${inv.invoiceNumber}`,
+          invoiceId: inv._id,
+          invoiceNumber: inv.invoiceNumber,
+          recordedByName: 'اصلاح حساب',
+          date: inv.invoiceDate || new Date(),
+        });
+      }
+    }
   }
 
   /** Open walk-in credit that was never posted to a customer account. */
@@ -725,7 +785,6 @@ export class CustomersService implements OnModuleInit {
     return this.transactionModel
       .find({ customer: new Types.ObjectId(customerId) })
       .sort({ date: -1, createdAt: -1 })
-      .limit(300)
       .exec();
   }
 
@@ -751,7 +810,6 @@ export class CustomersService implements OnModuleInit {
     const rows = await this.transactionModel
       .find(match)
       .sort({ date: -1, createdAt: -1 })
-      .limit(500)
       .populate('customer', 'name phoneNumber')
       .lean()
       .exec();
@@ -770,6 +828,7 @@ export class CustomersService implements OnModuleInit {
     shopsCount: number;
     walkInCount: number;
   }> {
+    await this.attachMissingSaleDebts();
     const customers = await this.customerModel.find({ isActive: true }).exec();
 
     let debtorsCount = 0;

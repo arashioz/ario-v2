@@ -55,6 +55,7 @@ export interface BulkPricePreview {
   /** Retail profit per stock unit, before and after the change. */
   profitBefore: number;
   profitAfter: number;
+  buyAfter?: number;
   skipped?: string;
 }
 
@@ -78,10 +79,51 @@ function quoteBulkPrices(prod: Product, dto: BulkPriceUpdateDto) {
     afterWholesale: beforeWholesale,
     profitBefore,
     profitAfter: profitBefore,
+    buyAfter: buy,
     changed: false,
     skipped: undefined as string | undefined,
     reason: '',
   };
+
+  if (dto.type === 'round') {
+    const after = roundMoney(before, step);
+    const afterSupermarket = roundMoney(beforeSupermarket, step);
+    const afterWholesale = roundMoney(beforeWholesale, step);
+    const buyAfter = buy > 0 ? roundMoney(buy, step) : 0;
+    const changed =
+      after !== before || afterSupermarket !== beforeSupermarket || afterWholesale !== beforeWholesale || buyAfter !== buy;
+    return {
+      ...base,
+      after,
+      afterSupermarket,
+      afterWholesale,
+      buyAfter,
+      profitAfter: after - (buyAfter || buy),
+      changed,
+      reason: `گرد کردن قیمت‌ها به ${step.toLocaleString('fa-IR')} تومان`,
+    };
+  }
+
+  if (dto.type === 'base') {
+    if (buy <= 0) return { ...base, skipped: 'قیمت خرید ندارد' };
+    const buyAfter = Math.max(0, roundMoney(buy * (1 + dto.value / 100), step));
+    const scale = buyAfter / buy;
+    const after = Math.max(roundMoney(before * scale, step), buyAfter);
+    const afterSupermarket = Math.max(roundMoney(beforeSupermarket * scale, step), buyAfter);
+    const afterWholesale = Math.max(roundMoney(beforeWholesale * scale, step), buyAfter);
+    const changed =
+      buyAfter !== buy || after !== before || afterSupermarket !== beforeSupermarket || afterWholesale !== beforeWholesale;
+    return {
+      ...base,
+      after,
+      afterSupermarket,
+      afterWholesale,
+      buyAfter,
+      profitAfter: after - buyAfter,
+      changed,
+      reason: `قیمت پایه ${dto.value}٪`,
+    };
+  }
 
   if (dto.type === 'profit') {
     if (buy <= 0) return { ...base, skipped: 'قیمت خرید ندارد' };
@@ -594,6 +636,7 @@ export class ProductsService implements OnModuleInit {
         afterWholesale: next.afterWholesale,
         profitBefore: next.profitBefore,
         profitAfter: next.profitAfter,
+        buyAfter: next.buyAfter,
         skipped: next.skipped,
       });
       if (dto.preview || next.skipped || !next.changed) continue;
@@ -607,6 +650,7 @@ export class ProductsService implements OnModuleInit {
             priceSupermarket: next.afterSupermarket,
             priceWholesale: next.afterWholesale,
             priceSetAt: new Date(),
+            ...(next.buyAfter != null && next.buyAfter !== next.buy ? { buyPrice: next.buyAfter } : {}),
           },
           $unset: { priceCostBasisPerKg: 1 },
           $push: {
