@@ -4,12 +4,12 @@
  * Nothing is deleted: extra payments stay, and a signed adjustment offsets them
  * until someone confirms a bank receipt and removes that adjustment in the app.
  *
- * Deploy this version first, then:
- *   node backend/scripts/post-belali-reconciliation.js
- *   node backend/scripts/post-belali-reconciliation.js --dry-run
+ * Run it inside the app container, after the image that contains the adjustment routes is up:
+ *   docker compose exec app node scripts/post-belali-reconciliation.js --dry-run
+ *   docker compose exec app node scripts/post-belali-reconciliation.js
  *
- * ARIO_API defaults to http://89.44.241.67/api
- * ARIO_USER / ARIO_PASSWORD override the admin user in .env
+ * Inside the container the API is http://127.0.0.1:3000/api and the admin password
+ * is the container's ADMIN_DEFAULT_PASSWORD. ARIO_API / ARIO_USER / ARIO_PASSWORD override those.
  */
 const fs = require('fs');
 const path = require('path');
@@ -24,10 +24,16 @@ function envFile(file, key) {
   return line.slice(key.length + 1).replace(/^["']|["']$/g, '').trim();
 }
 
-const API = (process.env.ARIO_API || 'http://89.44.241.67/api').replace(/\/$/, '');
-const USER = process.env.ARIO_USER || envFile(path.join(root, '.env'), 'ADMIN_DEFAULT_USERNAME') || 'admin';
+const inContainer = Boolean(process.env.ADMIN_DEFAULT_PASSWORD && process.env.MONGODB_URI);
+const API = (process.env.ARIO_API || (inContainer ? `http://127.0.0.1:${process.env.PORT || 3000}/api` : 'http://89.44.241.67/api')).replace(/\/$/, '');
+const USER =
+  process.env.ARIO_USER ||
+  process.env.ADMIN_DEFAULT_USERNAME ||
+  envFile(path.join(root, '.env'), 'ADMIN_DEFAULT_USERNAME') ||
+  'admin';
 const PASS =
   process.env.ARIO_PASSWORD ||
+  process.env.ADMIN_DEFAULT_PASSWORD ||
   envFile(path.join(root, '.env'), 'ADMIN_DEFAULT_PASSWORD') ||
   envFile(path.join(root, 'backend/.env'), 'ADMIN_DEFAULT_PASSWORD');
 

@@ -167,11 +167,21 @@ export interface SupplierProductRow {
   isDefault: boolean;
 }
 
+export interface SupplierTrade {
+  revenue: number;
+  cost: number;
+  profit: number;
+  kg: number;
+  salesCount: number;
+  sales: { invoiceId: string; invoiceNumber: string; date: string | null; customerName: string; amount: number; profit: number }[];
+}
+
 export interface SupplierProfile {
   company: SupplierCompany;
   registered: boolean;
   isParent: boolean;
   account: SupplierAccount;
+  trade?: SupplierTrade;
   products: SupplierProductRow[];
 }
 
@@ -188,6 +198,20 @@ export interface SupplierStatement {
 }
 
 export const PARENT_COMPANY = 'شرکت قند بلالی';
+
+const cleanSupplier = (s: string) =>
+  (s || '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Same parent-company aliases as the server. Other companies stay on their own account. */
+export function isParentCompany(name: string | null | undefined): boolean {
+  const s = cleanSupplier(name ?? '');
+  if (!s || s === 'شرکت' || s.startsWith('شرکت بنام') || s.startsWith('شرکت به نام') || s.includes('بلالی')) return true;
+  return s === PARENT_COMPANY;
+}
 
 /** "IR19 0120 …" / "6219 8619 …" for display. */
 export const formatAccountNumber = (a: string) =>

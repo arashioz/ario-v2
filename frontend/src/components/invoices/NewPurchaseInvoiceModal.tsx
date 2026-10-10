@@ -22,7 +22,7 @@ import { productsService } from '../../services/products.service';
 import type { Product } from '../../services/products.service';
 import { invoicesService } from '../../services/invoices.service';
 import type { Invoice } from '../../services/invoices.service';
-import { suppliersService, type SupplierListItem } from '../../services/suppliers.service';
+import { isParentCompany, suppliersService, type SupplierListItem } from '../../services/suppliers.service';
 import { useNotification } from '../../context/NotificationContext';
 import { LoadingOverlay } from '../LoadingOverlay';
 import { InvoiceDateModal } from '../pos/InvoiceDateModal';
@@ -256,9 +256,12 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
       };
 
       const res = await invoicesService.create(invoiceData);
+      const split = res.splitInto;
       showNotification({
         title: 'فاکتور خرید ثبت شد',
-        message: `فاکتور خرید ${res.invoiceNumber} ثبت و موجودی انبار به‌روزرسانی شد.`,
+        message: split?.length
+          ? `${split.length} فاکتور جدا ثبت شد: ${split.map((s) => `${s.invoiceNumber} (${s.supplierCompany})`).join('، ')}`
+          : `فاکتور خرید ${res.invoiceNumber} برای ${res.supplierCompany || res.customerName} ثبت شد.`,
         type: 'success',
       });
       onInvoiceCreated(res);
@@ -346,6 +349,11 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                 />
               </div>
             </div>
+            {supplierName.trim() && !isParentCompany(supplierName) && (
+              <p className="text-[10px] text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2">
+                این فاکتور فقط در حساب همین شرکت می‌ماند و به موجودی، صندوق و فاکتورهای اپ اصلی وارد نمی‌شود.
+              </p>
+            )}
             {suppliers.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {suppliers.map((s) => (

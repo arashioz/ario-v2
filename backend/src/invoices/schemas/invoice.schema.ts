@@ -100,6 +100,26 @@ export class Invoice {
   @Prop({ required: true, trim: true, default: 'مشتری حضوری' })
   customerName: string;
 
+  /** Company whose goods are on this invoice. Mixed carts are split so each company gets its own invoice. */
+  @Prop({ trim: true, default: '' })
+  supplierCompany?: string;
+
+  /**
+   * When one order had several companies, every resulting invoice keeps the full cart
+   * so the original lines can still be read.
+   */
+  @Prop({ type: MongooseSchema.Types.Mixed })
+  orderBundle?: {
+    id: string;
+    invoices: {
+      invoiceId: string;
+      invoiceNumber: string;
+      supplierCompany: string;
+      finalAmount: number;
+      items: { productName: string; category: string; quantity: number; unit: string; totalPrice: number }[];
+    }[];
+  };
+
   @Prop({ trim: true, default: '' })
   customerPhone?: string;
 
@@ -171,8 +191,8 @@ export class Invoice {
   @Prop({ default: 15 })
   dueDays: number;
 
-  /** shop: deduct shop stock. factory: goods leave the factory, shop stock is untouched. */
-  @Prop({ type: String, enum: ['shop', 'factory'], default: 'shop' })
+  /** shop: in the shop books. factory: direct from the factory. ledger: another company's account only. */
+  @Prop({ type: String, enum: ['shop', 'factory', 'ledger'], default: 'shop' })
   fulfillment: string;
 
   /** Purchase invoice booked to the parent company for a direct factory sale. */

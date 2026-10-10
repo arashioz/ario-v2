@@ -9,6 +9,7 @@ import {
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
 import { runFifo, dayKey, purchaseFreight } from './fifo';
+import { purchaseEntersShop } from '../suppliers/supplier-names';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
 
 export interface Period {
@@ -263,7 +264,7 @@ export class AccountingService {
     // must not be what flags a warehouse error.
     for (const inv of f.invoices) {
       const purchase = inv.type === 'purchase';
-      if (inv.fulfillment === 'factory') continue;
+      if (purchase ? !purchaseEntersShop(inv) : inv.fulfillment === 'factory') continue;
       for (const it of inv.items) {
         if (purchase && it.received === false) continue;
         if (!it.productId) continue;

@@ -6,10 +6,11 @@ import { SupplierPayment, SupplierPaymentDocument } from './schemas/supplier-pay
 import { SupplierAdjustment, SupplierAdjustmentDocument } from './schemas/supplier-adjustment.schema';
 import { CreateSupplierPaymentDto, UpdateSupplierPaymentDto } from './dto/supplier-payment.dto';
 import { CreateSupplierAdjustmentDto, UpdateSupplierAdjustmentDto } from './dto/supplier-adjustment.dto';
-import { canonicalSupplier, clean, PARENT_COMPANY, setRegisteredSuppliers } from './supplier-names';
+import { canonicalSupplier, clean, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, setRegisteredSuppliers } from './supplier-names';
 import { SupplierCompany, SupplierCompanyDocument } from './schemas/supplier-company.schema';
 import { CreateSupplierCompanyDto, SupplierBankAccountDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
+import { runFifo } from '../accounting/fifo';
 
 const normAccount = (a: SupplierBankAccountDto) => ({
   holder: (a.holder || '').trim(),
@@ -482,11 +483,14 @@ export class SuppliersService implements OnApplicationBootstrap {
       (await this.productModel.find({ _id: { $in: [...byProduct.keys()].filter((id) => Types.ObjectId.isValid(id)) } }).select('stock unit').lean()).map((p) => [String(p._id), p]),
     );
 
+    const trade = await this.companyTrade(supplier);
+
     return {
       company: company ? { ...company, _id: String(company._id) } : { _id: null, name: supplier, phone: '', contactName: '', address: '', notes: '', accounts: [], isActive: true },
       registered: !!company,
       isParent: supplier === PARENT_COMPANY,
       account,
+      trade,
       products: [...byProduct.values()]
         .map((r) => ({
           ...r,
@@ -497,6 +501,62 @@ export class SuppliersService implements OnApplicationBootstrap {
           isDefault: defaults.some((d) => String(d._id) === r.productId),
         }))
         .sort((a, b) => b.amount - a.amount),
+    };
+  }
+
+  /** Sales and profit of this company's own products, separate from the other companies. */
+  private async companyTrade(supplier: string) {
+    const [invoices, products] = await Promise.all([
+      this.invoiceModel
+        .find()
+        .select('invoiceNumber type invoiceDate createdAt customerId customerName supplierCompany totalAmount discount finalAmount creditAmount remainingDebt shippingPayer shippingCost fulfillment items')
+        .lean(),
+      this.productModel.find().select('name unit weightPerUnitKg buyPrice stock supplierName').lean(),
+    ]);
+    const mine = new Set(
+      products
+        .filter((p) => {
+          const named = (p.supplierName || '').trim();
+          return named ? canonicalSupplier(named) === supplier : supplier === PARENT_COMPANY;
+        })
+        .map((p) => String(p._id)),
+    );
+    const fifo = runFifo(
+      invoices.map((i) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as any,
+      products.map((p) => ({ ...p, _id: String(p._id) })) as any,
+    );
+    const lines = fifo.saleLines.filter((l) => mine.has(l.productId));
+    const byInvoice = new Map<string, { amount: number; cost: number; profit: number }>();
+    for (const l of lines) {
+      const row = byInvoice.get(l.invoiceId) ?? { amount: 0, cost: 0, profit: 0 };
+      row.amount += l.revenue;
+      row.cost += l.cost;
+      row.profit += l.revenue - l.cost;
+      byInvoice.set(l.invoiceId, row);
+    }
+    const sales = [...byInvoice.entries()]
+      .map(([invoiceId, row]) => {
+        const inv = invoices.find((i) => String(i._id) === invoiceId);
+        return {
+          invoiceId,
+          invoiceNumber: inv?.invoiceNumber || '',
+          date: inv?.invoiceDate ?? null,
+          customerName: inv?.customerName || '',
+          amount: r0(row.amount),
+          profit: r0(row.profit),
+        };
+      })
+      .sort((a, b) => +new Date(b.date || 0) - +new Date(a.date || 0));
+    const revenue = lines.reduce((s, l) => s + l.revenue, 0);
+    const cost = lines.reduce((s, l) => s + l.cost, 0);
+    const kg = lines.reduce((s, l) => s + l.kg, 0);
+    return {
+      revenue: r0(revenue),
+      cost: r0(cost),
+      profit: r0(revenue - cost),
+      kg: Math.round(kg),
+      salesCount: sales.length,
+      sales,
     };
   }
 
@@ -687,6 +747,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     const to = canonicalSupplier(toClean);
     const from = canonicalSupplier(fromName || PARENT_COMPANY);
     if (from === to) throw new BadRequestException('مقصد با شرکت فعلی یکی است');
+    const toShop = isParentSupplier(to);
 
     await this.productModel.updateMany({ _id: { $in: ids } }, { $set: { supplierName: to } });
     const idSet = new Set(ids);
@@ -701,7 +762,11 @@ export class SuppliersService implements OnApplicationBootstrap {
       if (!moving.length) continue;
 
       if (moving.length === items.length) {
+        const wasInShop = purchaseEntersShop(inv);
         inv.customerName = to;
+        inv.fulfillment = inv.fulfillment === 'factory' ? 'factory' : toShop ? 'shop' : 'ledger';
+        if (wasInShop && !purchaseEntersShop(inv)) await this.shiftPurchaseStock(items, -1);
+        else if (!wasInShop && purchaseEntersShop(inv)) await this.shiftPurchaseStock(items, 1);
         await inv.save();
         movedInvoices++;
         continue;
@@ -728,6 +793,7 @@ export class SuppliersService implements OnApplicationBootstrap {
       inv.paidAmount = Math.max(0, inv.finalAmount - inv.creditAmount);
       inv.remainingDebt = inv.creditAmount;
       inv.isPaid = inv.creditAmount <= 0;
+      if (purchaseEntersShop(inv)) await this.shiftPurchaseStock(moving, -1);
       await inv.save();
 
       let number = `${inv.invoiceNumber}-2`;
@@ -754,14 +820,24 @@ export class SuppliersService implements OnApplicationBootstrap {
         remainingDebt: movedCredit,
         isPaid: movedCredit <= 0,
         notes: `انتقال کالا از ${from}، فاکتور ${inv.invoiceNumber}`,
+        fulfillment: toShop ? 'shop' : 'ledger',
         createdByName: inv.createdByName || '',
       });
+      if (toShop) await this.shiftPurchaseStock(moving, 1);
       splitInvoices++;
     }
 
     await this.sync(from);
     await this.sync(to);
     return { products: ids.length, movedInvoices, splitInvoices, to };
+  }
+
+  /** Received lines of a purchase that is entering or leaving the shop warehouse. */
+  private async shiftPurchaseStock(items: { productId?: string; quantity?: number; received?: boolean }[], sign: 1 | -1) {
+    for (const item of items) {
+      if (item.received === false || !item.productId || !Types.ObjectId.isValid(item.productId)) continue;
+      await this.productModel.updateOne({ _id: item.productId }, { $inc: { stock: sign * (item.quantity || 0) } });
+    }
   }
 
   async exportReconciliationCsv(supplierName?: string): Promise<{ csv: string; filename: string }> {

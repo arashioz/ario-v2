@@ -45,6 +45,21 @@ export interface Invoice {
   saleType: 'retail' | 'supermarket' | 'wholesale';
   customerId?: string;
   customerName: string;
+  /** Company this invoice's goods belong to. A mixed cart is saved as one invoice per company. */
+  supplierCompany?: string;
+  /** Set on the first invoice when one save wrote several company invoices. */
+  splitInto?: { _id: string; invoiceNumber: string; supplierCompany?: string; finalAmount: number; type: 'sale' | 'purchase' }[];
+  /** Full cart when one order was split across companies. Stored on every piece. */
+  orderBundle?: {
+    id: string;
+    invoices: {
+      invoiceId: string;
+      invoiceNumber: string;
+      supplierCompany: string;
+      finalAmount: number;
+      items: { productName: string; category: string; quantity: number; unit: string; totalPrice: number }[];
+    }[];
+  };
   customerPhone?: string;
   branchName?: string;
   invoiceDate: string;
@@ -66,8 +81,8 @@ export interface Invoice {
   creditSurplus?: number;
   dueDate?: string;
   dueDays?: number;
-  /** shop stock, or goods that left the factory and never touched the shop. */
-  fulfillment?: 'shop' | 'factory';
+  /** shop stock, factory shipment, or another company's ledger only. */
+  fulfillment?: 'shop' | 'factory' | 'ledger';
   /** Company purchase created for a direct factory sale. */
   factoryPurchaseId?: string;
   factoryPurchaseNumber?: string;
@@ -107,7 +122,7 @@ export interface CreateInvoiceInput {
   shippingCost?: number;
   depositAccounts?: DepositAccounts;
   dueDays?: number;
-  fulfillment?: 'shop' | 'factory';
+  fulfillment?: 'shop' | 'factory' | 'ledger';
 }
 
 export const invoiceDueDate = (inv: Pick<Invoice, 'type' | 'remainingDebt' | 'dueDate' | 'dueDays' | 'invoiceDate' | 'createdAt'>): Date | null => {

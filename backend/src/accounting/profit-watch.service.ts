@@ -8,6 +8,7 @@ import { AccountingService } from './accounting.service';
 import { AuditService } from '../audit/audit.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { dayKey, isDoubleDiscount } from './fifo';
+import { purchaseEntersShop } from '../suppliers/supplier-names';
 import type { FifoResult, SaleLine } from './fifo';
 
 export type Severity = 'error' | 'warning' | 'info';
@@ -525,7 +526,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     const soldQty = new Map<string, number>();
     for (const inv of f.invoices) {
       const purchase = inv.type === 'purchase';
-      if (inv.fulfillment === 'factory') continue;
+      if (purchase ? !purchaseEntersShop(inv) : inv.fulfillment === 'factory') continue;
       for (const it of inv.items) {
         if (purchase && it.received === false) continue;
         if (!it.productId) continue;

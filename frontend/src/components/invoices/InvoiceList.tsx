@@ -58,6 +58,7 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
           <h4 className="text-xs font-bold text-slate-800 mt-1 truncate">
             {inv.customerName}
             {inv.branchName ? ` · ${inv.branchName}` : ''}
+            {inv.type === 'sale' && inv.supplierCompany ? ` · ${inv.supplierCompany}` : ''}
           </h4>
         </div>
       </div>

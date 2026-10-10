@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { CreateInvoiceInput, DepositAccounts, Invoice, InvoiceItem, ShippingPayer, SplitDetails } from './invoices.service';
+import { apiErrorMessage, type CreateInvoiceInput, type DepositAccounts, type Invoice, type InvoiceItem, type ShippingPayer, type SplitDetails } from './invoices.service';
 
 export type ProformaStatus = 'pending' | 'shipped' | 'cancelled';
 
@@ -56,6 +56,15 @@ export const PROFORMA_STATUS_LABELS: Record<ProformaStatus, string> = {
   cancelled: 'لغو شده',
 };
 
+/** Older servers reject dueDays with forbidNonWhitelisted. Drop it and retry once. */
+const withoutDueDays = <T extends { dueDays?: number }>(terms: T): Omit<T, 'dueDays'> => {
+  const rest = { ...terms };
+  delete rest.dueDays;
+  return rest;
+};
+
+const staleDueDays = (err: unknown) => apiErrorMessage(err, '').includes('dueDays');
+
 export const proformasService = {
   async create(input: CreateInvoiceInput): Promise<Proforma> {
     return (await api.post('/proformas', input)).data;
@@ -67,10 +76,20 @@ export const proformasService = {
     return (await api.get('/proformas/summary')).data;
   },
   async update(id: string, terms: ProformaTerms): Promise<Proforma> {
-    return (await api.patch(`/proformas/${id}`, terms)).data;
+    try {
+      return (await api.patch(`/proformas/${id}`, terms)).data;
+    } catch (err) {
+      if (terms.dueDays == null || !staleDueDays(err)) throw err;
+      return (await api.patch(`/proformas/${id}`, withoutDueDays(terms))).data;
+    }
   },
   async ship(id: string, terms: ProformaTerms & { date?: string }): Promise<{ proforma: Proforma; invoice: Invoice }> {
-    return (await api.post(`/proformas/${id}/ship`, terms)).data;
+    try {
+      return (await api.post(`/proformas/${id}/ship`, terms)).data;
+    } catch (err) {
+      if (terms.dueDays == null || !staleDueDays(err)) throw err;
+      return (await api.post(`/proformas/${id}/ship`, withoutDueDays(terms))).data;
+    }
   },
   async cancel(id: string): Promise<Proforma> {
     return (await api.post(`/proformas/${id}/cancel`)).data;

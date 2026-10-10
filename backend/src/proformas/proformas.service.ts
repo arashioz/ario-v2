@@ -232,10 +232,11 @@ export class ProformasService {
     };
 
     const invoice = await this.invoices.create(dto, recordedByName, { proformaNumber: doc.number, shippedAt });
+    const split = (invoice as { splitInto?: { invoiceNumber: string }[] }).splitInto;
     doc.status = 'shipped';
     doc.shippedAt = shippedAt;
     doc.invoiceId = String(invoice._id);
-    doc.invoiceNumber = invoice.invoiceNumber;
+    doc.invoiceNumber = split?.length ? split.map((s) => s.invoiceNumber).join('، ') : invoice.invoiceNumber;
     await doc.save();
     return { proforma: doc, invoice };
   }

@@ -8,6 +8,7 @@ import { SupplierPayment, SupplierPaymentDocument } from '../suppliers/schemas/s
 import { CashTransaction, CashTransactionDocument } from './schemas/cash-transaction.schema';
 import { CashboxAdjustment, CashboxAdjustmentDocument } from './schemas/cashbox-adjustment.schema';
 import { SettingsService } from '../settings/settings.service';
+import { isParentSupplier, purchaseEntersShop } from '../suppliers/supplier-names';
 
 type Channel = 'cash' | 'bank' | 'cheque';
 type Kind = 'sale' | 'debt_payment' | 'walkin_payment' | 'expense' | 'withdrawal' | 'manager_deposit' | 'supplier_payment' | 'purchase_spot' | 'pos_settlement';
@@ -85,19 +86,24 @@ export class CashbookService {
     };
     const inRange = (d: Date) => (!from || +new Date(d) >= +from) && (!to || +new Date(d) <= +to);
 
-    const [invoices, walkins, txs, expenses, supplierPayments] = await Promise.all([
+    const [invoices, walkins, txs, expenses, supplierPayments, companyPurchases] = await Promise.all([
       this.invoiceModel
         .find({ ...range('invoiceDate') })
-        .select('invoiceNumber type invoiceDate customerName finalAmount creditAmount paymentMethod splitDetails depositAccounts shippingPayer')
+        .select('invoiceNumber type invoiceDate customerName fulfillment finalAmount creditAmount paymentMethod splitDetails depositAccounts shippingPayer')
         .lean(),
       this.invoiceModel.find({ type: 'sale', 'legacyPayments.0': { $exists: true } }).select('invoiceNumber customerName legacyPayments').lean(),
       this.txModel.find({ type: 'payment', ...range('date') }).populate('customer', 'name').lean(),
       this.expenseModel.find({ ...range('date') }).lean(),
       this.supplierPaymentModel.find({ ...range('date') }).lean(),
+      this.invoiceModel.find({ type: 'purchase' }).select('_id customerName fulfillment').lean(),
     ]);
+    const companyInvoiceIds = new Set(
+      companyPurchases.filter((inv) => !purchaseEntersShop(inv) && inv.fulfillment !== 'factory').map((inv) => String(inv._id)),
+    );
 
     const entries: CashEntry[] = [];
     for (const inv of invoices) {
+      if (inv.type === 'purchase' && !purchaseEntersShop(inv)) continue;
       const upfront = Math.max(0, (inv.finalAmount || 0) - (inv.creditAmount || 0));
       if (upfront <= 0) continue;
       const direction = inv.type === 'sale' ? 'in' : 'out';
@@ -138,6 +144,7 @@ export class CashbookService {
       });
     }
     for (const e of expenses) {
+      if (e.invoiceId && companyInvoiceIds.has(String(e.invoiceId))) continue;
       const deposit = e.type === 'deposit';
       const withdrawal = !deposit && (e.isPersonalWithdrawal || e.type === 'withdrawal');
       entries.push({
@@ -152,6 +159,7 @@ export class CashbookService {
       });
     }
     for (const p of supplierPayments) {
+      if (!isParentSupplier(p.supplier)) continue;
       entries.push({
         date: p.date,
         direction: 'out',

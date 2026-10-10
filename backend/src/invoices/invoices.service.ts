@@ -14,7 +14,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { canonicalSupplier, PARENT_COMPANY } from '../suppliers/supplier-names';
+import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop } from '../suppliers/supplier-names';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 
@@ -157,7 +157,8 @@ export class InvoicesService {
   /** Keeps the shipping expense of an invoice in step with who pays for delivery. */
   private async syncShippingExpense(invoice: InvoiceDocument, recordedByName: string) {
     const isSale = invoice.type === 'sale';
-    const needed = invoice.shippingPayer === 'me' && invoice.shippingCost > 0;
+    const onCompanyBooks = invoice.type === 'purchase' && !purchaseEntersShop(invoice) && invoice.fulfillment !== 'factory';
+    const needed = !onCompanyBooks && invoice.shippingPayer === 'me' && invoice.shippingCost > 0;
     const existing = invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)
       ? await this.expenseModel.findById(invoice.shippingExpenseId).exec()
       : null;
@@ -258,7 +259,7 @@ export class InvoicesService {
     const fields = {
       type: 'purchase',
       saleType: 'wholesale',
-      customerName: PARENT_COMPANY,
+      customerName: canonicalSupplier(sale.supplierCompany || PARENT_COMPANY),
       customerPhone: '',
       invoiceDate: sale.invoiceDate,
       items,
@@ -295,7 +296,7 @@ export class InvoicesService {
     sale.factoryPurchaseId = String(purchase._id);
     sale.factoryPurchaseNumber = purchase.invoiceNumber;
     await sale.save();
-    await this.suppliersService.sync(PARENT_COMPANY);
+    await this.suppliersService.sync(canonicalSupplier(sale.supplierCompany || PARENT_COMPANY));
   }
 
   async repairFactoryPurchasePrices(): Promise<number> {
@@ -348,13 +349,150 @@ export class InvoicesService {
   // CRUD
   // ---------------------------------------------------------------------------
 
+  /**
+   * One invoice per company. A cart with sugar, tea and nabat becomes three invoices,
+   * each with its own lines, and each sits on that company's account.
+   */
+  private async divideByCompany(dto: CreateInvoiceDto): Promise<{ company: string; dto: CreateInvoiceDto }[]> {
+    const isSale = (dto.type || 'sale') === 'sale';
+    const fallback = isSale ? PARENT_COMPANY : canonicalSupplier(dto.customerName || PARENT_COMPANY);
+    const ids = [...new Set((dto.items || []).map((it) => it.productId).filter((id) => Types.ObjectId.isValid(id)))];
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('supplierName').lean() : [];
+    const named = new Map(products.map((p) => [String(p._id), (p.supplierName || '').trim()]));
+    const companyOf = (productId: string) => {
+      const raw = named.get(productId);
+      return raw ? canonicalSupplier(raw) : fallback;
+    };
+    const groups = new Map<string, CreateInvoiceDto['items']>();
+    for (const it of dto.items || []) {
+      const company = companyOf(it.productId);
+      const list = groups.get(company) ?? [];
+      list.push(it);
+      groups.set(company, list);
+    }
+    const entries = [...groups.entries()];
+    if (entries.length <= 1) {
+      const company = entries[0]?.[0] || fallback;
+      return [{ company, dto: { ...dto, customerName: isSale ? dto.customerName : company } }];
+    }
+
+    const lineSum = (items: CreateInvoiceDto['items']) => items.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
+    const all = lineSum(dto.items);
+    let discountLeft = Math.round(dto.discount || 0);
+    let shippingLeft = Math.round(dto.shippingCost || 0);
+    let paidLeft = Math.round(dto.paidAmount || 0);
+    const splitLeft = {
+      pos: Math.round(dto.splitDetails?.pos || 0),
+      cash: Math.round(dto.splitDetails?.cash || 0),
+      transfer: Math.round(dto.splitDetails?.transfer || 0),
+      cheque: Math.round(dto.splitDetails?.cheque || 0),
+      credit: Math.round(dto.splitDetails?.credit || 0),
+    };
+    const portion = (total: number, left: number, last: boolean, share: number) => {
+      if (last) return left;
+      return Math.min(left, Math.round(total * share));
+    };
+
+    return entries.map(([company, items], index) => {
+      const last = index === entries.length - 1;
+      const share = all > 0 ? lineSum(items) / all : 1 / entries.length;
+      const discount = portion(dto.discount || 0, discountLeft, last, share);
+      discountLeft -= discount;
+      const shippingCost = portion(dto.shippingCost || 0, shippingLeft, last, share);
+      shippingLeft -= shippingCost;
+      const totalAmount = Math.round(lineSum(items));
+      const finalAmount = Math.max(0, totalAmount - discount);
+      let splitDetails = dto.splitDetails;
+      let paidAmount = dto.paidAmount;
+      if (dto.paymentMethod === 'split') {
+        const next = {
+          pos: portion(dto.splitDetails?.pos || 0, splitLeft.pos, last, share),
+          cash: portion(dto.splitDetails?.cash || 0, splitLeft.cash, last, share),
+          transfer: portion(dto.splitDetails?.transfer || 0, splitLeft.transfer, last, share),
+          cheque: portion(dto.splitDetails?.cheque || 0, splitLeft.cheque, last, share),
+          credit: portion(dto.splitDetails?.credit || 0, splitLeft.credit, last, share),
+        };
+        splitLeft.pos -= next.pos;
+        splitLeft.cash -= next.cash;
+        splitLeft.transfer -= next.transfer;
+        splitLeft.cheque -= next.cheque;
+        splitLeft.credit -= next.credit;
+        splitDetails = next;
+        paidAmount = Math.max(0, finalAmount - next.credit);
+      } else if (dto.paymentMethod === 'credit') {
+        paidAmount = portion(dto.paidAmount || 0, paidLeft, last, share);
+        paidLeft -= paidAmount;
+      } else {
+        paidAmount = finalAmount;
+      }
+      const weight = items.reduce((s, it) => s + (Number(it.weightKg) || 0), 0);
+      return {
+        company,
+        dto: {
+          ...dto,
+          items,
+          customerName: isSale ? dto.customerName : company,
+          totalAmount,
+          discount,
+          finalAmount,
+          totalWeightKg: Math.round(weight * 10) / 10,
+          shippingCost,
+          splitDetails,
+          paidAmount,
+        },
+      };
+    });
+  }
+
   async create(
     dto: CreateInvoiceDto,
     recordedByName: string,
     extra: { proformaNumber?: string; shippedAt?: Date } = {},
+    companyName?: string,
   ): Promise<InvoiceDocument> {
+    if (!companyName) {
+      const parts = await this.divideByCompany(dto);
+      if (parts.length > 1) {
+        const made: InvoiceDocument[] = [];
+        for (const part of parts) made.push(await this.create(part.dto, recordedByName, extra, part.company));
+        const productIds = [...new Set(made.flatMap((inv) => (inv.items || []).map((it) => String(it.productId))).filter((id) => Types.ObjectId.isValid(id)))];
+        const categories = new Map(
+          (productIds.length ? await this.productModel.find({ _id: { $in: productIds } }).select('category').lean() : []).map((p) => [String(p._id), p.category || '']),
+        );
+        const orderBundle = {
+          id: crypto.randomUUID(),
+          invoices: made.map((inv) => ({
+            invoiceId: String(inv._id),
+            invoiceNumber: inv.invoiceNumber,
+            supplierCompany: inv.supplierCompany || '',
+            finalAmount: inv.finalAmount,
+            items: (inv.items || []).map((it) => ({
+              productName: it.productName,
+              category: categories.get(String(it.productId)) || '',
+              quantity: it.quantity,
+              unit: it.unit,
+              totalPrice: it.totalPrice,
+            })),
+          })),
+        };
+        await this.invoiceModel.updateMany({ _id: { $in: made.map((inv) => inv._id) } }, { $set: { orderBundle } });
+        const first = made[0].toObject() as InvoiceDocument & { splitInto?: unknown[]; orderBundle?: unknown };
+        first.orderBundle = orderBundle;
+        first.splitInto = made.map((inv) => ({
+          _id: String(inv._id),
+          invoiceNumber: inv.invoiceNumber,
+          supplierCompany: inv.supplierCompany,
+          finalAmount: inv.finalAmount,
+          type: inv.type,
+        }));
+        return first as InvoiceDocument;
+      }
+      return this.create(parts[0].dto, recordedByName, extra, parts[0].company);
+    }
+
     const isSale = (dto.type || 'sale') === 'sale';
     const fromFactory = isSale && dto.fulfillment === 'factory';
+    const ledgerPurchase = !isSale && !isParentSupplier(dto.customerName);
     if (fromFactory) await this.assertFactoryEnabled();
     const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory);
     const customer = isSale ? await this.resolveCustomer(dto) : null;
@@ -368,10 +506,10 @@ export class InvoicesService {
 
     if (isSale && !fromFactory) {
       await this.shiftStock(items, -1);
-    } else if (!isSale && dto.fulfillment !== 'factory') {
+    } else if (!isSale && !ledgerPurchase) {
       await this.shiftStock(items, 1, true);
       for (const item of items) {
-        if (item.unitPrice > 0 && dto.fulfillment !== 'factory') {
+        if (item.unitPrice > 0) {
           await this.rememberBuyPrice(item.productId, item.unitPrice, new Date(dto.invoiceDate || Date.now()));
         }
       }
@@ -386,6 +524,7 @@ export class InvoicesService {
       saleType: dto.saleType || 'retail',
       customerId: customer ? customer._id : undefined,
       customerName: customer?.name || (isSale ? dto.customerName : canonicalSupplier(dto.customerName)),
+      supplierCompany: companyName,
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
       branchName,
       invoiceDate,
@@ -402,7 +541,7 @@ export class InvoicesService {
       creditSurplus: 0,
       dueDays,
       dueDate: credit > 0 ? new Date(invoiceDate.getTime() + dueDays * 86400000) : undefined,
-      fulfillment: fromFactory ? 'factory' : 'shop',
+      fulfillment: fromFactory ? 'factory' : ledgerPurchase ? 'ledger' : 'shop',
       paidAmount: dto.finalAmount - credit,
       remainingDebt: credit,
       isPaid: credit === 0,
@@ -436,10 +575,11 @@ export class InvoicesService {
     const isSale = invoice.type === 'sale';
     const wasFactory = invoice.fulfillment === 'factory';
     const willFactory = (dto.fulfillment ?? invoice.fulfillment) === 'factory';
+    const nextSupplier = isSale ? invoice.customerName : canonicalSupplier(dto.customerName || invoice.customerName);
     const wasShopSale = isSale && !wasFactory;
-    const wasShopPurchase = !isSale && !wasFactory;
+    const wasShopPurchase = !isSale && purchaseEntersShop(invoice);
     const willShopSale = isSale && !willFactory;
-    const willShopPurchase = !isSale && !willFactory;
+    const willShopPurchase = !isSale && !wasFactory && !willFactory && isParentSupplier(nextSupplier);
     if (isSale && willFactory && !wasFactory) await this.assertFactoryEnabled();
 
     // Undo the old effects, then apply the new ones; restore on validation failure.
@@ -491,7 +631,7 @@ export class InvoicesService {
       customerPhone: customer?.phoneNumber || dto.customerPhone || '',
       branchName,
       invoiceDate,
-      fulfillment: dto.fulfillment ?? invoice.fulfillment ?? 'shop',
+      fulfillment: isSale ? (willFactory ? 'factory' : 'shop') : wasFactory ? 'factory' : willShopPurchase ? 'shop' : 'ledger',
       ...(typeof dueDays === 'number' ? { dueDays } : {}),
       ...(credit > 0 ? { dueDate: new Date(new Date(invoiceDate).getTime() + (dueDays || 15) * 86400000) } : {}),
       items: prepared.items,
@@ -548,7 +688,7 @@ export class InvoicesService {
     }
 
     if (isSale && !fromFactory) await this.shiftStock(invoice.items as any, 1);
-    else if (!isSale && !fromFactory) await this.shiftStock(invoice.items as any, -1, true);
+    else if (purchaseEntersShop(invoice)) await this.shiftStock(invoice.items as any, -1, true);
     if (invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)) {
       await this.expenseModel.deleteOne({ _id: invoice.shippingExpenseId }).exec();
     }
@@ -789,7 +929,7 @@ export class InvoicesService {
   async rebuildStock() {
     const invoices = await this.invoiceModel
       .find({ type: { $in: ['sale', 'purchase'] } })
-      .select('type fulfillment items')
+      .select('type fulfillment customerName items')
       .lean()
       .exec();
 
@@ -798,7 +938,8 @@ export class InvoicesService {
     let sales = 0;
     for (const inv of invoices) {
       const purchase = inv.type === 'purchase';
-      if (inv.fulfillment === 'factory') continue;
+      if (purchase && !purchaseEntersShop(inv)) continue;
+      if (!purchase && inv.fulfillment === 'factory') continue;
       if (purchase) purchases++;
       else sales++;
       for (const item of inv.items || []) {

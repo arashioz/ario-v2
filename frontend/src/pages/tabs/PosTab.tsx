@@ -187,10 +187,12 @@ export const PosTab: React.FC = () => {
         loadPending();
       } else {
         const inv = await invoicesService.create(input);
+        const split = inv.splitInto;
         showNotification({
           title: 'فاکتور صادر شد',
-          message:
-            fulfillment === 'factory'
+          message: split?.length
+            ? `${split.length} فاکتور جدا برای شرکت‌ها ثبت شد: ${split.map((s) => `${s.invoiceNumber} (${s.supplierCompany})`).join('، ')}`
+            : fulfillment === 'factory'
               ? `فاکتور ${inv.invoiceNumber} ثبت شد. از موجودی آریو کم نشد و خرید شرکت مادر هم ثبت شد.`
               : `فاکتور ${inv.invoiceNumber} به مبلغ ${formatToman(inv.finalAmount)} ثبت شد.`,
           type: 'success',

@@ -7,7 +7,6 @@ import { suppliersService, type SupplierListItem } from '../services/suppliers.s
 import { Empty, ReportHeader } from '../components/reports/ReportUI';
 import { CompanySheet } from '../components/suppliers/CompanySheet';
 import { useNotification } from '../context/NotificationContext';
-import Toman from '../components/ui/Toman';
 import { dateToYmd, formatJalali } from '../lib/jalali';
 import { formatToman, num, weight } from '../lib/format';
 
@@ -59,20 +58,30 @@ export const SuppliersPage: React.FC = () => {
   };
 
   const open = (name: string) => navigate(`/supplier-account?name=${encodeURIComponent(name)}`);
-  const totalDebt = (list ?? []).reduce((s, c) => s + c.debt, 0);
 
   return (
     <IonPage>
       <ReportHeader
         title="شرکت‌های تأمین‌کننده"
-        subtitle="حساب، بدهی و محصولات هر شرکت"
+        subtitle="هر شرکت جدا، با فاکتورهای خودش"
         right={
-          <button
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-sky-600 text-white text-[11px] font-bold active:scale-95 shrink-0"
-          >
-            <Plus className="w-4 h-4" /> شرکت جدید
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => handleExport(e)}
+              disabled={exportingName !== null}
+              className="flex items-center gap-1 px-2.5 py-2 rounded-2xl bg-emerald-50 text-emerald-700 text-[11px] font-bold active:scale-95 shrink-0 disabled:opacity-50"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              {exportingName === 'parent' ? '…' : 'اکسل مادر'}
+            </button>
+            <button
+              onClick={() => setCreating(true)}
+              className="flex items-center gap-1 px-3 py-2 rounded-2xl bg-sky-600 text-white text-[11px] font-bold active:scale-95 shrink-0"
+            >
+              <Plus className="w-4 h-4" /> شرکت جدید
+            </button>
+          </div>
         }
       />
       <IonContent fullscreen className="bg-slate-50">
@@ -80,30 +89,6 @@ export const SuppliersPage: React.FC = () => {
           <IonRefresherContent />
         </IonRefresher>
         <div className="p-3 space-y-3 max-w-md mx-auto pb-8">
-          {list && list.length > 0 && (
-            <div className="rounded-2xl p-3.5 text-white bg-gradient-to-br from-rose-600 to-fuchsia-700 shadow-lg space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-[11px] text-rose-100">جمع بدهی به همه شرکت‌ها</div>
-                  <div className="text-2xl font-extrabold mt-0.5">
-                    <Toman value={totalDebt} unitClassName="text-xs font-normal text-rose-100" />
-                  </div>
-                  <div className="text-[10px] text-rose-100 mt-0.5">{num(list.length)} شرکت فعال</div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => handleExport(e)}
-                  disabled={exportingName !== null}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold active:scale-95 transition backdrop-blur-xs disabled:opacity-50 shrink-0 border border-white/25 shadow-xs"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>{exportingName === 'parent' ? 'دریافت…' : 'اکسل شرکت مادر'}</span>
-                </button>
-              </div>
-            </div>
-          )}
-
           {error && <Empty>{error}</Empty>}
           {!list && !error && <Empty>در حال دریافت…</Empty>}
 

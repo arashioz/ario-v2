@@ -11,7 +11,8 @@ import {
   Request,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
-import { IsDateString, IsNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDateString, IsNotEmpty, IsNumber, Min } from 'class-validator';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -22,6 +23,13 @@ class SetInvoiceDateDto {
   @IsDateString({}, { message: 'تاریخ نامعتبر است' })
   @IsNotEmpty()
   invoiceDate: string;
+}
+
+class SetDueDaysDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  dueDays: number;
 }
 
 const actorName = (req: any) => req.user?.fullName || req.user?.username || 'کاربر سیستم';
@@ -85,8 +93,8 @@ export class InvoicesController {
   }
 
   @Post(':id/due')
-  setDue(@Param('id') id: string, @Body() body: { dueDays?: number }) {
-    return this.invoicesService.setDueDays(id, body?.dueDays ?? 15);
+  setDue(@Param('id') id: string, @Body() body: SetDueDaysDto) {
+    return this.invoicesService.setDueDays(id, body.dueDays);
   }
 
   /** POST instead of DELETE so the confirmation password travels in the body reliably. */

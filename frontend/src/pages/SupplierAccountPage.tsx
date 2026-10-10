@@ -5,7 +5,6 @@ import {
   Building2,
   CalendarClock,
   CheckCircle2,
-  ChevronLeft,
   Clock,
   Copy,
   CreditCard,
@@ -53,8 +52,6 @@ export const SupplierAccountPage: React.FC = () => {
   const [sheet, setSheet] = useState<{ payment: SupplierPaymentRow | null } | null>(null);
   const [adjustSheet, setAdjustSheet] = useState<{ row: SupplierAdjustmentRow | null } | null>(null);
   const [editCompany, setEditCompany] = useState(false);
-  const [newCompany, setNewCompany] = useState(false);
-  const [others, setOthers] = useState<SupplierListItem[] | null>(null);
   const [exporting, setExporting] = useState(false);
   const [moving, setMoving] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
@@ -69,7 +66,6 @@ export const SupplierAccountPage: React.FC = () => {
       const p = await suppliersService.profile(name);
       setProfile(p);
       setData(p.account);
-      if (p.isParent) setOthers((await suppliersService.list()).filter((c) => !c.isParent));
     } catch {
       setError('دریافت حساب شرکت ناموفق بود');
     }
@@ -348,49 +344,24 @@ export const SupplierAccountPage: React.FC = () => {
             </div>
           )}
 
-          {profile?.isParent && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-bold text-slate-700">شرکت‌های تأمین‌کننده</div>
-                <button
-                  onClick={() => setNewCompany(true)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-600 text-white text-[11px] font-bold active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" /> شرکت جدید
-                </button>
-              </div>
-              {!others ? (
-                <p className="text-[10px] text-slate-400">در حال دریافت…</p>
-              ) : others.length === 0 ? (
-                <p className="text-[10px] text-slate-400">جز شرکت مادر، شرکتی ثبت نشده. با «شرکت جدید» تأمین‌کننده‌هایتان را اضافه کنید.</p>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {others.map((c) => (
-                    <button
-                      key={c.name}
-                      onClick={() => navigate(`/supplier-account?name=${encodeURIComponent(c.name)}`)}
-                      className="w-full flex items-center gap-2.5 py-2.5 text-right"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-                        <Building2 className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-bold text-slate-800 truncate">{c.name}</div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {c.phone ? <span dir="ltr">{c.phone}</span> : c.contactName || 'بدون شماره'} · پرداختی {formatToman(c.paymentsTotal)}
-                        </div>
-                      </div>
-                      <div className="text-left shrink-0">
-                        <div className="text-[9px] text-slate-400">{c.prepaid > 0 ? 'طلب' : 'بدهی'}</div>
-                        <div className={`text-[11px] font-bold font-mono ${c.prepaid > 0 ? 'text-emerald-600' : c.debt ? 'text-rose-600' : 'text-slate-400'}`}>
-                          {formatToman(c.prepaid > 0 ? c.prepaid : c.debt)}
-                        </div>
-                      </div>
-                      <ChevronLeft className="w-4 h-4 text-slate-300 shrink-0" />
-                    </button>
-                  ))}
+          {profile?.trade && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 space-y-2">
+              <div className="text-xs font-bold text-slate-800">گزارش اجمالی و سود این شرکت</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-sky-50 px-2 py-2">
+                  <div className="text-[10px] text-sky-700">فروش</div>
+                  <div className="text-[11px] font-bold text-sky-900 mt-0.5">{formatToman(profile.trade.revenue)}</div>
                 </div>
-              )}
+                <div className="rounded-xl bg-emerald-50 px-2 py-2">
+                  <div className="text-[10px] text-emerald-700">سود</div>
+                  <div className="text-[11px] font-bold text-emerald-900 mt-0.5">{formatToman(profile.trade.profit)}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 px-2 py-2">
+                  <div className="text-[10px] text-slate-500">فاکتور فروش</div>
+                  <div className="text-[11px] font-bold text-slate-800 mt-0.5">{num(profile.trade.salesCount)}</div>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400">فقط کالاهای همین شرکت. قند، چای و نبات هر کدام در حساب شرکت خودشان حساب می‌شوند.</p>
             </div>
           )}
 
@@ -558,6 +529,25 @@ export const SupplierAccountPage: React.FC = () => {
                   </button>
                 ))}
               </div>
+              {profile?.trade && profile.trade.sales.length > 0 && channel === 'all' && (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-slate-500">فروش کالاهای این شرکت</div>
+                  {profile.trade.sales.map((sale) => (
+                    <button key={sale.invoiceId} onClick={() => openInvoice(sale.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-sky-100 shadow-sm p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-800 truncate">{sale.customerName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono" dir="ltr">{sale.invoiceNumber}</div>
+                        </div>
+                        <div className="text-left shrink-0">
+                          <div className="text-[11px] font-bold text-slate-800">{formatToman(sale.amount)}</div>
+                          <div className="text-[10px] text-emerald-700">سود {formatToman(sale.profit)}</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
               {data.invoices
                 .filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel)
                 .map((i) => {
@@ -857,15 +847,6 @@ export const SupplierAccountPage: React.FC = () => {
         />
         </>
       )}
-      <CompanySheet
-        open={newCompany}
-        company={null}
-        onClose={() => setNewCompany(false)}
-        onSaved={(c) => {
-          setNewCompany(false);
-          navigate(`/supplier-account?name=${encodeURIComponent(c.name)}`);
-        }}
-      />
       <CompanySheet
         open={editCompany}
         company={company ? { ...company, _id: profile?.registered ? company._id : null } : null}

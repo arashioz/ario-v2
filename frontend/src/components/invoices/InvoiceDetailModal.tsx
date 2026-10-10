@@ -33,7 +33,7 @@ import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
 import { invoiceSms, openSms } from '../../lib/sms';
-import { formatToman, tons } from '../../lib/format';
+import { formatToman, num, tons } from '../../lib/format';
 
 interface InvoiceDetailModalProps {
   isOpen: boolean;
@@ -291,6 +291,23 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span className="text-[10px] text-slate-400 block">ثبت: {invoice.createdByName}</span>
               </div>
             </div>
+
+            {invoice.orderBundle && invoice.orderBundle.invoices.length > 1 && (
+              <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-3 space-y-2 print:hidden">
+                <div className="text-[11px] font-bold text-violet-900">سفارش ترکیبی — هر شرکت فاکتور جدا دارد</div>
+                {invoice.orderBundle.invoices.map((part) => (
+                  <div key={part.invoiceId} className="rounded-xl bg-white px-2.5 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-slate-800">{part.supplierCompany}</span>
+                      <span className="text-[10px] font-mono text-slate-400" dir="ltr">{part.invoiceNumber}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1 leading-5">
+                      {part.items.map((it) => `${it.category ? `${it.category}: ` : ''}${it.productName} ×${num(it.quantity, 2)}`).join(' · ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Line Items Table (ریز اقلام) */}
             <div className="space-y-2">
