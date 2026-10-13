@@ -43,6 +43,18 @@
   padding-top: 20px;
 }
 
+.pos-products-locked {
+  filter: grayscale(1);
+  opacity: .65;
+}
+
+.pos-page .pos-products-locked .pos-product-card {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .pos-catalog-count {
   min-width: 64px;
   padding: 8px 12px;

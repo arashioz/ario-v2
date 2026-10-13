@@ -33,8 +33,9 @@ export const PosTab: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const [tierMode, setTierMode] = useState<'auto' | 'manual'>('auto');
-  const [manualTier, setManualTier] = useState<SaleType>('retail');
+  const [tierMode, setTierMode] = useState<'auto' | 'manual'>('manual');
+  const [manualTier, setManualTier] = useState<SaleType | null>(null);
+  const hasInvoiceType = manualTier !== null;
   const [invoiceDate, setInvoiceDate] = useState<string>(todayYmd);
   const [dateOpen, setDateOpen] = useState(false);
 
@@ -48,6 +49,12 @@ export const PosTab: React.FC = () => {
   const productRequest = useRef<Promise<void> | null>(null);
   const productVersion = useRef(0);
   const pendingRequest = useRef<Promise<void> | null>(null);
+
+  const pickProduct = useCallback((product: Product) => {
+    if (hasInvoiceType) setEditing(product);
+  }, [hasInvoiceType]);
+  // The required first step always stays above the configurable product sections.
+  const productLayout = useMemo(() => settings.posSections.filter((section) => section.id !== 'tiers'), [settings.posSections]);
 
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
   const [createdProforma, setCreatedProforma] = useState<Proforma | null>(null);
@@ -82,7 +89,7 @@ export const PosTab: React.FC = () => {
   useIonViewWillEnter(() => { void loadData(); void loadPending(); });
 
   const openCheckout = async () => {
-    if (checkoutRequest.current) return;
+    if (!hasInvoiceType || !lines.length || checkoutRequest.current) return;
     checkoutRequest.current = true;
     setPreparingCheckout(true);
     try {
@@ -99,8 +106,8 @@ export const PosTab: React.FC = () => {
 
   const totalKg = useMemo(() => lines.reduce((s, l) => s + lineKg(l), 0), [lines]);
   const subtotal = useMemo(() => lines.reduce((s, l) => s + lineTotal(l), 0), [lines]);
-  const auto = tierMode === 'auto' && settings.autoSaleType;
-  const saleType: SaleType = auto ? saleTypeForKg(totalKg, settings) : manualTier;
+  const auto = hasInvoiceType && tierMode === 'auto' && settings.autoSaleType;
+  const saleType: SaleType = auto ? saleTypeForKg(totalKg, settings) : manualTier ?? 'retail';
 
   // Lines without a hand-typed price follow the active tier.
   useEffect(() => {
@@ -121,6 +128,7 @@ export const PosTab: React.FC = () => {
   const editingLine = editing ? lines.find((l) => l.product._id === editing._id) : undefined;
 
   const upsert = (line: CartLine) => {
+    if (!hasInvoiceType) return;
     setLines((prev) => {
       const i = prev.findIndex((l) => l.product._id === line.product._id);
       if (i < 0) return [...prev, line];
@@ -154,6 +162,7 @@ export const PosTab: React.FC = () => {
   }, [auto, saleType, totalKg, settings]);
 
   const toggleAuto = () => {
+    if (!hasInvoiceType) return;
     if (auto) {
       setManualTier(saleType);
       setTierMode('manual');
@@ -163,6 +172,7 @@ export const PosTab: React.FC = () => {
   };
 
   const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName }: CheckoutResult) => {
+    if (!hasInvoiceType || !lines.length) return;
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
       const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
@@ -223,7 +233,8 @@ export const PosTab: React.FC = () => {
       }
       setLines([]);
       setCheckoutOpen(false);
-      setTierMode('auto');
+      setTierMode('manual');
+      setManualTier(null);
     } catch (err) {
       showNotification({ title: 'ثبت انجام نشد', message: apiErrorMessage(err, 'خطا در صدور فاکتور'), type: 'error' });
     } finally {
@@ -232,7 +243,8 @@ export const PosTab: React.FC = () => {
   };
 
   const tiersBlock = (
-    <div className="space-y-1.5">
+    <section className="space-y-1.5 mb-3" aria-labelledby="invoice-type-heading">
+      <h2 id="invoice-type-heading" className="text-sm font-bold text-white px-1">۱. نوع فاکتور را انتخاب کنید</h2>
       {(auto || fromFactory || pendingProformas > 0) && (
         <div className="flex flex-wrap gap-1.5 px-0.5">
           {auto && <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">خودکار فعال است</span>}
@@ -245,12 +257,14 @@ export const PosTab: React.FC = () => {
         {TIERS.map((t) => (
           <button
             key={t}
+            type="button"
+            aria-pressed={hasInvoiceType && saleType === t}
             onClick={() => {
               setManualTier(t);
               setTierMode('manual');
             }}
             className={`py-2 rounded-2xl text-[11px] font-bold transition ${
-              saleType === t ? `${SALE_TYPE_TONE[t].solid} shadow` : 'text-slate-500'
+              hasInvoiceType && saleType === t ? `${SALE_TYPE_TONE[t].solid} shadow` : 'text-slate-500 bg-slate-50'
             }`}
           >
             {SALE_TYPE_LABELS[t]}
@@ -264,7 +278,7 @@ export const PosTab: React.FC = () => {
         </p>
       )}
     </div>
-    </div>
+    </section>
   );
 
   const cartBlock = lines.length > 0 && (
@@ -325,9 +339,10 @@ export const PosTab: React.FC = () => {
                 <button
                   type="button"
                   onClick={toggleAuto}
+                  disabled={!hasInvoiceType}
                   aria-label="خودکار"
                   title="خودکار"
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center border active:scale-95 ${
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center border active:scale-95 disabled:opacity-40 ${
                     auto ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200'
                   }`}
                 >
@@ -386,20 +401,27 @@ export const PosTab: React.FC = () => {
             <div><p className="text-[10px] text-blue-200 mb-1">آریو · میز فروش</p><h2 className="text-lg font-bold text-white">امروز چی می‌فروشیم؟</h2></div>
             <div className="pos-catalog-count text-center"><strong className="block text-lg font-mono text-white">{loading && !products.length ? '…' : num(products.length)}</strong><span className="text-[9px] text-blue-100">کالا در ویترین</span></div>
           </div>
+          {tiersBlock}
+          <p id="pos-product-instruction" role="status" className="mb-3 px-1 text-xs text-blue-100">
+            {hasInvoiceType ? '۲. محصولات سفارش را انتخاب کنید' : 'برای فعال شدن محصولات، ابتدا نوع فاکتور را از بالا انتخاب کنید.'}
+          </p>
           {!loading && !products.length && <button onClick={() => void loadData()} className="mb-3 text-xs text-white underline">دریافت دوبارهٔ کالاها</button>}
+          <fieldset disabled={!hasInvoiceType} aria-describedby="pos-product-instruction" className={`m-0 min-w-0 border-0 p-0 ${hasInvoiceType ? '' : 'pos-products-locked'}`}>
+          <legend className="sr-only">محصولات سفارش</legend>
           <ProductBrowser
             products={products}
             saleType={saleType}
             inCart={inCart}
-            onPick={setEditing}
+            onPick={pickProduct}
             view={settings.posView}
             categoryOrder={settings.categoryOrder}
             subcategoryOrder={settings.subcategoryOrder}
             productOrder={settings.productOrder}
-            layout={settings.posSections}
-            slots={{ tiers: tiersBlock, cart: cartBlock }}
+            layout={productLayout}
+            slots={{ cart: cartBlock }}
             ignoreStock={fromFactory}
           />
+          </fieldset>
         </div>
 
         {lines.length > 0 && (
