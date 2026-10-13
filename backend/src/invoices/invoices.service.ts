@@ -988,13 +988,14 @@ export class InvoicesService implements OnApplicationBootstrap {
       }
     }
 
-    const products = await this.productModel.find().select('_id stock stockAdjust').lean().exec();
+    const products = await this.productModel.find().select('_id stock stockAdjust openingStock').lean().exec();
     const writes: { updateOne: { filter: { _id: unknown }; update: { $set: { stock: number } } } }[] = [];
     for (const product of products) {
       const id = String(product._id);
       const adjust = (product as { stockAdjust?: number }).stockAdjust || 0;
-      if (!totals.has(id) && !adjust) continue;
-      const stock = Math.round(((totals.get(id) || 0) + adjust) * 1000) / 1000;
+      const opening = product.openingStock || 0;
+      if (!totals.has(id) && !adjust && !opening) continue;
+      const stock = Math.round(((totals.get(id) || 0) + adjust + opening) * 1000) / 1000;
       if (Math.abs((product.stock || 0) - stock) < 0.0005) continue;
       writes.push({ updateOne: { filter: { _id: product._id }, update: { $set: { stock } } } });
     }

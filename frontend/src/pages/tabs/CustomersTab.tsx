@@ -110,7 +110,7 @@ export const CustomersTab: React.FC = () => {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const settings = useSettings();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter');
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -139,6 +139,14 @@ export const CustomersTab: React.FC = () => {
   const [detailRefreshTrigger, setDetailRefreshTrigger] = useState(0);
   const [view, setView] = useState<'customers' | 'payments'>('customers');
   const [paymentsRefresh, setPaymentsRefresh] = useState(0);
+
+  useEffect(() => {
+    const customerId = searchParams.get('customerId');
+    if (customerId) {
+      setSelectedCustomerIdForDetail(customerId);
+      setIsDetailOpen(true);
+    }
+  }, [searchParams]);
 
   const requestId = React.useRef(0);
 
@@ -565,6 +573,11 @@ export const CustomersTab: React.FC = () => {
           onClose={() => {
             setIsDetailOpen(false);
             setSelectedCustomerIdForDetail(null);
+            if (searchParams.has('customerId')) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('customerId');
+              setSearchParams(next, { replace: true });
+            }
           }}
           onChanged={() => {
             loadData();

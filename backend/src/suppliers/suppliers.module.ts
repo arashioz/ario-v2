@@ -7,6 +7,7 @@ import { SuppliersService } from './suppliers.service';
 import { SuppliersController } from './suppliers.controller';
 import { SupplierCompany, SupplierCompanySchema } from './schemas/supplier-company.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
+import { WorkshopBatch, WorkshopBatchSchema } from '../workshop/workshop.schema';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { Product, ProductSchema } from '../products/schemas/product.schema';
       { name: Invoice.name, schema: InvoiceSchema },
       { name: SupplierCompany.name, schema: SupplierCompanySchema },
       { name: Product.name, schema: ProductSchema },
+      { name: WorkshopBatch.name, schema: WorkshopBatchSchema },
     ]),
   ],
   controllers: [SuppliersController],

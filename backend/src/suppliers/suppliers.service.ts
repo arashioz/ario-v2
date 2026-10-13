@@ -11,6 +11,7 @@ import { SupplierCompany, SupplierCompanyDocument } from './schemas/supplier-com
 import { CreateSupplierCompanyDto, SupplierBankAccountDto, UpdateSupplierCompanyDto } from './dto/supplier-company.dto';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { runFifo } from '../accounting/fifo';
+import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
 
 const normAccount = (a: SupplierBankAccountDto) => ({
   holder: (a.holder || '').trim(),
@@ -60,6 +61,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
     @InjectModel(SupplierCompany.name) private companyModel: Model<SupplierCompanyDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(WorkshopBatch.name) private workshopModel: Model<WorkshopBatchDocument>,
   ) {}
 
   async onApplicationBootstrap() {
@@ -506,12 +508,13 @@ export class SuppliersService implements OnApplicationBootstrap {
 
   /** Sales and profit of this company's own products, separate from the other companies. */
   private async companyTrade(supplier: string) {
-    const [invoices, products] = await Promise.all([
+    const [invoices, products, batches] = await Promise.all([
       this.invoiceModel
         .find()
         .select('invoiceNumber type invoiceDate createdAt customerId customerName supplierCompany totalAmount discount finalAmount creditAmount remainingDebt shippingPayer shippingCost fulfillment items')
         .lean(),
       this.productModel.find().select('name unit weightPerUnitKg buyPrice stock supplierName').lean(),
+      this.workshopModel.find({ status: 'completed' }).sort({ date: 1 }).lean(),
     ]);
     const mine = new Set(
       products
@@ -524,6 +527,7 @@ export class SuppliersService implements OnApplicationBootstrap {
     const fifo = runFifo(
       invoices.map((i) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as any,
       products.map((p) => ({ ...p, _id: String(p._id) })) as any,
+      batches.map((b) => ({ ...b, _id: String(b._id) })),
     );
     const lines = fifo.saleLines.filter((l) => mine.has(l.productId));
     const byInvoice = new Map<string, { amount: number; cost: number; profit: number }>();

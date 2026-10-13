@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { runFifo, dayKey, purchaseFreight } from './fifo';
 import { purchaseEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
+import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
 
 export interface Period {
@@ -67,6 +68,7 @@ export class AccountingService {
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(WorkshopBatch.name) private workshopModel: Model<WorkshopBatchDocument>,
     @InjectModel(CustomerTransaction.name) private txModel: Model<CustomerTransactionDocument>,
     private readonly audit: AuditService,
     private readonly pricePeriods: PricePeriodService,
@@ -74,12 +76,13 @@ export class AccountingService {
 
   /** FIFO over all invoices, cached until any invoice or product changes. */
   async fifo(): Promise<FifoResult> {
-    const [count, lastInv, lastProd] = await Promise.all([
+    const [count, lastInv, lastProd, batches] = await Promise.all([
       this.invoiceModel.countDocuments(),
       this.invoiceModel.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
       this.productModel.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean(),
+      this.workshopModel.find({ status: 'completed' }).sort({ date: 1 }).lean(),
     ]);
-    const key = `${count}|${(lastInv as any)?.updatedAt?.getTime?.() ?? 0}|${(lastProd as any)?.updatedAt?.getTime?.() ?? 0}`;
+    const key = `${count}|${(lastInv as any)?.updatedAt?.getTime?.() ?? 0}|${(lastProd as any)?.updatedAt?.getTime?.() ?? 0}|${batches.map((b) => String(b._id)).join(',')}`;
     if (this.cache?.key === key) return this.cache.result;
 
     const [invoices, products] = await Promise.all([
@@ -92,6 +95,7 @@ export class AccountingService {
     const result = runFifo(
       invoices.map((i: any) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as FifoInvoice[],
       products.map((p: any) => ({ ...p, _id: String(p._id) })) as FifoProduct[],
+      batches.map((b) => ({ ...b, _id: String(b._id) })),
     );
     this.cache = { key, result };
     return result;

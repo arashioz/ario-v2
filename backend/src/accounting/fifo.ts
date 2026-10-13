@@ -194,7 +194,16 @@ export function purchaseLineCosts(inv: FifoInvoice, products: Map<string, FifoPr
   });
 }
 
-export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): FifoResult {
+export interface FifoWorkshop {
+  _id: string;
+  date: Date;
+  inputs: { productId: string; quantity: number; weightKg: number; unitCost: number }[];
+  output: { productId: string; productName: string; quantity: number; weightKg: number; unitCost: number };
+  packagingCost: number;
+  laborCost: number;
+}
+
+export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], workshops: FifoWorkshop[] = []): FifoResult {
   const products = new Map(productList.map((p) => [String(p._id), p]));
 
   const sorted = [...invoices].sort(
@@ -241,7 +250,46 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[]): Fi
     }
     return price;
   };
-  for (const inv of sorted) {
+  const events = [
+    ...sorted.map((inv, index) => ({ date: new Date(inv.invoiceDate).getTime(), index, inv, batch: null as FifoWorkshop | null })),
+    ...workshops.map((batch, index) => ({ date: new Date(batch.date).getTime(), index: sorted.length + index, inv: null as FifoInvoice | null, batch })),
+  ].sort((a, b) => a.date - b.date || a.index - b.index);
+  for (const event of events) {
+    if (event.batch) {
+      const batch = event.batch;
+      let cost = batch.packagingCost + batch.laborCost;
+      for (const input of batch.inputs) {
+        let need = input.weightKg || input.quantity;
+        const q = queue.get(input.productId) ?? [];
+        while (need > EPS && q.length) {
+          const lot = q[0];
+          const take = Math.min(need, lot.kgLeft);
+          cost += take * lot.costPerKg;
+          lot.kgLeft -= take;
+          need -= take;
+          if (lot.kgLeft <= EPS) { lot.kgLeft = 0; q.shift(); }
+        }
+        // Opening stock may have no purchase lot; use the cost recorded at production.
+        cost += need * input.unitCost * input.quantity / (input.weightKg || input.quantity);
+      }
+      const output = batch.output;
+      const kg = output.weightKg || output.quantity;
+      const lot: Lot = {
+        id: `workshop:${batch._id}`, invoiceId: batch._id, invoiceNumber: `تولید ${batch._id.slice(-6)}`,
+        supplier: 'کارگاه', date: batch.date, createdAt: batch.date,
+        productId: output.productId, productName: output.productName,
+        kgIn: kg, kgLeft: kg, costPerKg: cost / kg, invoicePricePerKg: cost / kg,
+        freightPerKg: 0, kgSold: 0, revenue: 0, cost: 0,
+      };
+      lots.push(lot);
+      if (!lotsByProduct.has(output.productId)) lotsByProduct.set(output.productId, []);
+      lotsByProduct.get(output.productId)!.push(lot);
+      if (!queue.has(output.productId)) queue.set(output.productId, []);
+      queue.get(output.productId)!.push(lot);
+      lastCost.set(output.productId, lot.costPerKg);
+      continue;
+    }
+    const inv = event.inv!;
     const id = String(inv._id);
     if (inv.type === 'purchase') {
       // Company invoice for a direct shipment: it is not stock Ario holds.

@@ -146,6 +146,10 @@ export interface BulkPricePreviewItem {
 }
 
 export const productsService = {
+  async getForSale(): Promise<Product[]> {
+    const res = await api.get<Omit<Product, 'priceHistory'>[]>('/products/pos');
+    return res.data.map((p) => ({ ...p, priceHistory: [] }));
+  },
   async getProducts(params?: {
     search?: string;
     category?: string;

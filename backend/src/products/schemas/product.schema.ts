@@ -98,6 +98,14 @@ export class Product {
   @Prop({ default: 0 })
   stockAdjust: number;
 
+  /** Opening stock outside invoices. Missing on older products until first workshop use. */
+  @Prop()
+  openingStock?: number;
+
+  /** In-flight workshop writes, used to recover interrupted production on standalone MongoDB. */
+  @Prop({ type: [String], default: [], select: false })
+  workshopPending: string[];
+
   @Prop({ default: 5 })
   minStockAlert: number;
 

@@ -21,7 +21,6 @@ import '@ionic/react/css/display.css';
 
 import '@fontsource-variable/vazirmatn/wght.css';
 import './index.css';
-import 'leaflet/dist/leaflet.css';
 
 setupIonicReact({
   mode: 'ios',

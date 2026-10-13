@@ -29,6 +29,7 @@ import {
   Users,
   History,
   KeyRound,
+  Factory,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
@@ -118,6 +119,13 @@ const REPORTS: Item[] = [
 ];
 
 const SHOP: Item[] = [
+  {
+    path: '/workshop',
+    title: 'تولید کارگاهی',
+    desc: 'ترکیب مواد، بسته‌بندی و تبدیل موجودی به محصول',
+    icon: Factory,
+    tone: 'bg-sky-100 text-sky-600',
+  },
   {
     path: '/products',
     title: 'مدیریت کالاها',

@@ -12,6 +12,7 @@ import { AccountingController } from './accounting.controller';
 import { ProfitWatchService } from './profit-watch.service';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { PricingModule } from '../pricing/pricing.module';
+import { WorkshopBatch, WorkshopBatchSchema } from '../workshop/workshop.schema';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PricingModule } from '../pricing/pricing.module';
     MongooseModule.forFeature([
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: WorkshopBatch.name, schema: WorkshopBatchSchema },
       { name: CustomerTransaction.name, schema: CustomerTransactionSchema },
       { name: WatchDismissal.name, schema: WatchDismissalSchema },
     ]),

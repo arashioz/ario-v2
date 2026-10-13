@@ -21,6 +21,7 @@ const E = (entity: string, label: string, model?: string, extra: Partial<EntityD
 /** First path segment after /api → entity; nested literal segments may point to a sub-entity. */
 const RESOURCES: Record<string, { def: EntityDef; subs?: Record<string, EntityDef> }> = {
   invoices: { def: E('invoice', 'فاکتور', 'Invoice') },
+  workshop: { def: E('workshop', 'تولید کارگاهی', 'WorkshopBatch') },
   products: { def: E('product', 'کالا', 'Product'), subs: { categories: E('productCategory', 'دسته‌بندی کالا') } },
   customers: {
     def: E('customer', 'مشتری', 'Customer'),

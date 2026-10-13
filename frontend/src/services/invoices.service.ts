@@ -180,10 +180,15 @@ export const invoicesService = {
   lastPurchasePrices: async (productIds: string[]): Promise<Record<string, number>> => {
     const ids = [...new Set(productIds.filter(Boolean))];
     if (!ids.length) return {};
-    const response = await api.get<Record<string, number>>('/invoices/last-purchase-prices', {
-      params: { productIds: ids.join(',') },
-    });
-    return response.data || {};
+    const prices: Record<string, number> = {};
+    // Keep requests below proxy URL limits when management shows the full catalog.
+    for (let i = 0; i < ids.length; i += 100) {
+      const response = await api.get<Record<string, number>>('/invoices/last-purchase-prices', {
+        params: { productIds: ids.slice(i, i + 100).join(',') },
+      });
+      Object.assign(prices, response.data || {});
+    }
+    return prices;
   },
 
   create: async (data: CreateInvoiceInput): Promise<Invoice> => {

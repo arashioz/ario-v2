@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -12,6 +12,7 @@ import type { RefresherEventDetail } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { productsService } from '../services/products.service';
+import { invoicesService } from '../services/invoices.service';
 import type { Product, ProductStats } from '../services/products.service';
 import { UpdatePriceModal } from '../components/products/UpdatePriceModal';
 import { UpdateStockModal } from '../components/products/UpdateStockModal';
@@ -31,6 +32,7 @@ import {
   Edit2,
   Trash2,
   BookOpen,
+  Factory,
 } from 'lucide-react';
 import { formatToman, num, weight } from '../lib/format';
 import { PriceTiers, ProductPhoto, StockAmount } from '../components/products/ProductPriceInfo';
@@ -44,6 +46,9 @@ export const ProductsPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<ProductStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastPurchasePrices, setLastPurchasePrices] = useState<Record<string, number>>({});
+  const [purchasePricesUnavailable, setPurchasePricesUnavailable] = useState(false);
+  const loadVersion = useRef(0);
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -67,6 +72,7 @@ export const ProductsPage: React.FC = () => {
     setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
 
   const loadData = useCallback(async () => {
+    const version = ++loadVersion.current;
     try {
       const [list, statsData] = await Promise.all([
         productsService.getProducts({
@@ -76,16 +82,28 @@ export const ProductsPage: React.FC = () => {
         }),
         productsService.getProductStats(),
       ]);
+      if (version !== loadVersion.current) return;
+      let prices: Record<string, number> = {};
+      let unavailable = false;
+      try {
+        prices = await invoicesService.lastPurchasePrices(list.map((p) => p._id));
+      } catch {
+        unavailable = true;
+      }
+      if (version !== loadVersion.current) return;
       setProducts(list);
       setStats(statsData);
+      setLastPurchasePrices(prices);
+      setPurchasePricesUnavailable(unavailable);
     } catch {
+      if (version !== loadVersion.current) return;
       showNotification({
         title: 'خطا در بارگذاری',
         message: 'امکان دریافت لیست محصولات وجود ندارد',
         type: 'error',
       });
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [search, selectedCategory, lowStockFilter, showNotification]);
 
@@ -239,6 +257,9 @@ export const ProductsPage: React.FC = () => {
             </div>
           </div>
 
+          <button onClick={() => navigate('/workshop')} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-sky-600 text-white text-xs font-bold">
+            <Factory className="w-4 h-4" />تولید کارگاهی و بسته‌بندی
+          </button>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setIsCatalogOpen(true)}
@@ -402,6 +423,12 @@ export const ProductsPage: React.FC = () => {
                     {/* Prices and Stock Grid */}
                     <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-100 space-y-2">
                       <PriceTiers product={product} by={priceBy} />
+                      <p className="text-[11px] text-slate-600">
+                        آخرین خرید هر {priceBy === 'kg' && kgPerUnit(product) > 0 ? 'کیلوگرم' : product.unit}: {' '}
+                        <strong>{purchasePricesUnavailable ? 'دریافت نشد' : lastPurchasePrices[product._id] !== undefined
+                          ? formatToman(priceBy === 'kg' && kgPerUnit(product) > 0 ? pricePerKg(lastPurchasePrices[product._id], product) : lastPurchasePrices[product._id])
+                          : 'خریدی ثبت نشده'}</strong>
+                      </p>
                       {kgPerUnit(product) > 0 && product.unit !== 'کیلوگرم' && (
                         <p className="text-[10px] text-slate-400">
                           هر {product.unit} {num(kgPerUnit(product), 2)} کیلوگرم

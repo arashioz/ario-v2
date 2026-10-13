@@ -35,6 +35,11 @@ export class ProductsController {
     return this.productsService.getStats();
   }
 
+  @Get('pos')
+  async forSale() {
+    return this.productsService.findForSale();
+  }
+
   @Post()
   async create(@Body() createProductDto: CreateProductDto, @Request() req: any) {
     const recordedByName = req.user?.fullName || req.user?.username || 'کاربر سیستم';

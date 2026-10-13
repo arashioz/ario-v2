@@ -20,6 +20,7 @@ import { ProformasModule } from './proformas/proformas.module';
 import { SharesModule } from './shares/shares.module';
 import { AuditModule } from './audit/audit.module';
 import { BackupModule } from './backup/backup.module';
+import { WorkshopModule } from './workshop/workshop.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { BackupModule } from './backup/backup.module';
     AuthModule,
     CustomersModule,
     ProductsModule,
+    WorkshopModule,
     InvoicesModule,
     ChequesModule,
     ExpensesModule,

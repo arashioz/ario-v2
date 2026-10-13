@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, IonHeader, IonToolbar, IonContent, useIonViewWillEnter } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
@@ -19,6 +19,7 @@ import { termsFinal, termsPayload } from '../../components/pos/PaymentTermsForm'
 import { kgPerUnit, lineKg, lineTotal, r3, tierPrice, toInvoiceItem, type CartLine } from '../../components/pos/cart';
 import { formatJalali, todayYmd } from '../../lib/jalali';
 import { formatToman, num, weight } from '../../lib/format';
+import './PosTab.css';
 
 const TIERS: SaleType[] = ['retail', 'supermarket', 'wholesale'];
 
@@ -42,39 +43,59 @@ export const PosTab: React.FC = () => {
   const fromFactory = shipFrom === 'factory' && !!settings.factorySalesEnabled;
   const [editing, setEditing] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [preparingCheckout, setPreparingCheckout] = useState(false);
+  const checkoutRequest = useRef(false);
+  const productRequest = useRef<Promise<void> | null>(null);
+  const productVersion = useRef(0);
+  const pendingRequest = useRef<Promise<void> | null>(null);
 
   const [createdInvoice, setCreatedInvoice] = useState<Invoice | null>(null);
   const [createdProforma, setCreatedProforma] = useState<Proforma | null>(null);
   const [pendingProformas, setPendingProformas] = useState(0);
 
   const loadPending = useCallback(() => {
-    proformasService.summary().then((s) => setPendingProformas(s.pendingCount)).catch(() => undefined);
+    if (pendingRequest.current) return pendingRequest.current;
+    const request = proformasService.summary().then((s) => setPendingProformas(s.pendingCount))
+      .catch(() => undefined).finally(() => { pendingRequest.current = null; });
+    pendingRequest.current = request;
+    return request;
   }, []);
 
-  useEffect(() => {
-    loadPending();
-  }, [loadPending]);
-  useIonViewWillEnter(loadPending);
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [prods, custs] = await Promise.all([productsService.getAll(), customersService.getAll()]);
-      setProducts(prods);
-      setCustomers(custs);
-    } catch {
-      showNotification({ title: 'خطا در بارگذاری', message: 'امکان اتصال به سرور وجود ندارد.', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
+  // Ionic entry and React mount can fire together. Share only the active request;
+  // a later visit always asks the server for fresh prices and stock.
+  const loadData = useCallback((force = false) => {
+    if (!force && productRequest.current) return productRequest.current;
+    const version = ++productVersion.current;
+    setLoading(true);
+    const request = productsService.getForSale().then((prods) => {
+      if (version === productVersion.current) setProducts(prods);
+    }).catch(() => {
+      if (version === productVersion.current) showNotification({ title: 'خطا در بارگذاری', message: 'دریافت کالاها انجام نشد؛ دوباره تلاش کنید.', type: 'error' });
+    }).finally(() => {
+      if (version === productVersion.current) { setLoading(false); productRequest.current = null; }
+    });
+    productRequest.current = request;
+    return request;
   }, [showNotification]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-  useIonViewWillEnter(() => {
-    productsService.getAll().then(setProducts).catch(() => undefined);
-  });
+  useEffect(() => { void loadData(); void loadPending(); }, [loadData, loadPending]);
+  useIonViewWillEnter(() => { void loadData(); void loadPending(); });
+
+  const openCheckout = async () => {
+    if (checkoutRequest.current) return;
+    checkoutRequest.current = true;
+    setPreparingCheckout(true);
+    try {
+      const list = await customersService.getAll();
+      setCustomers(list);
+      setCheckoutOpen(true);
+    } catch {
+      showNotification({ title: 'دریافت مشتریان انجام نشد', message: 'دوباره روی ثبت فاکتور بزنید؛ سبد شما حفظ شده است.', type: 'error' });
+    } finally {
+      checkoutRequest.current = false;
+      setPreparingCheckout(false);
+    }
+  };
 
   const totalKg = useMemo(() => lines.reduce((s, l) => s + lineKg(l), 0), [lines]);
   const subtotal = useMemo(() => lines.reduce((s, l) => s + lineTotal(l), 0), [lines]);
@@ -198,7 +219,7 @@ export const PosTab: React.FC = () => {
           type: 'success',
         });
         setCreatedInvoice(inv);
-        loadData();
+        void loadData(true);
       }
       setLines([]);
       setCheckoutOpen(false);
@@ -294,12 +315,12 @@ export const PosTab: React.FC = () => {
   );
 
   return (
-    <IonPage>
+    <IonPage className="pos-page">
       <IonHeader className="ion-no-border">
-        <IonToolbar className="bg-white/95 backdrop-blur-md px-4 py-2 border-b border-sky-100">
+        <IonToolbar className="pos-toolbar px-4 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex items-center gap-2">
-              <h1 className="text-sm font-semibold text-slate-800">فروش</h1>
+              <div className="flex items-center gap-2"><span className="pos-brand-icon"><ShoppingCart className="w-4 h-4" /></span><h1 className="text-sm font-bold text-white">فروش</h1></div>
               {settings.autoSaleType && (
                 <button
                   type="button"
@@ -357,10 +378,15 @@ export const PosTab: React.FC = () => {
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="bg-slate-50">
-        <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها و مشتریان..." />
+      <IonContent className="pos-content">
+        <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها..." />
 
-        <div className={`p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
+        <div className={`pos-workspace p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
+          <div className="pos-welcome flex items-center justify-between gap-3 mb-4 px-1">
+            <div><p className="text-[10px] text-blue-200 mb-1">آریو · میز فروش</p><h2 className="text-lg font-bold text-white">امروز چی می‌فروشیم؟</h2></div>
+            <div className="pos-catalog-count text-center"><strong className="block text-lg font-mono text-white">{loading && !products.length ? '…' : num(products.length)}</strong><span className="text-[9px] text-blue-100">کالا در ویترین</span></div>
+          </div>
+          {!loading && !products.length && <button onClick={() => void loadData()} className="mb-3 text-xs text-white underline">دریافت دوبارهٔ کالاها</button>}
           <ProductBrowser
             products={products}
             saleType={saleType}
@@ -382,9 +408,10 @@ export const PosTab: React.FC = () => {
             className="absolute inset-x-0 bottom-2 z-20 px-3"
           >
             <button
-              onClick={() => setCheckoutOpen(true)}
+              onClick={() => void openCheckout()}
+              disabled={preparingCheckout}
               className={`max-w-md mx-auto w-full flex items-center justify-between gap-3 rounded-2xl text-white pr-4 pl-2 py-2 shadow-lg active:scale-[0.99] transition ${
-                fromFactory ? 'bg-amber-600 shadow-amber-900/25' : 'bg-sky-600 shadow-sky-900/25'
+                fromFactory ? 'bg-amber-600 shadow-amber-900/25' : 'pos-checkout-button'
               }`}
             >
               <div className="text-right min-w-0">
@@ -395,13 +422,13 @@ export const PosTab: React.FC = () => {
               </div>
               <span className={`shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white text-sm font-bold ${fromFactory ? 'text-amber-700' : 'text-sky-700'}`}>
                 <FileCheck2 className="w-4 h-4" />
-                ثبت فاکتور
+                {preparingCheckout ? 'آماده‌سازی…' : 'ثبت فاکتور'}
               </span>
             </button>
           </div>
         )}
 
-        <QuantitySheet
+        {editing && <QuantitySheet
           product={editing}
           saleType={saleType}
           existing={editingLine}
@@ -409,9 +436,9 @@ export const PosTab: React.FC = () => {
           onConfirm={upsert}
           onRemove={remove}
           ignoreStock={fromFactory}
-        />
+        />}
 
-        <CheckoutSheet
+        {checkoutOpen && <CheckoutSheet
           open={checkoutOpen}
           onClose={() => !submitting && setCheckoutOpen(false)}
           saleType={saleType}
@@ -433,9 +460,9 @@ export const PosTab: React.FC = () => {
             sellPrice: l.unitPrice,
             priceWholesale: l.product.priceWholesale || 0,
           }))}
-        />
+        />}
 
-        <ProformaSheet
+        {createdProforma && <ProformaSheet
           proforma={createdProforma}
           onClose={() => setCreatedProforma(null)}
           onChanged={(p) => {
@@ -445,20 +472,20 @@ export const PosTab: React.FC = () => {
           onShipped={(inv) => {
             setCreatedProforma(null);
             setCreatedInvoice(inv);
-            loadData();
+            void loadData(true);
             loadPending();
           }}
-        />
+        />}
 
-        <InvoiceDateModal
+        {dateOpen && <InvoiceDateModal
           isOpen={dateOpen}
           currentDate={invoiceDate}
           max={todayYmd()}
           onClose={() => setDateOpen(false)}
           onSelectDate={setInvoiceDate}
-        />
+        />}
 
-        <InvoiceDetailModal isOpen={!!createdInvoice} invoice={createdInvoice} onClose={() => setCreatedInvoice(null)} />
+        {createdInvoice && <InvoiceDetailModal isOpen invoice={createdInvoice} onClose={() => setCreatedInvoice(null)} />}
       </IonContent>
     </IonPage>
   );

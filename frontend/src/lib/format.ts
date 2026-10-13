@@ -1,5 +1,13 @@
-const fa = (n: number, digits = 0) =>
-  n.toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+// Reuse the locale formatter across the hundreds of prices and quantities on screen.
+const formatters = new Map<number, Intl.NumberFormat>();
+const fa = (n: number, digits = 0) => {
+  let formatter = formatters.get(digits);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+    formatters.set(digits, formatter);
+  }
+  return formatter.format(n);
+};
 
 /*
  * Money is always shown in full toman with thousands separators — never shortened

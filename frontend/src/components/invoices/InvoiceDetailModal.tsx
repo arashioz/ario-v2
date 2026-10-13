@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   IonModal,
   IonHeader,
@@ -49,6 +50,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   onClose,
   onChanged,
 }) => {
+  const navigate = useNavigate();
   const { showNotification } = useNotification();
   const settings = useSettings();
   const [invoice, setInvoice] = useState<Invoice | null>(invoiceProp);
@@ -268,7 +270,15 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
             {/* Customer & Date Info */}
             <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50/70 p-3 rounded-2xl border border-slate-100">
-              <div className="space-y-1">
+              <button
+                type="button"
+                disabled={!isSale || !invoice.customerId}
+                onClick={() => {
+                  onClose();
+                  navigate(`/tabs/customers?customerId=${encodeURIComponent(invoice.customerId!)}`);
+                }}
+                className="space-y-1 text-right rounded-xl enabled:hover:bg-sky-50 enabled:cursor-pointer disabled:opacity-100"
+              >
                 <div className="flex items-center gap-1 text-slate-400 text-[11px]">
                   <User className="w-3.5 h-3.5" />
                   <span>{isSale ? 'خریدار:' : 'تأمین‌کننده:'}</span>
@@ -280,7 +290,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                     {invoice.customerPhone}
                   </span>
                 )}
-              </div>
+                {isSale && invoice.customerId && <span className="block text-[10px] text-sky-600">مشاهده حساب مشتری ←</span>}
+              </button>
 
               <div className="space-y-1 text-left">
                 <div className="flex items-center justify-end gap-1 text-slate-400 text-[11px]">

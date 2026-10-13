@@ -369,6 +369,7 @@ export class ProductsService implements OnModuleInit {
       unit: createProductDto.unit || 'عدد',
       buyPrice: createProductDto.buyPrice || 0,
       stock: createProductDto.stock || 0,
+      openingStock: createProductDto.stock || 0,
       minStockAlert: createProductDto.minStockAlert ?? 5,
       isActive: true,
       priceHistory: [
@@ -383,6 +384,13 @@ export class ProductsService implements OnModuleInit {
     });
 
     return product.save();
+  }
+
+  /** Checkout needs current prices and stock, not each product's complete price history. */
+  async findForSale() {
+    return this.productModel.find({ isActive: true })
+      .select('-priceHistory -description -__v')
+      .sort({ updatedAt: -1 }).lean().exec();
   }
 
   async findAll(query?: {
