@@ -3,7 +3,7 @@ import { Check, ChevronRight, ClipboardList, FileCheck2, Phone, Search, UserPlus
 import { Sheet } from '../ui/Sheet';
 import { customersService, CUSTOMER_KIND_LABELS } from '../../services/customers.service';
 import type { Customer, CustomerKind } from '../../services/customers.service';
-import { apiErrorMessage } from '../../services/invoices.service';
+import { apiErrorMessage, invoicesService } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, type AppSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
 import { formatToman, num, parseDecimal, searchKey, weight } from '../../lib/format';
@@ -26,10 +26,13 @@ export interface FactoryLine {
   buyPrice: number;
   sellPrice: number;
   priceWholesale: number;
+  kgPerUnit: number;
 }
 
 export interface CheckoutResult {
   customer: Customer | null;
+  customerName?: string;
+  customerPhone?: string;
   terms: PaymentTerms;
   asProforma: boolean;
   fulfillment: 'shop' | 'factory';
@@ -96,6 +99,10 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [fulfillment, setFulfillment] = useState<'shop' | 'factory'>('shop');
   const [branch, setBranch] = useState('');
   const [factoryCosts, setFactoryCosts] = useState<Record<string, number>>({});
+  const [loadingCosts, setLoadingCosts] = useState(false);
+  const [costError, setCostError] = useState('');
+  const editedCosts = useRef(new Set<string>());
+  const editedSellPrices = useRef(new Set<string>());
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
   const [margins, setMargins] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
@@ -116,10 +123,38 @@ export const CheckoutSheet: React.FC<Props> = ({
     setFulfillment(fromFactory ? 'factory' : 'shop');
     setBranch('');
     setFactoryCosts({});
+    editedCosts.current.clear(); editedSellPrices.current.clear();
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
     setMargins({});
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const productIds = factoryLines.map((l) => l.productId).sort().join(',');
+  useEffect(() => {
+    if (!open || !factoryOn) return;
+    let cancelled = false;
+    setLoadingCosts(true); setCostError('');
+    invoicesService.lastPurchasePrices(productIds.split(',').filter(Boolean)).then((prices) => {
+      if (cancelled) return;
+      setFactoryCosts((previous) => ({ ...prices, ...Object.fromEntries(Object.entries(previous).filter(([id]) => editedCosts.current.has(id))) }));
+    }).catch(() => { if (!cancelled) setCostError('قیمت آخرین خرید دریافت نشد؛ قیمت کارخانهٔ هر کالا را وارد کنید.'); })
+      .finally(() => { if (!cancelled) setLoadingCosts(false); });
+    return () => { cancelled = true; };
+  }, [open, factoryOn, productIds]);
+
+  useEffect(() => {
+    if (!open || fulfillment !== 'factory') return;
+    setSellPrices((previous) => {
+      const next = { ...previous };
+      for (const line of factoryLines) {
+        const cost = factoryCosts[line.productId];
+        if (cost === undefined || editedSellPrices.current.has(line.productId)) continue;
+        const multiplier = settings.factoryMarkupUnit === 'kg' ? line.kgPerUnit : 1;
+        next[line.productId] = Math.round(cost * (1 + settings.factoryMarkupPercent / 100) + settings.factoryMarkupAmount * multiplier);
+      }
+      return next;
+    });
+  }, [open, fulfillment, factoryCosts, productIds, settings.factoryMarkupAmount, settings.factoryMarkupPercent, settings.factoryMarkupUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const results = useMemo(() => {
     const q = searchKey(query);
@@ -156,7 +191,9 @@ export const CheckoutSheet: React.FC<Props> = ({
   const walkInNamed = !customer && !!walkName.trim();
   const branches = (customer?.branches || []).map((b) => b.trim()).filter(Boolean);
   const branchError = branches.length > 0 && !branches.includes(branch) ? 'شعبه را انتخاب کنید' : '';
-  const error = branchError || termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
+  const factoryError = pricingFactory && (loadingCosts ? 'در حال دریافت قیمت آخرین خرید…' : factoryLines.some((l) => factoryCosts[l.productId] === undefined) ? 'قیمت کارخانهٔ کالاهای بدون سابقهٔ خرید را وارد کنید.' : settings.factoryMarkupUnit === 'kg' && settings.factoryMarkupAmount > 0 && factoryLines.some((l) => !(l.kgPerUnit > 0)) ? 'برای کارمزد کیلویی، وزن واحد کالاها را در مدیریت محصولات وارد کنید.' : '');
+  const offlineCreditError = !navigator.onLine && !customer && credit > 0 ? 'برای فروش نسیه آفلاین، یک مشتری ذخیره‌شده را انتخاب کنید.' : '';
+  const error = factoryError || offlineCreditError || branchError || termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
 
   const pick = (c: Customer | null) => {
     const list = (c?.branches || []).map((b) => b.trim()).filter(Boolean);
@@ -200,7 +237,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     if (error) return;
     const phone = searchKey(walkPhone).replace(/\D/g, '');
     let buyer = customer;
-    if (!buyer && (walkName.trim() || phone)) {
+    if (!buyer && (walkName.trim() || phone) && navigator.onLine) {
       try {
         setSaving(true);
         buyer = await customersService.create({ name: walkName.trim() || 'مشتری حضوری', phoneNumber: phone, kind: 'walkin' });
@@ -215,6 +252,8 @@ export const CheckoutSheet: React.FC<Props> = ({
     const fromFactory = factoryOn && fulfillment === 'factory';
     onSubmit({
       customer: buyer,
+      customerName: walkName.trim() || undefined,
+      customerPhone: phone || undefined,
       terms,
       asProforma: bulk && asProforma && !!buyer,
       fulfillment: fromFactory ? 'factory' : 'shop',
@@ -503,9 +542,10 @@ export const CheckoutSheet: React.FC<Props> = ({
           <div className="space-y-2 pt-1">
             {pricingFactory && (
               <p className="text-[10px] text-amber-800 leading-5">
-                سود با همین دو عدد حساب می‌شود: قیمت کارخانه و قیمت فروش. قیمت لیست کالا در این محاسبه نیست.
+                قیمت کارخانه از آخرین فاکتور خرید هر محصول خوانده می‌شود. کارمزد تنظیمات: {formatToman(settings.factoryMarkupAmount)} برای هر {settings.factoryMarkupUnit === 'kg' ? 'کیلو' : 'بسته / واحد'} و {num(settings.factoryMarkupPercent)}٪ روی پایه.
               </p>
             )}
+            {pricingFactory && costError && <p role="alert" className="text-xs text-rose-700">{costError}</p>}
             {factoryLines.map((l) => {
               const cost = factoryCosts[l.productId] || 0;
               const sell = sellPrices[l.productId] ?? l.sellPrice;
@@ -519,7 +559,8 @@ export const CheckoutSheet: React.FC<Props> = ({
                   {pricingFactory && (
                     <>
                       <span className="text-[10px] text-slate-500 block">قیمت کارخانه (هر {l.unit})</span>
-                      <AmountInput value={cost} onChange={(v) => setFactoryCosts((prev) => ({ ...prev, [l.productId]: v }))} />
+                      <AmountInput value={cost} onChange={(v) => { editedCosts.current.add(l.productId); setFactoryCosts((prev) => ({ ...prev, [l.productId]: v })); }} />
+                      {factoryCosts[l.productId] === undefined && !loadingCosts && <p className="text-[10px] text-amber-700">بدون قیمت خرید ذخیره‌شده؛ مبلغ را وارد کنید.</p>}
                       <div className="flex items-center gap-1.5">
                         <input
                           inputMode="decimal"
@@ -530,7 +571,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                         />
                         <button
                           type="button"
-                          onClick={() => setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) }))}
+                          onClick={() => { editedSellPrices.current.add(l.productId); setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) })); }}
                           className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
                         >
                           سود عمده روی قیمت کارخانه
@@ -539,7 +580,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                     </>
                   )}
                   <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری (دلخواه)</span>
-                  <AmountInput value={sell} onChange={(v) => setSellPrices((prev) => ({ ...prev, [l.productId]: v }))} />
+                  <AmountInput value={sell} onChange={(v) => { editedSellPrices.current.add(l.productId); setSellPrices((prev) => ({ ...prev, [l.productId]: v })); }} />
                   {pricingFactory && (
                     <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       سود این ردیف {formatToman(lineProfit)}

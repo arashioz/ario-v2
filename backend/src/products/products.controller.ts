@@ -61,6 +61,11 @@ export class ProductsController {
     return this.productsService.bulkUpdatePrices(dto, recordedByName);
   }
 
+  @Post('category-price')
+  async categoryPrice(@Body() body: { category: string; amount: number; unit: 'kg' | 'unit' }, @Request() req: any) {
+    return this.productsService.saveCategoryPrice(body, req.user?.fullName || req.user?.username || 'کاربر سیستم');
+  }
+
   @Get()
   async findAll(
     @Query('search') search?: string,

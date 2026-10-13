@@ -25,6 +25,11 @@ import {
   InvoiceSchema,
 } from '../invoices/schemas/invoice.schema';
 import { InvoicesService } from '../invoices/invoices.service';
+import { OrderRequestsService } from '../orders/order-requests.service';
+import { OrderRequestSchema } from '../orders/order-requests.module';
+import { AppSettings, AppSettingsSchema } from '../settings/schemas/app-settings.schema';
+import { SettingsService } from '../settings/settings.service';
+import { CreateInvoiceDto } from '../invoices/dto/create-invoice.dto';
 
 // Real standalone MongoDB exercises conditional stock writes and failure recovery.
 // Supply MONGOD_BINARY when mongod is not on PATH. No application database is used.
@@ -143,6 +148,7 @@ describe('Workshop production (standalone MongoDB)', () => {
         { productId: String(packaging._id), quantity: 4 },
       ],
       outputProductId: String(output._id),
+      outputCategory: 'نبات و قند',
       outputQuantity: 4,
       packagingCost: 20,
       laborCost: 40,
@@ -165,13 +171,25 @@ describe('Workshop production (standalone MongoDB)', () => {
       buyPrice: 70,
       sellPrice: 100,
       priceRetail: 100,
+      category: 'نبات و قند',
     });
     expect((await service.create(dto, 'آزمایش'))._id).toEqual(result._id);
     expect((await products.findById(material._id))!.stock).toBe(8);
     expect(await batches.countDocuments()).toBe(1);
+    expect(result.output.category).toBe('نبات و قند');
     expect(
       await products.countDocuments({ workshopPending: String(result._id) }),
     ).toBe(0);
+  });
+
+  it('requires an output category before deducting any inventory', async () => {
+    await expect(service.create({ ...dto, outputCategory: '  ' }, 'test'))
+      .rejects.toThrow('دسته‌بندی');
+    expect(await batches.countDocuments()).toBe(0);
+    expect((await products.findById(material._id))!.stock).toBe(10);
+    expect((await products.findById(output._id))!.stock).toBe(2);
+    const errors = await validate(plainToInstance(CreateWorkshopDto, { ...dto, outputCategory: '  ' }));
+    expect(errors.some((error) => error.property === 'outputCategory')).toBe(true);
   });
 
   it('rejects insufficient stock, repeated materials and self-conversion without writes', async () => {
@@ -300,6 +318,10 @@ describe('Workshop production (standalone MongoDB)', () => {
     } });
     await products.updateOne({ _id: packaging._id }, { $set: { isActive: false } });
     const catalog = new ProductsService(products as unknown as Model<ProductDocument>, null, null);
+    const managed = await catalog.findAll({ category: dto.outputCategory });
+    expect(managed).toHaveLength(1);
+    expect(String(managed[0]._id)).toBe(String(output._id));
+    expect(managed[0].stock).toBe(6);
     const list = await catalog.findForSale();
     expect(list).toHaveLength(2);
     const row = list.find((p) => String(p._id) === String(output._id));
@@ -310,6 +332,84 @@ describe('Workshop production (standalone MongoDB)', () => {
     await products.updateOne({ _id: output._id }, { $set: { stock: 5, sellPrice: 130 } });
     expect((await catalog.findForSale()).find((p) => String(p._id) === String(output._id)))
       .toMatchObject({ stock: 5, sellPrice: 130 });
+  });
+
+  it('calculates fixed plus percentage workshop wages once', async () => {
+    const result = await service.create({ ...dto, laborPercent: 10 }, 'test');
+    expect(result.laborFlatCost).toBe(40);
+    expect(result.laborPercent).toBe(10);
+    expect(result.laborCost).toBe(64); // 40 + 10% of (220 materials + 20 packaging)
+    expect(result.totalCost).toBe(304);
+    expect(result.output.unitCost).toBe(76);
+  });
+
+  const invoiceService = () => new InvoicesService(
+    invoices as unknown as Model<InvoiceDocument>, products as unknown as Model<ProductDocument>,
+    null, null, null, null, { sync: async () => undefined } as any,
+    { get: async () => ({ factorySalesEnabled: true }) } as any, { rebuild: async () => [] } as any,
+  );
+
+  it('loads each product from its own newest purchase, including factory, unreceived and zero prices', async () => {
+    const line = (p: ProductDocument, price: number, received = true) => ({ productId: String(p._id), productName: p.name, unit: p.unit, quantity: 1, unitPrice: price, totalPrice: price, received });
+    await invoices.create({ invoiceNumber: 'PRICE-OLD', type: 'purchase', invoiceDate: new Date('2026-01-01'), items: [line(material, 100), line(output, 200)] });
+    await invoices.create({ invoiceNumber: 'PRICE-FACTORY', type: 'purchase', fulfillment: 'factory', invoiceDate: new Date('2026-01-02'), items: [line(material, 120, false)] });
+    await invoices.create({ invoiceNumber: 'PRICE-ZERO', type: 'purchase', invoiceDate: new Date('2026-01-03'), items: [line(output, 0)] });
+    const prices = await invoiceService().lastShopPurchasePrices([String(material._id), String(output._id), String(packaging._id)]);
+    expect(prices).toEqual({ [String(material._id)]: 120, [String(output._id)]: 0 });
+  });
+
+  it('keeps the chosen factory cost in both the sale and generated purchase without changing shop stock', async () => {
+    const inv = await invoiceService().create({ type: 'sale', fulfillment: 'factory', customerName: 'حضوری',
+      items: [{ productId: String(material._id), productName: material.name, unit: material.unit, quantity: 2, unitPrice: 150, totalPrice: 300, factoryUnitCost: 120 }],
+      totalAmount: 300, finalAmount: 300, paymentMethod: 'cash',
+    }, 'test');
+    expect(inv.items[0].factoryUnitCost).toBe(120);
+    expect(inv.items[0].factoryCostConfirmed).toBe(true);
+    expect((await invoices.findById(inv.factoryPurchaseId))!.items[0].unitPrice).toBe(120);
+    expect((await products.findById(material._id))!.stock).toBe(10);
+  });
+
+  it('automatically prices packages from category kilograms and each product commission', async () => {
+    const model = connection.models.AppSettings || connection.model(AppSettings.name, AppSettingsSchema);
+    await model.deleteMany({});
+    const settings = new SettingsService(model as any);
+    const catalog = new ProductsService(products as unknown as Model<ProductDocument>, null, settings);
+    await products.updateOne({ _id: output._id }, { $set: { category: 'تولیدی', autoPricing: true, commissionAmount: 2000, commissionUnit: 'kg', commissionPercent: 10 } });
+    await catalog.saveCategoryPrice({ category: 'تولیدی', amount: 100000, unit: 'kg' }, 'test');
+    expect((await products.findById(output._id))!.sellPrice).toBe(56000); // half kg: 50000 + 5000 + 1000
+    await catalog.saveCategoryPrice({ category: 'تولیدی', amount: 120000, unit: 'kg' }, 'test');
+    expect((await products.findById(output._id))!.sellPrice).toBe(67000);
+    const edited = await catalog.update(String(output._id), { commissionAmount: 2000, commissionUnit: 'unit', commissionPercent: 0 });
+    expect(edited.sellPrice).toBe(62000);
+  });
+
+  it('deduplicates a synced sale after a lost response and across concurrent retries', async () => {
+    const model = connection.models.OrderRequest || connection.model('OrderRequest', OrderRequestSchema);
+    await model.deleteMany({});
+    const receipts = new OrderRequestsService(model as any);
+    const payload: CreateInvoiceDto = { type: 'sale', customerName: 'حضوری',
+      items: [{ productId: String(material._id), productName: material.name, unit: material.unit, quantity: 2, unitPrice: 120, totalPrice: 240 }],
+      totalAmount: 240, finalAmount: 240, paymentMethod: 'cash' };
+    const key = randomUUID();
+    const execute = jest.fn(() => invoiceService().create(payload, 'test'));
+    const [first, second] = await Promise.all([receipts.run(key, 'user', 'invoice', payload, execute), receipts.run(key, 'user', 'invoice', payload, execute)]);
+    expect(first._id).toBe(second._id);
+    const restarted = new OrderRequestsService(model as any);
+    expect((await restarted.run(key, 'user', 'invoice', payload, execute))._id).toBe(first._id);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect((await products.findById(material._id))!.stock).toBe(8);
+    expect(await invoices.countDocuments({ type: 'sale' })).toBe(1);
+    await expect(receipts.run(key, 'user', 'invoice', { ...payload, finalAmount: 1 }, execute)).rejects.toThrow('یکسان نیست');
+  });
+
+  it('retains an uncertain partial operation for review instead of executing it twice', async () => {
+    const model = connection.models.OrderRequest || connection.model('OrderRequest', OrderRequestSchema);
+    const receipts = new OrderRequestsService(model as any);
+    const key = randomUUID();
+    const execute = jest.fn(async () => { throw new Error('interrupted write'); });
+    await expect(receipts.run(key, 'user', 'invoice', {}, execute)).rejects.toThrow('interrupted write');
+    await expect(receipts.run(key, 'user', 'invoice', {}, execute)).rejects.toThrow('interrupted write');
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it('preserves legacy opening inventory and workshop changes through stock rebuilds', async () => {

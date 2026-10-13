@@ -42,6 +42,7 @@ export class InvoiceItem {
    */
   @Prop({ default: 0 })
   factoryUnitCost?: number;
+  @Prop({ default: false }) factoryCostConfirmed?: boolean;
 }
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);

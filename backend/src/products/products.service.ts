@@ -13,6 +13,7 @@ import { join } from 'path';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { StockCount, StockCountDocument } from './schemas/stock-count.schema';
 import { SettingsService } from '../settings/settings.service';
+import { automaticPrice, CategoryBasePrice } from './automatic-pricing';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import {
@@ -383,6 +384,12 @@ export class ProductsService implements OnModuleInit {
       ],
     });
 
+    if (product.autoPricing) {
+      const settings = await this.settings.get();
+      const price = automaticPrice(product, settings.categoryBasePrices?.find((r) => r.category === product.category));
+      product.sellPrice = product.priceRetail = product.priceSupermarket = product.priceWholesale = price;
+      product.priceHistory[0].oldPrice = product.priceHistory[0].newPrice = price;
+    }
     return product.save();
   }
 
@@ -458,14 +465,15 @@ export class ProductsService implements OnModuleInit {
 
   async update(id: string, updateDto: UpdateProductDto): Promise<ProductDocument> {
     const set: any = { ...updateDto };
-    let priceChanged = false;
-    if (['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale'].some((k) => (updateDto as any)[k] !== undefined)) {
-      const current = await this.productModel.findById(id).select('sellPrice priceRetail priceSupermarket priceWholesale').lean();
-      if (current && ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale'].some((k) => (updateDto as any)[k] !== undefined && (updateDto as any)[k] !== (current as any)[k])) {
-        set.priceSetAt = new Date();
-        priceChanged = true;
-      }
+    const existing = await this.findOne(id);
+    if (updateDto.autoPricing ?? existing.autoPricing) {
+      const merged = { ...existing.toObject(), ...updateDto };
+      const settings = await this.settings.get();
+      const price = automaticPrice(merged, settings.categoryBasePrices?.find((r) => r.category === merged.category));
+      Object.assign(set, { sellPrice: price, priceRetail: price, priceSupermarket: price, priceWholesale: price });
     }
+    const priceChanged = ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale'].some((k) => set[k] !== undefined && set[k] !== existing[k]);
+    if (priceChanged) set.priceSetAt = new Date();
     const product = await this.productModel
       .findByIdAndUpdate(id, { $set: set, ...(priceChanged ? { $unset: { priceCostBasisPerKg: 1 } } : {}) }, { new: true })
       .exec();
@@ -474,6 +482,29 @@ export class ProductsService implements OnModuleInit {
       throw new NotFoundException('کالا یافت نشد');
     }
     return product;
+  }
+
+  async saveCategoryPrice(rule: CategoryBasePrice, actor: string) {
+    const category = String(rule.category || '').trim();
+    if (!category || !Number.isFinite(rule.amount) || rule.amount < 0 || rule.amount > 1e12 || !['kg', 'unit'].includes(rule.unit))
+      throw new BadRequestException('دسته‌بندی، مبلغ یا واحد قیمت پایه نامعتبر است');
+    const next = { category, amount: rule.amount, unit: rule.unit };
+    const products = await this.productModel.find({ category, isActive: true, autoPricing: true });
+    // Validate every weight before changing either settings or product prices.
+    const changes = products.map((p) => ({ product: p, price: automaticPrice(p, next) }));
+    const settings = await this.settings.get();
+    settings.categoryBasePrices = [...(settings.categoryBasePrices || []).filter((r) => r.category !== category), next];
+    settings.markModified('categoryBasePrices');
+    await settings.save();
+    if (changes.length) await this.productModel.bulkWrite(changes.map(({ product, price }) => ({ updateOne: {
+      filter: { _id: product._id, autoPricing: true, category },
+      update: {
+        $set: { sellPrice: price, priceRetail: price, priceSupermarket: price, priceWholesale: price, priceSetAt: new Date() },
+        $unset: { priceCostBasisPerKg: 1 },
+        $push: { priceHistory: { $each: [{ oldPrice: product.sellPrice, newPrice: price, reason: 'قیمت پایه دسته + کارمزد محصول', changedByName: actor, date: new Date() }], $position: 0, $slice: 40 } },
+      },
+    } })));
+    return { modified: changes.length };
   }
 
   async updatePrice(

@@ -17,11 +17,12 @@ import {
 } from 'lucide-react';
 import { productImageUrl, productsService } from '../../services/products.service';
 import { resizeImage } from '../../lib/image';
-import { weight } from '../../lib/format';
+import { weight, formatToman } from '../../lib/format';
 import type { Product, CreateProductInput } from '../../services/products.service';
 import { suppliersService } from '../../services/suppliers.service';
 import { useNotification } from '../../context/NotificationContext';
 import { LoadingOverlay } from '../LoadingOverlay';
+import { useSettings } from '../../services/settings.service';
 import { MoneyTextInput } from '../ui/AmountInput';
 
 interface NewProductModalProps {
@@ -30,6 +31,7 @@ interface NewProductModalProps {
   onProductSaved: (product: Product) => void;
   editProduct?: Product | null;
   categories?: string[];
+  productionOutput?: boolean;
 }
 
 export const NewProductModal: React.FC<NewProductModalProps> = ({
@@ -37,10 +39,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   onClose,
   onProductSaved,
   editProduct,
+  productionOutput = false,
   categories = ['خواربار و حبوبات', 'نایلون و پلاستیک', 'شوینده و بهداشتی', 'لبنیات', 'نوشیدنی'],
 }) => {
   const { showNotification } = useNotification();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const settings = useSettings();
+  const [autoPricing, setAutoPricing] = useState(false);
+  const [commissionAmount, setCommissionAmount] = useState('0');
+  const [commissionPercent, setCommissionPercent] = useState('0');
+  const [commissionUnit, setCommissionUnit] = useState<'kg' | 'unit'>('unit');
 
   const [name, setName] = useState('');
   const [barcode, setBarcode] = useState('');
@@ -103,6 +111,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
 
   const formKg =
     hasDualUnit && secondaryUnit === 'کیلوگرم' ? Number(unitRatio) || 0 : unit === 'کیلوگرم' ? 1 : 0;
+  const categoryBase = settings.categoryBasePrices.find((rule) => rule.category === category.trim());
+  const automaticUnitPrice = categoryBase ? Math.round(categoryBase.amount * (categoryBase.unit === 'kg' ? formKg : 1) * (1 + Number(commissionPercent) / 100) + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) : null;
 
   const [roundStep, setRoundStep] = useState(500);
   const roundMoney = (n: number, step = roundStep) => {
@@ -129,6 +139,10 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setAutoPricing(!!editProduct?.autoPricing);
+      setCommissionAmount(String(editProduct?.commissionAmount || 0));
+      setCommissionPercent(String(editProduct?.commissionPercent || 0));
+      setCommissionUnit(editProduct?.commissionUnit || 'unit');
       setPhoto(null);
       setRemovePhoto(false);
     }
@@ -159,7 +173,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     } else if (isOpen) {
       setName('');
       setBarcode('');
-      setCategory(categories[0] || 'عمومی');
+      setCategory(productionOutput ? '' : categories[0] || 'عمومی');
       setSubcategory('');
       setSupplierName('');
       setUnit('بسته');
@@ -181,7 +195,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setMinStockAlert('5');
       setDescription('');
     }
-  }, [editProduct, isOpen, categories]);
+  }, [editProduct, isOpen, categories, productionOutput]);
 
   const generateBarcode = () => {
     const randomCode = '626' + Math.floor(1000000000 + Math.random() * 9000000000).toString();
@@ -200,7 +214,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       return;
     }
 
-    if (!sellPrice || Number(sellPrice) < 0) {
+    if (!autoPricing && (!sellPrice || Number(sellPrice) < 0)) {
       showNotification({
         title: 'خطای ورودی',
         message: 'قیمت فروش تکی باید عدد معتبر باشد',
@@ -209,7 +223,13 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       return;
     }
 
+    if (productionOutput && !category.trim()) {
+      showNotification({ title: 'دسته‌بندی محصول', message: 'دسته‌بندی محصول تولیدی را انتخاب کنید.', type: 'warning' });
+      return;
+    }
+
     const payload: CreateProductInput = {
+      autoPricing, commissionAmount: Number(commissionAmount), commissionPercent: Number(commissionPercent), commissionUnit,
       name: name.trim(),
       barcode: barcode.trim() || undefined,
       category: category.trim() || 'عمومی',
@@ -228,7 +248,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       priceRetail: Number(sellPrice),
       priceSupermarket: priceSupermarket ? Number(priceSupermarket) : Number(sellPrice),
       priceWholesale: priceWholesale ? Number(priceWholesale) : Number(sellPrice),
-      stock: stock ? Number(stock) : 0,
+      stock: productionOutput ? 0 : stock ? Number(stock) : 0,
       minStockAlert: minStockAlert ? Number(minStockAlert) : 5,
       description: description.trim() || undefined,
     };
@@ -331,7 +351,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setPhoto(null);
+                      setAutoPricing(!!editProduct?.autoPricing);
+      setCommissionAmount(String(editProduct?.commissionAmount || 0));
+      setCommissionPercent(String(editProduct?.commissionPercent || 0));
+      setCommissionUnit(editProduct?.commissionUnit || 'unit');
+      setPhoto(null);
                       setRemovePhoto(true);
                     }}
                     className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold"
@@ -403,6 +427,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               <input
                 type="text"
                 list="category-options"
+                required={productionOutput}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="انتخاب یا تایپ دسته"
@@ -761,6 +786,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 <input
                   type="number"
                   value={stock}
+                  disabled={productionOutput}
                   onChange={(e) => setStock(e.target.value)}
                   placeholder="0"
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
@@ -768,9 +794,21 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
                 {formKg > 0 && formKg !== 1 && Number(stock) > 0 && (
                   <span className="text-[10px] text-slate-400 block">معادل {weight(Number(stock) * formKg)}</span>
                 )}
+                {productionOutput && <p className="text-[11px] text-sky-700 leading-5">موجودی اولیه صفر است؛ با ثبت تولید، مقدار محصول به انبار اضافه می‌شود.</p>}
             </div>
           </div>
 
+          <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+            <h3 className="text-sm font-bold text-blue-900">کارمزد و قیمت‌گذاری خودکار</h3>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={autoPricing} onChange={(e) => setAutoPricing(e.target.checked)} />محاسبهٔ قیمت از پایهٔ دسته‌بندی + کارمزد</label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="space-y-1 text-xs"><span>کارمزد ثابت (تومان)</span><MoneyTextInput value={commissionAmount} onChange={setCommissionAmount} className="w-full rounded-xl border p-2.5" /></label>
+              <label className="space-y-1 text-xs"><span>مبنای کارمزد</span><select value={commissionUnit} onChange={(e) => setCommissionUnit(e.target.value as 'kg' | 'unit')} className="w-full rounded-xl border p-2.5"><option value="unit">هر بسته / واحد</option><option value="kg">هر کیلو</option></select></label>
+              <label className="space-y-1 text-xs"><span>درصد روی قیمت پایه</span><input type="number" min="0" max="1000" step="any" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} className="w-full rounded-xl border p-2.5" /></label>
+            </div>
+            {autoPricing && <p className="text-[11px] leading-6 text-blue-800">{settings.categoryBasePrices.some((r) => r.category === category.trim()) ? 'قیمت هر سه سطح فروش با پایهٔ این دسته و کارمزد بالا محاسبه و جایگزین می‌شود.' : 'ابتدا قیمت پایهٔ این دسته را در مدیریت کالاها ثبت کنید.'}</p>}
+            {autoPricing && automaticUnitPrice !== null && <p className="text-sm font-bold text-blue-900">قیمت خودکار هر {unit}: {formatToman(automaticUnitPrice)}</p>}
+          </section>
           {/* Description */}
           <div className="space-y-1 text-right">
             <label className="text-xs font-medium text-slate-700 block">توضیحات تکمیلی</label>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { cachedGet } from './offlineCache';
 
 export type SalesLayout = 'cards' | 'compact' | 'table';
 export type SaleType = 'retail' | 'supermarket' | 'wholesale';
@@ -205,7 +206,12 @@ export const SMS_PLACEHOLDERS: Record<SmsTemplateKey, [string, string][]> = {
   ],
 };
 
+export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit' }
 export interface AppSettings {
+  categoryBasePrices: CategoryBasePrice[];
+  factoryMarkupAmount: number;
+  factoryMarkupPercent: number;
+  factoryMarkupUnit: 'kg' | 'unit';
   shopName: string;
   shopPhone: string;
   shopAddress: string;
@@ -240,6 +246,10 @@ export interface BackupSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  categoryBasePrices: [],
+  factoryMarkupAmount: 0,
+  factoryMarkupPercent: 0,
+  factoryMarkupUnit: 'kg',
   shopName: 'فروشگاه آریو',
   shopPhone: '',
   shopAddress: '',
@@ -326,9 +336,8 @@ export const settingsService = {
   async get(force = false): Promise<AppSettings> {
     if (cached && !force) return cached;
     if (!inflight) {
-      inflight = api
-        .get<AppSettings>('/settings')
-        .then((r) => publish(r.data))
+      inflight = cachedGet<AppSettings>('/settings')
+        .then(publish)
         .finally(() => {
           inflight = null;
         });

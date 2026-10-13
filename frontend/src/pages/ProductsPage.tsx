@@ -9,7 +9,7 @@ import {
   useIonViewWillEnter,
 } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { productsService } from '../services/products.service';
 import { invoicesService } from '../services/invoices.service';
@@ -36,11 +36,14 @@ import {
 } from 'lucide-react';
 import { formatToman, num, weight } from '../lib/format';
 import { PriceTiers, ProductPhoto, StockAmount } from '../components/products/ProductPriceInfo';
+import { CategoryPricingPanel } from '../components/products/CategoryPricingPanel';
 import { CatalogShareSheet } from '../components/products/CatalogShareSheet';
 import { kgPerUnit, pricePerKg, tierPrice } from '../components/pos/cart';
 
 export const ProductsPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const focusedProductId = new URLSearchParams(location.search).get('productId');
   const { showNotification } = useNotification();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -53,6 +56,18 @@ export const ProductsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [lowStockFilter, setLowStockFilter] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (location.pathname !== '/products' || !focusedProductId) return;
+    setSearch('');
+    setSelectedCategory('all');
+    setLowStockFilter(false);
+  }, [focusedProductId, location.key, location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname !== '/products' || !focusedProductId || loading) return;
+    document.getElementById(`product-${focusedProductId}`)?.scrollIntoView({ block: 'center' });
+  }, [focusedProductId, products, loading, location.key, location.pathname]);
 
   // Modals state
   const [isNewProductOpen, setIsNewProductOpen] = useState(false);
@@ -307,6 +322,8 @@ export const ProductsPage: React.FC = () => {
             />
           </div>
 
+          <CategoryPricingPanel categories={stats?.categories || []} onSaved={() => void loadData()} />
+
           {/* Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             <button
@@ -386,7 +403,8 @@ export const ProductsPage: React.FC = () => {
                 return (
                   <div
                     key={product._id}
-                    className="bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3"
+                    id={`product-${product._id}`}
+                    className={`bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3 ${focusedProductId === product._id ? 'ring-2 ring-blue-500 scroll-mt-4' : ''}`}
                   >
                     {/* Header Row */}
                     <div className="flex items-start justify-between gap-2">

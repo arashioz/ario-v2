@@ -66,6 +66,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     for (const sale of sales) {
       let changed = false;
       for (const it of sale.items || []) {
+        if (it.factoryCostConfirmed || Number(it.factoryUnitCost) > 0) continue;
         const price = priceOn(periods, String(it.productId), sale.invoiceDate);
         if (!(price > 0) || Math.round(Number(it.factoryUnitCost) || 0) === price) continue;
         it.factoryUnitCost = price;
@@ -137,7 +138,8 @@ export class InvoicesService implements OnApplicationBootstrap {
         ...item,
         weightKg: Math.round(weight * 10) / 10,
         received: isSale ? true : item.received !== false,
-        factoryUnitCost: isSale ? Math.max(0, Math.round(Number(item.factoryUnitCost) || 0)) : 0,
+        factoryUnitCost: Math.max(0, Math.round(Number(item.factoryUnitCost) || 0)),
+        factoryCostConfirmed: item.factoryUnitCost !== undefined,
       });
     }
 
@@ -236,7 +238,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
   }
 
-  /** Latest shop-purchase unit price per product. Factory purchases are excluded. */
+  /** Latest line per product across all purchase invoices, including unreceived/factory purchases. */
   async lastShopPurchasePrices(productIds: string[]): Promise<Record<string, number>> {
     const wanted = [...new Set(productIds.map((id) => String(id || '')).filter(Boolean))];
     const found: Record<string, number> = {};
@@ -244,20 +246,19 @@ export class InvoicesService implements OnApplicationBootstrap {
     const purchases = await this.invoiceModel
       .find({
         type: 'purchase',
-        fulfillment: { $ne: 'factory' },
         'items.productId': { $in: wanted },
       })
       .select('items.productId items.unitPrice items.received')
-      .sort({ invoiceDate: -1, createdAt: -1 })
+      .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
       .lean()
       .exec();
     const need = new Set(wanted);
     for (const inv of purchases) {
-      for (const it of inv.items || []) {
+      for (const it of [...(inv.items || [])].reverse()) {
         const pid = String(it.productId || '');
-        if (!need.has(pid) || it.received === false) continue;
+        if (!need.has(pid)) continue;
         const price = Math.round(Number(it.unitPrice) || 0);
-        if (price <= 0) continue;
+        if (!Number.isFinite(Number(it.unitPrice)) || price < 0) continue;
         found[pid] = price;
         need.delete(pid);
       }

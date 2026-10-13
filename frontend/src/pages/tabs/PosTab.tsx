@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
-import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
+import { apiErrorMessage, type Invoice } from '../../services/invoices.service';
+import { enqueueOrder, sendOrder, ORDERS_SYNCED, reserveQueuedStock, pendingOrders } from '../../services/offlineOrders';
 import { proformasService, type Proforma } from '../../services/proformas.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -46,6 +47,7 @@ export const PosTab: React.FC = () => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [preparingCheckout, setPreparingCheckout] = useState(false);
   const checkoutRequest = useRef(false);
+  const submittingRef = useRef(false);
   const productRequest = useRef<Promise<void> | null>(null);
   const productVersion = useRef(0);
   const pendingRequest = useRef<Promise<void> | null>(null);
@@ -75,7 +77,7 @@ export const PosTab: React.FC = () => {
     const version = ++productVersion.current;
     setLoading(true);
     const request = productsService.getForSale().then((prods) => {
-      if (version === productVersion.current) setProducts(prods);
+      if (version === productVersion.current) setProducts(reserveQueuedStock(prods));
     }).catch(() => {
       if (version === productVersion.current) showNotification({ title: 'خطا در بارگذاری', message: 'دریافت کالاها انجام نشد؛ دوباره تلاش کنید.', type: 'error' });
     }).finally(() => {
@@ -86,6 +88,13 @@ export const PosTab: React.FC = () => {
   }, [showNotification]);
 
   useEffect(() => { void loadData(); void loadPending(); }, [loadData, loadPending]);
+  useEffect(() => {
+    const refresh = () => { void loadData(true); void loadPending(); };
+    window.addEventListener(ORDERS_SYNCED, refresh);
+    // Keep the customer picker usable on the next offline visit.
+    if (navigator.onLine) void customersService.getAll().then(setCustomers).catch(() => undefined);
+    return () => window.removeEventListener(ORDERS_SYNCED, refresh);
+  }, [loadData, loadPending]);
   useIonViewWillEnter(() => { void loadData(); void loadPending(); });
 
   const openCheckout = async () => {
@@ -97,7 +106,8 @@ export const PosTab: React.FC = () => {
       setCustomers(list);
       setCheckoutOpen(true);
     } catch {
-      showNotification({ title: 'دریافت مشتریان انجام نشد', message: 'دوباره روی ثبت فاکتور بزنید؛ سبد شما حفظ شده است.', type: 'error' });
+      setCheckoutOpen(true);
+      showNotification({ title: 'دسترسی محدود به مشتریان', message: 'می‌توانید مشتری ذخیره‌شده یا خرید حضوری را انتخاب کنید.', type: 'warning' });
     } finally {
       checkoutRequest.current = false;
       setPreparingCheckout(false);
@@ -171,8 +181,9 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName }: CheckoutResult) => {
-    if (!hasInvoiceType || !lines.length) return;
+  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName, customerName, customerPhone }: CheckoutResult) => {
+    if (!hasInvoiceType || !lines.length || submittingRef.current) return;
+    submittingRef.current = true;
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
       const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
@@ -191,8 +202,8 @@ export const PosTab: React.FC = () => {
       type: 'sale' as const,
       saleType,
       customerId: customer?._id,
-      customerName: customer?.name ?? 'مشتری حضوری',
-      customerPhone: customer?.phoneNumber || undefined,
+      customerName: customer?.name || customerName || 'مشتری حضوری',
+      customerPhone: customer?.phoneNumber || customerPhone || undefined,
       invoiceDate,
       items,
       totalAmount: goods,
@@ -204,8 +215,14 @@ export const PosTab: React.FC = () => {
     };
     try {
       setSubmitting(true);
-      if (asProforma) {
-        const p = await proformasService.create(input);
+      const order = enqueueOrder(asProforma ? 'proforma' : 'invoice', input);
+      const saved = await sendOrder(order);
+      if (!saved) {
+        const needsReview = pendingOrders().find((pending) => pending.id === order.id)?.review;
+        showNotification({ title: needsReview ? 'سفارش نیاز به بررسی دارد' : 'سفارش روی دستگاه ذخیره شد', message: needsReview ? 'سفارش حذف نشده است؛ خطای ثبت را در صف دستگاه بررسی کنید.' : 'پس از اتصال، ثبت خودکار انجام می‌شود. وضعیت سفارش در صف دستگاه قابل مشاهده است.', type: needsReview ? 'warning' : 'info' });
+        void loadData(true);
+      } else if (asProforma) {
+        const p = saved as Proforma;
         showNotification({
           title: 'پیش‌فاکتور ثبت شد',
           message:
@@ -217,7 +234,7 @@ export const PosTab: React.FC = () => {
         setCreatedProforma(p);
         loadPending();
       } else {
-        const inv = await invoicesService.create(input);
+        const inv = saved as Invoice;
         const split = inv.splitInto;
         showNotification({
           title: 'فاکتور صادر شد',
@@ -239,12 +256,12 @@ export const PosTab: React.FC = () => {
       showNotification({ title: 'ثبت انجام نشد', message: apiErrorMessage(err, 'خطا در صدور فاکتور'), type: 'error' });
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
   const tiersBlock = (
-    <section className="space-y-1.5 mb-3" aria-labelledby="invoice-type-heading">
-      <h2 id="invoice-type-heading" className="text-sm font-bold text-white px-1">۱. نوع فاکتور را انتخاب کنید</h2>
+    <section className="space-y-1.5 mb-3" aria-label="نوع فاکتور">
       {(auto || fromFactory || pendingProformas > 0) && (
         <div className="flex flex-wrap gap-1.5 px-0.5">
           {auto && <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">خودکار فعال است</span>}
@@ -397,13 +414,9 @@ export const PosTab: React.FC = () => {
         <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها..." />
 
         <div className={`pos-workspace p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
-          <div className="pos-welcome flex items-center justify-between gap-3 mb-4 px-1">
-            <div><p className="text-[10px] text-blue-200 mb-1">آریو · میز فروش</p><h2 className="text-lg font-bold text-white">امروز چی می‌فروشیم؟</h2></div>
-            <div className="pos-catalog-count text-center"><strong className="block text-lg font-mono text-white">{loading && !products.length ? '…' : num(products.length)}</strong><span className="text-[9px] text-blue-100">کالا در ویترین</span></div>
-          </div>
           {tiersBlock}
           <p id="pos-product-instruction" role="status" className="mb-3 px-1 text-xs text-blue-100">
-            {hasInvoiceType ? '۲. محصولات سفارش را انتخاب کنید' : 'برای فعال شدن محصولات، ابتدا نوع فاکتور را از بالا انتخاب کنید.'}
+            {hasInvoiceType ? 'محصولات سفارش را انتخاب کنید' : 'برای فعال شدن محصولات، ابتدا نوع فاکتور را از بالا انتخاب کنید.'}
           </p>
           {!loading && !products.length && <button onClick={() => void loadData()} className="mb-3 text-xs text-white underline">دریافت دوبارهٔ کالاها</button>}
           <fieldset disabled={!hasInvoiceType} aria-describedby="pos-product-instruction" className={`m-0 min-w-0 border-0 p-0 ${hasInvoiceType ? '' : 'pos-products-locked'}`}>
@@ -481,6 +494,7 @@ export const PosTab: React.FC = () => {
             buyPrice: l.product.buyPrice || 0,
             sellPrice: l.unitPrice,
             priceWholesale: l.product.priceWholesale || 0,
+            kgPerUnit: kgPerUnit(l.product),
           }))}
         />}
 

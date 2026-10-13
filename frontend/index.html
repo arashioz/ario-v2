@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#f8fafc" />
+    <meta name="theme-color" content="#e6f2ff" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -15,24 +15,29 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>آریو</title>
     <style>
-      #boot {
-        position: fixed; inset: 0; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 18px;
-        background: #f8fafc; z-index: 9999;
+      html, body { margin: 0; background: #e6f2ff; }
+      .app-splash {
+        position: fixed; inset: 0; z-index: 100000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 22px; color: #174993; font-family: 'Vazirmatn Variable', sans-serif;
+        background: radial-gradient(ellipse at 25% 20%, #f7fcff, transparent 60%), radial-gradient(ellipse at 85% 80%, #c9e3ff, transparent 65%), #e6f2ff;
       }
-      #boot img { width: 84px; height: 84px; border-radius: 21px; box-shadow: 0 12px 30px -10px rgba(2,132,199,.45); }
-      #boot i {
-        width: 22px; height: 22px; border-radius: 50%;
-        border: 2.5px solid #bae6fd; border-top-color: #0284c7;
-        animation: bootspin .8s linear infinite;
-      }
+      .app-splash-brand { position: relative; display: grid; place-items: center; width: 180px; height: 180px; }
+      .app-splash-brand::before { content: ''; position: absolute; inset: 20px; border-radius: 38%; background: #ffffff70; transform: rotate(15deg); animation: brandfloat 3s ease-in-out infinite; }
+      .app-splash strong { position: relative; font-size: 60px; font-weight: 800; line-height: 1.5; background: linear-gradient(110deg, #174993 25%, #48a0e6 50%, #174993 75%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: brandshine 3s ease-in-out infinite; }
+      .app-splash-orbit { position: absolute; inset: 0; border: 1px solid #82b7ee55; border-radius: 50%; animation: bootspin 4s linear infinite; }
+      .app-splash-orbit::before { content: ''; position: absolute; top: 18px; left: 18px; width: 10px; height: 10px; border-radius: 50%; background: #4599e8; box-shadow: 0 0 0 5px #4599e820; }
+      .app-splash p { margin: 0; padding: 0 24px; text-align: center; font-size: 12px; color: #476b96; }
+      .app-splash-spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #abcdee; border-top-color: #287ac4; animation: bootspin .9s linear infinite; }
       @keyframes bootspin { to { transform: rotate(360deg); } }
+      @keyframes brandfloat { 50% { transform: rotate(-5deg) scale(1.08); } }
+      @keyframes brandshine { 50% { background-position: 100% 0; } }
+      @media (prefers-reduced-motion: reduce) { .app-splash *, .app-splash-brand::before { animation: none !important; } }
     </style>
   </head>
   <body class="bg-slate-50 font-vazir text-slate-800 antialiased select-none">
-    <div id="root">
-      <div id="boot"><img src="/icons/icon-192.png" alt="" /><i></i></div>
-    </div>
+    <div id="boot" class="app-splash" role="status" aria-label="در حال باز کردن آریو"><div class="app-splash-brand"><span class="app-splash-orbit" aria-hidden="true"></span><strong>آریو</strong></div><span class="app-splash-spinner"></span><p>در حال آماده‌سازی صفحه…</p></div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

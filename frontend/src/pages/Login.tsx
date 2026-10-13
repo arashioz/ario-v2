@@ -1,3 +1,4 @@
+import './Login.css';
 import React, { useState } from 'react';
 import { IonPage, IonContent } from '@ionic/react';
 import { useAuth } from '../context/AuthContext';
@@ -75,13 +76,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <IonPage>
+    <IonPage className="login-page">
       <IonContent fullscreen className="ion-padding">
         <LoadingOverlay isOpen={isSubmitting} message="در حال تأیید اطلاعات کاربری..." />
 
-        <div className="min-h-screen flex flex-col justify-between py-6 px-4 max-w-md mx-auto relative select-none">
-          {/* Top Decorative Background Elements */}
-          <div className="absolute top-0 right-1/2 translate-x-1/2 -z-10 w-96 h-96 bg-gradient-to-b from-sky-200/60 via-sky-100/30 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="login-shell flex flex-col justify-between py-6 px-4 max-w-md mx-auto relative select-none">
 
           {/* Header & Logo */}
           <div className="flex flex-col items-center pt-8">
@@ -89,16 +88,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <img src="/ario-logo.svg" alt="Ario Logo" className="w-14 h-14" />
             </div>
 
-            <h1 className="text-2xl font-black text-slate-800 mt-4 tracking-tight">
+            <h1 className="text-2xl font-black text-white mt-4 tracking-tight">
               نرم‌افزار فروشگاهی آریــو
             </h1>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
+            <p className="text-xs text-blue-100 mt-1 font-medium">
               سامانه یکپارچه مدیریت فاکتور، مشتریان و حسابداری
             </p>
           </div>
 
           {/* Login Card Form */}
-          <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-6 shadow-xl shadow-sky-100/70 border border-sky-100/80 my-auto">
+          <div className="login-card bg-white rounded-3xl p-6 border border-white/80 my-auto">
             <div className="mb-5 text-right">
               <h2 className="text-lg font-bold text-slate-800">ورود به حساب کاربری</h2>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -109,7 +108,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Username Input */}
               <div className="space-y-1 text-right">
-                <label className="text-xs font-semibold text-slate-600 block mr-1">
+                <label htmlFor="login-username" className="text-xs font-semibold text-slate-600 block mr-1">
                   نام کاربری
                 </label>
                 <div className="relative flex items-center">
@@ -117,6 +116,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     <User className="w-5 h-5" />
                   </div>
                   <input
+                    id="login-username"
+                    autoComplete="username"
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -129,7 +130,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
               {/* Password Input */}
               <div className="space-y-1 text-right">
-                <label className="text-xs font-semibold text-slate-600 block mr-1">
+                <label htmlFor="login-password" className="text-xs font-semibold text-slate-600 block mr-1">
                   رمز عبور
                 </label>
                 <div className="relative flex items-center">
@@ -137,6 +138,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     <Lock className="w-5 h-5" />
                   </div>
                   <input
+                    id="login-password"
+                    autoComplete="current-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -146,6 +149,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? 'پنهان کردن رمز' : 'نمایش رمز'}
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute left-3.5 text-slate-400 hover:text-slate-600 transition"
                   >
@@ -193,7 +197,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
 
           {/* Footer Info */}
-          <div className="text-center text-[11px] text-slate-400 mt-4">
+          <div className="text-center text-[11px] text-blue-100 mt-4">
             <span>سیستم امنیتی دو سطحی آریو • مدیریت و بازاریاب</span>
           </div>
         </div>

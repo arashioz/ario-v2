@@ -66,6 +66,17 @@ describe('workshop FIFO', () => {
     expect(result.lotsByProduct.get('packed')![0].kgLeft).toBe(3);
   });
 
+  it('preserves the confirmed factory price instead of substituting a shop purchase', () => {
+    const sale = invoice('factory', 'sale', '2026-10-03', 'raw', 2, 200);
+    sale.fulfillment = 'factory';
+    sale.items[0].factoryUnitCost = 140;
+    sale.items[0].factoryCostConfirmed = true;
+    const result = runFifo([invoice('buy', 'purchase', '2026-10-01', 'raw', 10, 100), sale], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
+    expect(result.invoiceProfit.get('factory')!.cost).toBe(280);
+    expect(result.invoiceProfit.get('factory')!.profit).toBe(120);
+    expect(result.lotsByProduct.get('raw')![0].kgLeft).toBe(10);
+  });
+
   it('uses recorded cost for materials without purchase history and handles fractional units', () => {
     const result = runFifo(
       [],

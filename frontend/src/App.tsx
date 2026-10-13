@@ -8,6 +8,9 @@ import { Login } from './pages/Login';
 import { TabsLayout } from './pages/TabsLayout';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PageLoader, PageLoadBoundary } from './components/PageLoader';
+import { OfflineOrderSync } from './components/OfflineOrderSync';
+import { NavigationSplash } from './components/NavigationSplash';
+import { SplashScreen } from './components/SplashScreen';
 const CatalogPage = lazy(() => import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })));
 import { DeletePasswordPrompt } from './components/ui/DeletePasswordPrompt';
 
@@ -20,14 +23,7 @@ const AppRoutes: React.FC = () => {
   if (isPublicPath(pathname)) return <PageLoadBoundary><Suspense fallback={<PageLoader />}><CatalogPage /></Suspense></PageLoadBoundary>;
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-sky-200 border-t-sky-500 rounded-full animate-spin" />
-          <span className="text-xs text-slate-500 font-semibold">در حال بارگذاری اطلاعات...</span>
-        </div>
-      </div>
-    );
+    return <SplashScreen message="در حال بررسی ورود…" />;
   }
 
   return (
@@ -46,6 +42,8 @@ const AppContent: React.FC = () => {
     <IonReactRouter>
       <OfflineBanner />
       <AppRoutes />
+      <NavigationSplash />
+      <OfflineOrderSync />
       <DeletePasswordPrompt />
     </IonReactRouter>
   );

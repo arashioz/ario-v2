@@ -9,8 +9,10 @@ import {
   Query,
   UseGuards,
   Request,
+  Headers,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
+import { OrderRequestsService } from '../orders/order-requests.service';
 import { Type } from 'class-transformer';
 import { IsDateString, IsNotEmpty, IsNumber, Min } from 'class-validator';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -37,11 +39,11 @@ const actorName = (req: any) => req.user?.fullName || req.user?.username || 'Ú©Ø
 @Controller('invoices')
 @UseGuards(JwtAuthGuard)
 export class InvoicesController {
-  constructor(private readonly invoicesService: InvoicesService) {}
+  constructor(private readonly invoicesService: InvoicesService, private readonly orders: OrderRequestsService) {}
 
   @Post()
-  create(@Body() createInvoiceDto: CreateInvoiceDto, @Request() req: any) {
-    return this.invoicesService.create(createInvoiceDto, actorName(req));
+  create(@Body() createInvoiceDto: CreateInvoiceDto, @Request() req: any, @Headers('idempotency-key') key?: string) {
+    return this.orders.run(key, req.user.id, 'invoice', createInvoiceDto, () => this.invoicesService.create(createInvoiceDto, actorName(req)));
   }
 
   @Get('stats')

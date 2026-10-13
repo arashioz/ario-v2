@@ -1,4 +1,5 @@
 import { api } from './api';
+import { cachedGet } from './offlineCache';
 
 /** shop: a store that buys to resell; walkin: a walk-in buyer (name and phone only). */
 export type CustomerKind = 'shop' | 'walkin';
@@ -123,6 +124,7 @@ export const customersService = {
     filter?: 'all' | 'debtors' | 'settled' | 'creditors';
     kind?: CustomerKind;
   }): Promise<Customer[]> {
+    if (!params || !Object.values(params).some(Boolean)) return cachedGet<Customer[]>('/customers');
     const res = await api.get('/customers', { params, timeout: 60000 });
     return res.data;
   },

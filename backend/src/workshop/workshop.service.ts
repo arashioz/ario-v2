@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -15,6 +16,8 @@ import {
 import { CreateWorkshopDto } from './workshop.dto';
 import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import { purchaseEntersShop } from '../suppliers/supplier-names';
+import { SettingsService } from '../settings/settings.service';
+import { automaticPrice } from '../products/automatic-pricing';
 
 const kgPerUnit = (p: Product) =>
   p.weightPerUnitKg ||
@@ -29,6 +32,7 @@ export class WorkshopService implements OnModuleInit {
     @InjectModel(WorkshopBatch.name)
     private batches: Model<WorkshopBatchDocument>,
     @InjectModel(Invoice.name) private invoices: Model<InvoiceDocument>,
+    @Optional() private settings?: SettingsService,
   ) {}
 
   // The deployed MongoDB is standalone. Durable per-product markers let interrupted
@@ -112,6 +116,9 @@ export class WorkshopService implements OnModuleInit {
           ? 'این تولید در حال ثبت است؛ کمی بعد دوباره بررسی کنید'
           : 'این ثبت انجام نشد؛ پس از بررسی موجودی، تولید جدیدی ثبت کنید',
       );
+    const outputCategory = dto.outputCategory?.trim();
+    if (!outputCategory)
+      throw new BadRequestException('دسته‌بندی محصول تولیدی را انتخاب کنید');
     const ids = dto.inputs.map((line) => line.productId);
     if (new Set(ids).size !== ids.length)
       throw new BadRequestException('هر ماده را فقط یک بار وارد کنید');
@@ -138,11 +145,12 @@ export class WorkshopService implements OnModuleInit {
         unitCost: p.buyPrice || 0,
       };
     });
-    const totalCost =
-      inputs.reduce((sum, line) => sum + line.quantity * line.unitCost, 0) +
-      dto.packagingCost +
-      dto.laborCost;
+    const materialCost = inputs.reduce((sum, line) => sum + line.quantity * line.unitCost, 0);
+    const laborCost = Math.round(dto.laborCost + (materialCost + dto.packagingCost) * (dto.laborPercent || 0) / 100);
+    const totalCost = materialCost + dto.packagingCost + laborCost;
     const out = byId.get(dto.outputProductId)!;
+    const pricingSettings = out.autoPricing ? await this.settings?.get() : null;
+    const sellPrice = out.autoPricing ? automaticPrice({ ...out.toObject(), category: outputCategory }, pricingSettings?.categoryBasePrices?.find((r) => r.category === outputCategory)) : dto.sellPrice;
     // Older products may have opening/manual stock that never had an invoice.
     // Preserve that baseline once, before adding workshop adjustments to their ledger.
     const legacy = products.filter((p) => p.openingStock === undefined);
@@ -194,15 +202,18 @@ export class WorkshopService implements OnModuleInit {
         output: {
           productId: String(out._id),
           productName: out.name,
+          category: outputCategory,
           unit: out.unit,
           quantity: dto.outputQuantity,
           weightKg: kgPerUnit(out) * dto.outputQuantity,
           unitCost: totalCost / dto.outputQuantity,
         },
         packagingCost: dto.packagingCost,
-        laborCost: dto.laborCost,
+        laborCost,
+        laborFlatCost: dto.laborCost,
+        laborPercent: dto.laborPercent || 0,
         totalCost,
-        sellPrice: dto.sellPrice,
+        sellPrice,
         notes: dto.notes || '',
         createdByName: actor,
       });
@@ -243,9 +254,11 @@ export class WorkshopService implements OnModuleInit {
         {
           $inc: { stock: dto.outputQuantity, stockAdjust: dto.outputQuantity },
           $set: {
+            category: outputCategory,
             buyPrice: batch.output.unitCost,
-            sellPrice: dto.sellPrice,
-            priceRetail: dto.sellPrice,
+            sellPrice,
+            priceRetail: sellPrice,
+            ...(out.autoPricing ? { priceSupermarket: sellPrice, priceWholesale: sellPrice } : {}),
             priceSetAt: new Date(),
           },
           $unset: { priceCostBasisPerKg: 1 },
@@ -255,7 +268,7 @@ export class WorkshopService implements OnModuleInit {
               $each: [
                 {
                   oldPrice: out.sellPrice,
-                  newPrice: dto.sellPrice,
+                  newPrice: sellPrice,
                   reason: 'تولید کارگاهی',
                   changedByName: actor,
                   date: new Date(),

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { cachedGet } from './offlineCache';
 
 export interface InvoiceItem {
   productId: string;
@@ -178,15 +179,13 @@ export const invoicesService = {
   },
 
   lastPurchasePrices: async (productIds: string[]): Promise<Record<string, number>> => {
-    const ids = [...new Set(productIds.filter(Boolean))];
+    const ids = [...new Set(productIds.filter(Boolean))].sort();
     if (!ids.length) return {};
     const prices: Record<string, number> = {};
     // Keep requests below proxy URL limits when management shows the full catalog.
     for (let i = 0; i < ids.length; i += 100) {
-      const response = await api.get<Record<string, number>>('/invoices/last-purchase-prices', {
-        params: { productIds: ids.slice(i, i + 100).join(',') },
-      });
-      Object.assign(prices, response.data || {});
+      const data = await cachedGet<Record<string, number>>(`/invoices/last-purchase-prices?productIds=${ids.slice(i, i + 100).join(',')}`);
+      Object.assign(prices, data || {});
     }
     return prices;
   },

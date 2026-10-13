@@ -1,6 +1,12 @@
+import { IsBoolean, Max } from 'class-validator';
 import { IsIn, IsOptional, IsString, IsNumber, Min } from 'class-validator';
 
 export class UpdateProductDto {
+  @IsOptional() @IsBoolean() autoPricing?: boolean;
+  @IsOptional() @IsNumber() @Min(0) commissionAmount?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(1000) commissionPercent?: number;
+  @IsOptional() @IsIn(['kg', 'unit']) commissionUnit?: 'kg' | 'unit';
+
   @IsOptional()
   @IsString()
   name?: string;

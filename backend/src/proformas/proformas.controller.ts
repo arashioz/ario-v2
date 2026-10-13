@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Headers } from '@nestjs/common';
+import { OrderRequestsService } from '../orders/order-requests.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateInvoiceDto } from '../invoices/dto/create-invoice.dto';
 import { ProformaTermsDto, ShipProformaDto } from './dto/proforma.dto';
@@ -9,11 +10,11 @@ const actorName = (req: any) => req.user?.fullName || req.user?.username || 'Ú©Ø
 @Controller('proformas')
 @UseGuards(JwtAuthGuard)
 export class ProformasController {
-  constructor(private readonly proformas: ProformasService) {}
+  constructor(private readonly proformas: ProformasService, private readonly orders: OrderRequestsService) {}
 
   @Post()
-  create(@Body() dto: CreateInvoiceDto, @Request() req: any) {
-    return this.proformas.create(dto, actorName(req));
+  create(@Body() dto: CreateInvoiceDto, @Request() req: any, @Headers('idempotency-key') key?: string) {
+    return this.orders.run(key, req.user.id, 'proforma', dto, () => this.proformas.create(dto, actorName(req)));
   }
 
   @Get()

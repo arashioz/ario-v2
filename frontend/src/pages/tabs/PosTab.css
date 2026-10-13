@@ -55,14 +55,6 @@
   cursor: not-allowed;
 }
 
-.pos-catalog-count {
-  min-width: 64px;
-  padding: 8px 12px;
-  border-radius: 18px;
-  background: rgba(219, 234, 254, .1);
-  border: 1px solid rgba(219, 234, 254, .2);
-}
-
 .pos-page .pos-category-title,
 .pos-page .pos-subcategory-title {
   color: #fff;

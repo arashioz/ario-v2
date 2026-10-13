@@ -1,7 +1,6 @@
-const VERSION = 'ario-v6';
+const VERSION = 'ario-v9';
 const SHELL_CACHE = `${VERSION}-shell`;
 const ASSET_CACHE = `${VERSION}-assets`;
-const API_CACHE = `${VERSION}-api`;
 
 const SHELL = [
   '/',
@@ -34,6 +33,12 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  // Session verification must never succeed using a cached profile.
+  if (/\/auth(?:\/|$)/.test(url.pathname)) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
   // Map tiles: cache-first so previously viewed areas load instantly and offline.
   if (/basemaps\.cartocdn\.com|tile\.openstreetmap\.org|arcgisonline\.com/.test(url.hostname)) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
@@ -42,9 +47,9 @@ self.addEventListener('fetch', (event) => {
 
   if (url.origin !== self.location.origin) return;
 
-  // API: always try network, fall back to last good response when offline.
+  // Private snapshots are stored per user by the app, never shared in the worker.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API_CACHE));
+    event.respondWith(fetch(request));
     return;
   }
 
@@ -77,19 +82,4 @@ async function cacheFirst(request, cacheName) {
     cache.put(request, res.clone());
   }
   return res;
-}
-
-async function networkFirst(request, cacheName) {
-  try {
-    const res = await fetch(request);
-    if (res.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, res.clone());
-    }
-    return res;
-  } catch (err) {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    throw err;
-  }
 }

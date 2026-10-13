@@ -24,6 +24,7 @@ import './index.css';
 
 setupIonicReact({
   mode: 'ios',
+  animated: false,
 });
 
 if ('serviceWorker' in navigator) {

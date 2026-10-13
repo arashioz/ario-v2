@@ -62,6 +62,7 @@ export interface FifoInvoice {
     received?: boolean;
     /** Parent-company price per unit on a direct factory sale. Hidden from the customer invoice. */
     factoryUnitCost?: number;
+    factoryCostConfirmed?: boolean;
   }[];
 }
 
@@ -355,16 +356,16 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
       const kg = lineKg(it, products.get(pid));
       const revenue = (it.totalPrice || 0) * discountFactor;
 
-      // Shipped from the factory. A price typed for that sale stands.
-      // If that saved price is actually a shop purchase from a later day, use the purchase price on the sale date.
+      // Confirmed factory prices are immutable cost snapshots. Legacy sales
+      // without a confirmed price may still use the historical purchase basis.
       if (inv.fulfillment === 'factory') {
         const saleDay = dayKey(inv.invoiceDate);
         const typed = Math.round(Number(it.factoryUnitCost) || 0);
         const historical = unitOnOrBefore(pid, saleDay);
         // The buy price of this date, not a later price that was written onto the old invoice.
-        const factoryUnit = historical > 0 ? historical : typed;
+        const factoryUnit = it.factoryCostConfirmed ? typed : historical > 0 ? historical : typed;
         const cost = factoryUnit * (it.quantity || 0);
-        const estimatedKg = factoryUnit > 0 ? 0 : kg;
+        const estimatedKg = factoryUnit > 0 || it.factoryCostConfirmed ? 0 : kg;
         if (estimatedKg > 0) ip.estimated = true;
         const perKg = kg > 0 ? cost / kg : 0;
         saleLines.push({

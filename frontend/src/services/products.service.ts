@@ -1,4 +1,5 @@
 import { api } from './api';
+import { cachedGet } from './offlineCache';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -41,6 +42,11 @@ export interface PriceHistoryItem {
 }
 
 export interface Product {
+  autoPricing?: boolean;
+  commissionAmount?: number;
+  commissionPercent?: number;
+  commissionUnit?: 'kg' | 'unit';
+
   _id: string;
   name: string;
   barcode?: string;
@@ -82,6 +88,11 @@ export interface ProductStats {
 }
 
 export interface CreateProductInput {
+  autoPricing?: boolean;
+  commissionAmount?: number;
+  commissionPercent?: number;
+  commissionUnit?: 'kg' | 'unit';
+
   name: string;
   barcode?: string;
   category?: string;
@@ -146,9 +157,12 @@ export interface BulkPricePreviewItem {
 }
 
 export const productsService = {
+  async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit' }) {
+    return (await api.post<{ modified: number }>('/products/category-price', rule)).data;
+  },
   async getForSale(): Promise<Product[]> {
-    const res = await api.get<Omit<Product, 'priceHistory'>[]>('/products/pos');
-    return res.data.map((p) => ({ ...p, priceHistory: [] }));
+    const data = await cachedGet<Omit<Product, 'priceHistory'>[]>('/products/pos');
+    return data.map((p) => ({ ...p, priceHistory: [] }));
   },
   async getProducts(params?: {
     search?: string;

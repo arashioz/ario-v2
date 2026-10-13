@@ -21,6 +21,7 @@ import { SharesModule } from './shares/shares.module';
 import { AuditModule } from './audit/audit.module';
 import { BackupModule } from './backup/backup.module';
 import { WorkshopModule } from './workshop/workshop.module';
+import { OrderRequestsModule } from './orders/order-requests.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { WorkshopModule } from './workshop/workshop.module';
       }),
     }),
     AuditModule,
+    OrderRequestsModule,
     UsersModule,
     AuthModule,
     CustomersModule,

@@ -120,17 +120,17 @@ const REPORTS: Item[] = [
 
 const SHOP: Item[] = [
   {
-    path: '/workshop',
-    title: 'تولید کارگاهی',
-    desc: 'ترکیب مواد، بسته‌بندی و تبدیل موجودی به محصول',
-    icon: Factory,
-    tone: 'bg-sky-100 text-sky-600',
-  },
-  {
     path: '/products',
     title: 'مدیریت کالاها',
     desc: 'ویرایش کالا، عکس، قیمت و موجودی',
     icon: Tag,
+    tone: 'bg-sky-100 text-sky-600',
+  },
+  {
+    path: '/workshop',
+    title: 'تولید کارگاهی',
+    desc: 'ترکیب مواد، بسته‌بندی و تبدیل موجودی به محصول',
+    icon: Factory,
     tone: 'bg-sky-100 text-sky-600',
   },
   {

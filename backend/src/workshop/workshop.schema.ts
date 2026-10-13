@@ -9,6 +9,7 @@ export class WorkshopLine {
   @Prop({ required: true }) quantity: number;
   @Prop({ default: 0 }) weightKg: number;
   @Prop({ required: true }) unitCost: number;
+  @Prop({ default: '' }) category?: string;
 }
 const WorkshopLineSchema = SchemaFactory.createForClass(WorkshopLine);
 
@@ -26,6 +27,8 @@ export class WorkshopBatch {
   @Prop({ type: WorkshopLineSchema, required: true }) output: WorkshopLine;
   @Prop({ required: true }) packagingCost: number;
   @Prop({ required: true }) laborCost: number;
+  @Prop({ default: 0 }) laborPercent: number;
+  @Prop({ default: 0 }) laborFlatCost: number;
   @Prop({ required: true }) totalCost: number;
   @Prop({ required: true }) sellPrice: number;
   @Prop({ default: '' }) notes: string;

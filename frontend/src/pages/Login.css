@@ -1,0 +1,18 @@
+.login-page ion-content {
+  --background: #1447aa;
+  --padding-top: env(safe-area-inset-top, 0px);
+  --padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.login-page ion-content::part(background) {
+  background-color: #1447aa;
+  background-image:
+    radial-gradient(ellipse at 8% 5%, #3887ed88, transparent 55%),
+    radial-gradient(ellipse at 95% 95%, #082665aa, transparent 65%),
+    linear-gradient(30deg, transparent 48%, #ffffff09 49%, #ffffff09 51%, transparent 52%),
+    linear-gradient(150deg, transparent 48%, #ffffff09 49%, #ffffff09 51%, transparent 52%),
+    radial-gradient(#ffffff25 1px, transparent 1px);
+  background-size: auto, auto, 96px 166px, 96px 166px, 24px 24px;
+}
+.login-shell { min-height: 100%; min-height: 100dvh; gap: 32px; }
+.login-card { box-shadow: 0 24px 70px #061e6140; }
+@media (max-height: 650px) { .login-shell { gap: 20px; } }

@@ -1,3 +1,4 @@
+import { IsBoolean, Max } from 'class-validator';
 import {
   IsIn,
   IsNotEmpty,
@@ -11,6 +12,11 @@ export class CreateProductDto {
   @IsString({ message: 'نام کالا باید رشته باشد' })
   @IsNotEmpty({ message: 'نام کالا الزامی است' })
   name: string;
+
+  @IsOptional() @IsBoolean() autoPricing?: boolean;
+  @IsOptional() @IsNumber() @Min(0) commissionAmount?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(1000) commissionPercent?: number;
+  @IsOptional() @IsIn(['kg', 'unit']) commissionUnit?: 'kg' | 'unit';
 
   @IsOptional()
   @IsString()

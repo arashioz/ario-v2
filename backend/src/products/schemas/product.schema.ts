@@ -26,6 +26,11 @@ export const PriceHistoryItemSchema =
 
 @Schema({ timestamps: true })
 export class Product {
+  @Prop({ default: false }) autoPricing: boolean;
+  @Prop({ default: 0, min: 0 }) commissionAmount: number;
+  @Prop({ default: 0, min: 0 }) commissionPercent: number;
+  @Prop({ default: 'unit', enum: ['kg', 'unit'] }) commissionUnit: string;
+
   @Prop({ required: true, trim: true, index: true })
   name: string;
 

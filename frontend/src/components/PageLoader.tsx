@@ -1,16 +1,12 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { IonContent, IonPage } from '@ionic/react';
+import { SplashScreen } from './SplashScreen';
+import { pageActivity } from '../services/pageActivity';
 
-export const PageLoader: React.FC = () => (
-  <IonPage>
-    <IonContent>
-      <div role="status" className="min-h-full flex items-center justify-center gap-3 text-sm text-sky-700">
-        <span className="w-5 h-5 rounded-full border-2 border-sky-200 border-t-sky-600 animate-spin" />
-        در حال باز کردن صفحه…
-      </div>
-    </IonContent>
-  </IonPage>
-);
+export const PageLoader: React.FC = () => {
+  useLayoutEffect(() => pageActivity.begin(), []);
+  return <IonPage><SplashScreen /></IonPage>;
+};
 
 /** A failed chunk download must offer recovery, rather than leave a blank screen. */
 export class PageLoadBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
