@@ -247,7 +247,7 @@ export interface BackupSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   categoryBasePrices: [],
-  factoryMarkupAmount: 0,
+  factoryMarkupAmount: 2000,
   factoryMarkupPercent: 0,
   factoryMarkupUnit: 'kg',
   shopName: 'فروشگاه آریو',

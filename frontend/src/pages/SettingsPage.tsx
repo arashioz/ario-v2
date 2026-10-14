@@ -138,7 +138,7 @@ export const SettingsPage: React.FC = () => {
   const [sample, setSample] = useState<Product[]>([]);
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [factoryPricing, setFactoryPricing] = useState({ amount: '0', percent: '0', unit: 'kg' as 'kg' | 'unit' });
+  const [factoryPricing, setFactoryPricing] = useState(() => ({ amount: String(settings.factoryMarkupAmount), percent: String(settings.factoryMarkupPercent), unit: settings.factoryMarkupUnit }));
   useEffect(() => { setFactoryPricing({ amount: String(settings.factoryMarkupAmount), percent: String(settings.factoryMarkupPercent), unit: settings.factoryMarkupUnit }); }, [settings.factoryMarkupAmount, settings.factoryMarkupPercent, settings.factoryMarkupUnit]);
   const [shop, setShop] = useState({ shopName: '', shopPhone: '', shopAddress: '', invoiceFooter: '', supermarketMinKg: 0, wholesaleMinKg: 0 });
   const [saving, setSaving] = useState(false);
@@ -693,7 +693,7 @@ export const SettingsPage: React.FC = () => {
                 onChange={(v) => save({ factorySalesEnabled: v }, true)}
               />
               <div className="space-y-3 border-t border-slate-100 pt-3 mt-3">
-                <p className="text-xs leading-6 text-slate-500">قیمت فروش کارخانه = آخرین قیمت خرید + درصد روی پایه + کارمزد ثابت. برای حذف اختلاف با پایه، هر دو کارمزد را صفر بگذارید؛ برای اختلاف ۲٬۰۰۰ تومان، کارمزد ثابت را ۲۰۰۰ وارد کنید.</p>
+                <p className="text-xs leading-6 text-slate-500">قیمت فروش کارخانه = آخرین قیمت خرید + درصد روی پایه + کارمزد ثابت. پیش‌فرض کارمزد ۲٬۰۰۰ تومان به‌ازای هر کیلوگرم است و می‌توانید مبلغ آن را تغییر دهید. برای بسته‌ها، کارمزد بر اساس وزن بسته محاسبه می‌شود.</p>
                 <Field label="کارمزد ثابت (تومان)"><MoneyTextInput value={factoryPricing.amount} onChange={(amount) => setFactoryPricing((p) => ({ ...p, amount }))} className={input} /></Field>
                 <Field label="مبنای کارمزد"><select className={input} value={factoryPricing.unit} onChange={(e) => setFactoryPricing((p) => ({ ...p, unit: e.target.value as 'kg' | 'unit' }))}><option value="kg">هر کیلوگرم</option><option value="unit">هر بسته / واحد</option></select></Field>
                 <Field label="درصد کارمزد روی پایه"><input type="number" min="0" max="1000" step="any" className={input} value={factoryPricing.percent} onChange={(e) => setFactoryPricing((p) => ({ ...p, percent: e.target.value }))} /></Field>
