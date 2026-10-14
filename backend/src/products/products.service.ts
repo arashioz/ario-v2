@@ -463,6 +463,13 @@ export class ProductsService implements OnModuleInit {
     return product;
   }
 
+  async setFactoryPrice(id: string, price: number | null) {
+    if (price !== null && (typeof price !== 'number' || !Number.isFinite(price) || price < 0 || price > 1e12))
+      throw new BadRequestException('قیمت کارخانه نامعتبر است');
+    await this.findOne(id);
+    return this.productModel.findByIdAndUpdate(id, { $set: { factoryPrice: price === null ? null : Math.round(price) } }, { new: true }).exec();
+  }
+
   async update(id: string, updateDto: UpdateProductDto): Promise<ProductDocument> {
     const set: any = { ...updateDto };
     const existing = await this.findOne(id);

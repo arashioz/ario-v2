@@ -10,5 +10,5 @@ export function automaticPrice(product: {
     throw new BadRequestException('برای قیمت یا کارمزد کیلویی، وزن هر واحد محصول را وارد کنید');
   const base = rule.amount * (rule.unit === 'kg' ? kg : 1);
   const fee = (product.commissionAmount || 0) * (product.commissionUnit === 'kg' ? kg : 1);
-  return Math.round(base * (1 + (product.commissionPercent || 0) / 100) + fee);
+  return Math.round((base + fee) * (1 + (product.commissionPercent || 0) / 100));
 }

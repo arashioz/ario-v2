@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import { formatToman, num, weight } from '../lib/format';
 import { PriceTiers, ProductPhoto, StockAmount } from '../components/products/ProductPriceInfo';
-import { CategoryPricingPanel } from '../components/products/CategoryPricingPanel';
 import { CatalogShareSheet } from '../components/products/CatalogShareSheet';
 import { kgPerUnit, pricePerKg, tierPrice } from '../components/pos/cart';
 
@@ -288,7 +287,7 @@ export const ProductsPage: React.FC = () => {
               className="flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-white border border-violet-100 text-violet-800 text-xs font-bold active:scale-[0.98]"
             >
               <Sliders className="w-4 h-4" />
-              قیمت گروهی
+              مدیریت قیمت
             </button>
           </div>
           <div className="grid grid-cols-2 gap-1 p-1 bg-white rounded-2xl border border-slate-200">
@@ -322,7 +321,6 @@ export const ProductsPage: React.FC = () => {
             />
           </div>
 
-          <CategoryPricingPanel categories={stats?.categories || []} onSaved={() => void loadData()} />
 
           {/* Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">

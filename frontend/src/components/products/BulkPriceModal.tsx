@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonContent } from '@ionic/react';
 import { X, Layers, Percent, Coins, CheckCircle2 } from 'lucide-react';
+import { FactoryPricesPanel } from '../pricing/FactoryPricesPanel';
+import { ProductPricingPanel } from '../pricing/ProductPricingPanel';
 import { productsService } from '../../services/products.service';
 import type { BulkPricePreviewItem } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -38,6 +40,7 @@ const markup = (sell: number, buy: number) => (buy > 0 ? ((sell - buy) / buy) * 
 
 export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categories, onClose, onSuccess }) => {
   const { showNotification } = useNotification();
+  const [tab, setTab] = useState<'bulk' | 'factory' | 'product'>('product');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [type, setType] = useState<'percentage' | 'fixed' | 'profit' | 'base' | 'round'>('profit');
@@ -50,7 +53,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
   const ready = type === 'round' || (value !== '' && value !== '-' && value !== '.' && !Number.isNaN(numValue));
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || tab !== 'bulk') return;
     if (!ready) {
       setPreview([]);
       return;
@@ -75,7 +78,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isOpen, selectedCategory, type, value, roundTo, ready, numValue]);
+  }, [isOpen, tab, selectedCategory, type, value, roundTo, ready, numValue]);
 
   const sums = useMemo(() => {
     let buy = 0;
@@ -143,8 +146,8 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
                 <Layers className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm font-extrabold text-slate-800">سود و تغییر قیمت</h2>
-                <p className="text-[10px] text-slate-400">خرید، سود فعلی و قیمت جدید را قبل از اعمال ببین</p>
+                <h2 className="text-sm font-extrabold text-slate-800">مدیریت قیمت</h2>
+                <p className="text-[10px] text-slate-400">قیمت کارخانه، پایه و کارمزد هر محصول</p>
               </div>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-full text-slate-400">
@@ -157,7 +160,12 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
       <IonContent className="bg-slate-50">
         <LoadingOverlay isOpen={isSubmitting} message="در حال اعمال قیمت‌ها..." />
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-3 max-w-md mx-auto pb-8">
+        <div role="tablist" aria-label="بخش‌های مدیریت قیمت" className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 mx-3 mt-3">
+          {([['product', 'پایه، کارمزد و سود'], ['factory', 'قیمت کارخانه'], ['bulk', 'تغییر گروهی']] as const).map(([id, title]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-xl py-3 text-xs font-bold ${tab === id ? 'bg-blue-700 text-white' : 'text-slate-600'}`}>{title}</button>)}
+        </div>
+        {isOpen && tab === 'factory' && <FactoryPricesPanel />}
+        {isOpen && tab === 'product' && <ProductPricingPanel onSaved={onSuccess} />}
+        {tab === 'bulk' && <form onSubmit={handleSubmit} className="p-3 space-y-3 max-w-md mx-auto pb-8">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
@@ -327,7 +335,7 @@ export const BulkPriceModal: React.FC<BulkPriceModalProps> = ({ isOpen, categori
             <CheckCircle2 className="w-4 h-4" />
             اعمال روی {sums.changing || 0} کالا
           </button>
-        </form>
+        </form>}
       </IonContent>
     </IonModal>
   );

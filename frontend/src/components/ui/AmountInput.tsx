@@ -52,10 +52,12 @@ export const MoneyTextInput: React.FC<{
   className?: string;
   placeholder?: string;
   allowNegative?: boolean;
-}> = ({ value, onChange, className = '', placeholder = '۰', allowNegative = false }) => {
+  allowZero?: boolean;
+  disabled?: boolean;
+}> = ({ value, onChange, className = '', placeholder = '۰', allowNegative = false, allowZero = false, disabled = false }) => {
   const raw = String(value ?? '');
   const n = Number(raw.replace(/[^0-9-]/g, '')) || 0;
-  const shown = raw === '-' ? '−' : n ? `${n < 0 ? '−' : ''}${grouped(n)}` : '';
+  const shown = allowZero && raw === '0' ? '۰' : raw === '-' ? '−' : n ? `${n < 0 ? '−' : ''}${grouped(n)}` : '';
   return (
     <input
       type="text"
@@ -63,7 +65,8 @@ export const MoneyTextInput: React.FC<{
       dir="ltr"
       placeholder={placeholder}
       value={shown}
-      onChange={(e) => onChange(moneyPlain(e.target.value, allowNegative))}
+      disabled={disabled}
+      onChange={(e) => onChange(allowZero && /^0+$/.test(toLatinDigits(e.target.value).trim()) ? '0' : moneyPlain(e.target.value, allowNegative))}
       className={className}
     />
   );

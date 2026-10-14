@@ -51,6 +51,11 @@ export class InvoicesController {
     return this.invoicesService.getStats();
   }
 
+  @Get('factory-prices')
+  factoryPrices(@Query('productIds') ids?: string) {
+    return this.invoicesService.factoryPrices(ids?.split(',').map((id) => id.trim()).filter(Boolean));
+  }
+
   @Get('last-purchase-prices')
   lastPurchasePrices(@Query('productIds') productIds?: string) {
     const ids = (productIds || '')
@@ -74,8 +79,9 @@ export class InvoicesController {
     @Query('customerId') customerId?: string,
     @Query('search') search?: string,
     @Query('isPaid') isPaid?: string,
+    @Query('fulfillment') fulfillment?: string,
   ) {
-    return this.invoicesService.findAll({ type, saleType, customerId, search, isPaid });
+    return this.invoicesService.findAll({ type, saleType, customerId, search, isPaid, fulfillment });
   }
 
   @Get(':id')

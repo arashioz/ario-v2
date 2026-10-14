@@ -19,9 +19,6 @@ const SCALARS = [
   'autoSaleType',
   'proformaForBulk',
   'factorySalesEnabled',
-  'factoryMarkupAmount',
-  'factoryMarkupPercent',
-  'factoryMarkupUnit',
 ] as const;
 
 const VIEW_FLAGS = ['groupByDay', 'showWeight', 'showPayment', 'showItems', 'showSaleType'] as const;
@@ -50,14 +47,7 @@ export class SettingsService {
 
     for (const k of SCALARS) {
       if (body[k] === undefined) continue;
-      if (k === 'factoryMarkupUnit') {
-        if (!['kg', 'unit'].includes(body[k])) throw new BadRequestException('واحد کارمزد نامعتبر است');
-        set[k] = body[k];
-      } else if (k === 'factoryMarkupAmount' || k === 'factoryMarkupPercent') {
-        const value = Number(body[k]);
-        if (!Number.isFinite(value) || value < 0 || value > (k === 'factoryMarkupPercent' ? 1000 : 1e12)) throw new BadRequestException('کارمزد نامعتبر است');
-        set[k] = value;
-      } else if (k === 'supermarketMinKg' || k === 'wholesaleMinKg') {
+      if (k === 'supermarketMinKg' || k === 'wholesaleMinKg') {
         const v = Number(body[k]);
         if (!Number.isFinite(v) || v < 0) throw new BadRequestException('حد وزن نامعتبر است');
         set[k] = v;

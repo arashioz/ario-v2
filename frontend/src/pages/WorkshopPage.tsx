@@ -67,7 +67,7 @@ export const WorkshopPage: React.FC = () => {
 
   const output = products.find((p) => p._id === outputId);
   const baseRule = settings.categoryBasePrices.find((rule) => rule.category === outputCategory.trim());
-  const autoSellPrice = output?.autoPricing && baseRule ? Math.round(baseRule.amount * (baseRule.unit === 'kg' ? kgPerUnit(output) : 1) * (1 + (output.commissionPercent || 0) / 100) + (output.commissionAmount || 0) * (output.commissionUnit === 'kg' ? kgPerUnit(output) : 1)) : null;
+  const autoSellPrice = output?.autoPricing && baseRule ? Math.round((baseRule.amount * (baseRule.unit === 'kg' ? kgPerUnit(output) : 1) + (output.commissionAmount || 0) * (output.commissionUnit === 'kg' ? kgPerUnit(output) : 1)) * (1 + (output.commissionPercent || 0) / 100)) : null;
   const selectedSellPrice = output?.autoPricing ? autoSellPrice === null ? '' : String(autoSellPrice) : sellPrice;
   const prepared = lines.map((line) => {
     const product = products.find((p) => p._id === line.productId);
@@ -190,7 +190,7 @@ export const WorkshopPage: React.FC = () => {
               <label className="block text-xs text-slate-600 space-y-2"><span>دستمزد درصدی روی بهای مواد و بسته‌بندی</span><input type="number" min="0" max="1000" step="any" className={field} value={laborPercent} onChange={(e) => setLaborPercent(e.target.value)} placeholder="۰٪" /></label>
               <p className="text-xs text-blue-700">دستمزد نهایی (ثابت + درصدی): {formatToman(laborTotal)}</p>
               <div className="grid grid-cols-2 gap-3 items-end"><label className="text-xs text-slate-600 space-y-2"><span>درصد سود فروش روی بهای تولید</span><input type="number" min="0" max="1000" step="any" className={field} value={profitPercent} onChange={(e) => setProfitPercent(e.target.value)} placeholder="۰٪" /></label><button type="button" disabled={!unitCost || !!output?.autoPricing} onClick={() => setSellPrice(String(Math.round(unitCost * (1 + Number(profitPercent) / 100))))} className="rounded-xl bg-blue-50 text-blue-700 py-3 text-xs font-bold">محاسبهٔ قیمت فروش</button></div>
-              <label className="block text-xs text-slate-600 space-y-2"><span>قیمت فروش هر {output?.unit || 'واحد'} <span className="text-rose-500">*</span></span>{output?.autoPricing ? <p className="rounded-xl bg-blue-50 p-3 text-blue-800 leading-6">{autoSellPrice === null ? 'ابتدا قیمت پایهٔ این دسته را در مدیریت کالاها ثبت کنید.' : `${formatToman(autoSellPrice)} — قیمت پایهٔ دسته + کارمزد محصول (خودکار)`}</p> : <MoneyTextInput className={field} value={sellPrice} onChange={setSellPrice} />}</label>
+              <label className="block text-xs text-slate-600 space-y-2"><span>قیمت فروش هر {output?.unit || 'واحد'} <span className="text-rose-500">*</span></span>{output?.autoPricing ? <p className="rounded-xl bg-blue-50 p-3 text-blue-800 leading-6">{autoSellPrice === null ? 'ابتدا قیمت پایهٔ این دسته را در مدیریت قیمت ثبت کنید.' : `${formatToman(autoSellPrice)} — (قیمت پایهٔ دسته + کارمزد محصول) + سود (خودکار)`}</p> : <MoneyTextInput className={field} value={sellPrice} onChange={setSellPrice} />}</label>
               <label className="block text-xs text-slate-600 space-y-2"><span>یادداشت (اختیاری)</span><textarea rows={2} maxLength={1000} className={field} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="توضیحات این نوبت تولید" /></label>
             </section>
           </fieldset>

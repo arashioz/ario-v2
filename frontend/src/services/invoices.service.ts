@@ -156,13 +156,34 @@ export interface InvoiceStats {
   }[];
 }
 
+export interface FactoryPriceRow {
+  productId: string;
+  name: string;
+  category: string;
+  unit: string;
+  weightPerUnitKg: number;
+  lastPurchasePrice: number | null;
+  overridePrice: number | null;
+  price: number | null;
+}
+
 export const invoicesService = {
+  factoryPrices: async (productIds?: string[]): Promise<FactoryPriceRow[]> => {
+    if (!productIds) return (await api.get<FactoryPriceRow[]>('/invoices/factory-prices')).data;
+    const ids = [...new Set(productIds.filter(Boolean))].sort();
+    const rows: FactoryPriceRow[] = [];
+    for (let i = 0; i < ids.length; i += 100) {
+      rows.push(...await cachedGet<FactoryPriceRow[]>(`/invoices/factory-prices?productIds=${ids.slice(i, i + 100).join(',')}`));
+    }
+    return rows;
+  },
   getAll: async (params?: {
     type?: string;
     saleType?: string;
     customerId?: string;
     search?: string;
     isPaid?: string;
+    fulfillment?: 'shop' | 'factory' | 'ledger';
   }): Promise<Invoice[]> => {
     const response = await api.get<Invoice[]>('/invoices', { params });
     return response.data;

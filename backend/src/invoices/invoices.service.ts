@@ -238,6 +238,21 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
   }
 
+  async factoryPrices(productIds?: string[]) {
+    const filter: any = { isActive: true };
+    if (productIds?.length) filter._id = { $in: productIds };
+    const products = await this.productModel.find(filter)
+      .select('name category unit weightPerUnitKg hasDualUnit secondaryUnit unitRatio factoryPrice').sort({ name: 1 }).lean().exec();
+    const latest = await this.lastShopPurchasePrices(products.map((p) => String(p._id)));
+    return products.map((p) => ({
+      productId: String(p._id), name: p.name, category: p.category, unit: p.unit,
+      weightPerUnitKg: p.weightPerUnitKg || (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio : 0) || (p.unit === 'کیلوگرم' ? 1 : 0),
+      lastPurchasePrice: latest[String(p._id)] ?? null,
+      overridePrice: p.factoryPrice ?? null,
+      price: p.factoryPrice ?? latest[String(p._id)] ?? null,
+    }));
+  }
+
   /** Latest line per product across all purchase invoices, including unreceived/factory purchases. */
   async lastShopPurchasePrices(productIds: string[]): Promise<Record<string, number>> {
     const wanted = [...new Set(productIds.map((id) => String(id || '')).filter(Boolean))];
@@ -849,11 +864,13 @@ export class InvoicesService implements OnApplicationBootstrap {
     customerId?: string;
     search?: string;
     isPaid?: string;
+    fulfillment?: string;
   }): Promise<InvoiceDocument[]> {
     await this.customersService.ensureReconciled();
     const filter: any = {};
 
     if (query?.type) filter.type = query.type;
+    if (query?.fulfillment) filter.fulfillment = query.fulfillment;
     if (query?.saleType) filter.saleType = query.saleType;
     if (query?.customerId && Types.ObjectId.isValid(query.customerId)) {
       filter.customerId = new Types.ObjectId(query.customerId);

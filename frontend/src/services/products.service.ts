@@ -157,6 +157,9 @@ export interface BulkPricePreviewItem {
 }
 
 export const productsService = {
+  async setFactoryPrice(id: string, price: number | null): Promise<Product> {
+    return (await api.patch(`/products/${id}/factory-price`, { price })).data;
+  },
   async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit' }) {
     return (await api.post<{ modified: number }>('/products/category-price', rule)).data;
   },

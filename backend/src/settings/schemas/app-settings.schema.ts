@@ -120,9 +120,6 @@ export class BackupSettings {
 @Schema({ timestamps: true, collection: 'appsettings' })
 export class AppSettings {
   @Prop({ type: [Object], default: [] }) categoryBasePrices: { category: string; amount: number; unit: 'kg' | 'unit' }[];
-  @Prop({ default: 2000 }) factoryMarkupAmount: number;
-  @Prop({ default: 0 }) factoryMarkupPercent: number;
-  @Prop({ default: 'kg', enum: ['kg', 'unit'] }) factoryMarkupUnit: string;
 
   @Prop({ trim: true, default: 'فروشگاه آریو' })
   shopName: string;

@@ -345,7 +345,7 @@ describe('Workshop production (standalone MongoDB)', () => {
 
   const invoiceService = () => new InvoicesService(
     invoices as unknown as Model<InvoiceDocument>, products as unknown as Model<ProductDocument>,
-    null, null, null, null, { sync: async () => undefined } as any,
+    null, null, { ensureReconciled: async () => undefined, getPaidLater: async () => 0, removeInvoiceDebt: async () => undefined } as any, null, { sync: async () => undefined } as any,
     { get: async () => ({ factorySalesEnabled: true }) } as any, { rebuild: async () => [] } as any,
   );
 
@@ -367,6 +367,45 @@ describe('Workshop production (standalone MongoDB)', () => {
     expect(inv.items[0].factoryCostConfirmed).toBe(true);
     expect((await invoices.findById(inv.factoryPurchaseId))!.items[0].unitPrice).toBe(120);
     expect((await products.findById(material._id))!.stock).toBe(10);
+    const edited = await invoiceService().update(String(inv._id), { type: 'sale', fulfillment: 'factory', customerName: 'حضوری',
+      items: [{ productId: String(material._id), productName: material.name, unit: material.unit, quantity: 2, unitPrice: 160, totalPrice: 320, factoryUnitCost: 125 }],
+      totalAmount: 320, finalAmount: 320, paymentMethod: 'cash',
+    }, 'test');
+    expect(edited.items[0].factoryUnitCost).toBe(125);
+    expect((await invoices.findById(edited.factoryPurchaseId))!.items[0].unitPrice).toBe(125);
+    expect((await products.findById(material._id))!.stock).toBe(10);
+    const list = await invoiceService().findAll({ type: 'sale', fulfillment: 'factory' });
+    expect(list.map((row) => String(row._id))).toEqual([String(inv._id)]);
+  });
+
+  it('stores factory overrides independently, respects zero, and resumes latest-purchase pricing on reset', async () => {
+    const inv = invoiceService();
+    const catalog = new ProductsService(products as unknown as Model<ProductDocument>, null, null);
+    const id = String(material._id);
+    const line = (price: number) => ({ productId: id, productName: material.name, unit: material.unit, quantity: 1, unitPrice: price, totalPrice: price });
+    await invoices.create({ invoiceNumber: 'FACTORY-BASE', type: 'purchase', invoiceDate: new Date('2026-01-01'), items: [line(100)] });
+    expect((await inv.factoryPrices([id]))[0]).toMatchObject({ price: 100, lastPurchasePrice: 100, overridePrice: null });
+    expect((await inv.factoryPrices([String(output._id)]))[0].price).toBeNull();
+    await catalog.setFactoryPrice(id, 130);
+    await invoices.create({ invoiceNumber: 'FACTORY-NEW', type: 'purchase', invoiceDate: new Date('2026-01-02'), items: [line(110)] });
+    expect((await inv.factoryPrices([id]))[0]).toMatchObject({ price: 130, lastPurchasePrice: 110, overridePrice: 130 });
+    expect((await products.findById(id))!).toMatchObject({ buyPrice: 100, sellPrice: 120, stock: 10 });
+    expect((await invoices.findOne({ invoiceNumber: 'FACTORY-BASE' }))!.items[0].unitPrice).toBe(100);
+    await catalog.setFactoryPrice(id, 0);
+    expect((await inv.factoryPrices([id]))[0].price).toBe(0);
+    const sale = await inv.create({ type: 'sale', fulfillment: 'factory', customerName: 'حضوری',
+      items: [{ ...line(150), factoryUnitCost: (await inv.factoryPrices([id]))[0].price }],
+      totalAmount: 150, finalAmount: 150, paymentMethod: 'cash',
+    }, 'test');
+    expect(sale.items[0].factoryUnitCost).toBe(0);
+    expect(sale.items[0].factoryCostConfirmed).toBe(true);
+    expect((await invoices.findById(sale.factoryPurchaseId))!.items[0].unitPrice).toBe(0);
+    await catalog.setFactoryPrice(id, null);
+    // The generated purchase is now the latest invoice, including its explicit zero price.
+    expect((await inv.factoryPrices([id]))[0]).toMatchObject({ price: 0, overridePrice: null });
+    for (const invalid of [-1, NaN, Infinity, undefined, '20', 1e13]) {
+      await expect(catalog.setFactoryPrice(id, invalid as any)).rejects.toThrow('نامعتبر');
+    }
   });
 
   it('automatically prices packages from category kilograms and each product commission', async () => {
@@ -376,9 +415,9 @@ describe('Workshop production (standalone MongoDB)', () => {
     const catalog = new ProductsService(products as unknown as Model<ProductDocument>, null, settings);
     await products.updateOne({ _id: output._id }, { $set: { category: 'تولیدی', autoPricing: true, commissionAmount: 2000, commissionUnit: 'kg', commissionPercent: 10 } });
     await catalog.saveCategoryPrice({ category: 'تولیدی', amount: 100000, unit: 'kg' }, 'test');
-    expect((await products.findById(output._id))!.sellPrice).toBe(56000); // half kg: 50000 + 5000 + 1000
+    expect((await products.findById(output._id))!.sellPrice).toBe(56100); // half kg: (50000 + 1000) * 1.10
     await catalog.saveCategoryPrice({ category: 'تولیدی', amount: 120000, unit: 'kg' }, 'test');
-    expect((await products.findById(output._id))!.sellPrice).toBe(67000);
+    expect((await products.findById(output._id))!.sellPrice).toBe(67100);
     const edited = await catalog.update(String(output._id), { commissionAmount: 2000, commissionUnit: 'unit', commissionPercent: 0 });
     expect(edited.sellPrice).toBe(62000);
   });

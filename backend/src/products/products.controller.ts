@@ -102,6 +102,11 @@ export class ProductsController {
     return this.productsService.update(id, updateProductDto);
   }
 
+  @Patch(':id/factory-price')
+  async factoryPrice(@Param('id') id: string, @Body() body: { price: number | null }) {
+    return this.productsService.setFactoryPrice(id, body.price);
+  }
+
   @Patch(':id/price')
   async updatePrice(
     @Param('id') id: string,

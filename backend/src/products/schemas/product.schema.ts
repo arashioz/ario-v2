@@ -26,8 +26,11 @@ export const PriceHistoryItemSchema =
 
 @Schema({ timestamps: true })
 export class Product {
+  /** Manual factory purchase cost per stock unit; null follows the latest purchase invoice. */
+  @Prop({ type: Number, default: null, min: 0 }) factoryPrice: number | null;
   @Prop({ default: false }) autoPricing: boolean;
   @Prop({ default: 0, min: 0 }) commissionAmount: number;
+  /** Profit percentage on base plus product fee; legacy field name retained for saved products. */
   @Prop({ default: 0, min: 0 }) commissionPercent: number;
   @Prop({ default: 'unit', enum: ['kg', 'unit'] }) commissionUnit: string;
 

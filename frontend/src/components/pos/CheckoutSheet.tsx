@@ -102,7 +102,6 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [loadingCosts, setLoadingCosts] = useState(false);
   const [costError, setCostError] = useState('');
   const editedCosts = useRef(new Set<string>());
-  const editedSellPrices = useRef(new Set<string>());
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
   const [margins, setMargins] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
@@ -123,7 +122,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setFulfillment(fromFactory ? 'factory' : 'shop');
     setBranch('');
     setFactoryCosts({});
-    editedCosts.current.clear(); editedSellPrices.current.clear();
+    editedCosts.current.clear();
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
     setMargins({});
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
@@ -134,27 +133,14 @@ export const CheckoutSheet: React.FC<Props> = ({
     if (!open || !factoryOn) return;
     let cancelled = false;
     setLoadingCosts(true); setCostError('');
-    invoicesService.lastPurchasePrices(productIds.split(',').filter(Boolean)).then((prices) => {
+    invoicesService.factoryPrices(productIds.split(',').filter(Boolean)).then((rows) => {
+      const prices = Object.fromEntries(rows.filter((r) => r.price !== null).map((r) => [r.productId, r.price as number]));
       if (cancelled) return;
       setFactoryCosts((previous) => ({ ...prices, ...Object.fromEntries(Object.entries(previous).filter(([id]) => editedCosts.current.has(id))) }));
     }).catch(() => { if (!cancelled) setCostError('قیمت آخرین خرید دریافت نشد؛ قیمت کارخانهٔ هر کالا را وارد کنید.'); })
       .finally(() => { if (!cancelled) setLoadingCosts(false); });
     return () => { cancelled = true; };
   }, [open, factoryOn, productIds]);
-
-  useEffect(() => {
-    if (!open || fulfillment !== 'factory') return;
-    setSellPrices((previous) => {
-      const next = { ...previous };
-      for (const line of factoryLines) {
-        const cost = factoryCosts[line.productId];
-        if (cost === undefined || editedSellPrices.current.has(line.productId)) continue;
-        const multiplier = settings.factoryMarkupUnit === 'kg' ? line.kgPerUnit : 1;
-        next[line.productId] = Math.round(cost * (1 + settings.factoryMarkupPercent / 100) + settings.factoryMarkupAmount * multiplier);
-      }
-      return next;
-    });
-  }, [open, fulfillment, factoryCosts, productIds, settings.factoryMarkupAmount, settings.factoryMarkupPercent, settings.factoryMarkupUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const results = useMemo(() => {
     const q = searchKey(query);
@@ -191,7 +177,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   const walkInNamed = !customer && !!walkName.trim();
   const branches = (customer?.branches || []).map((b) => b.trim()).filter(Boolean);
   const branchError = branches.length > 0 && !branches.includes(branch) ? 'شعبه را انتخاب کنید' : '';
-  const factoryError = pricingFactory && (loadingCosts ? 'در حال دریافت قیمت آخرین خرید…' : factoryLines.some((l) => factoryCosts[l.productId] === undefined) ? 'قیمت کارخانهٔ کالاهای بدون سابقهٔ خرید را وارد کنید.' : settings.factoryMarkupUnit === 'kg' && settings.factoryMarkupAmount > 0 && factoryLines.some((l) => !(l.kgPerUnit > 0)) ? 'برای کارمزد کیلویی، وزن واحد کالاها را در مدیریت محصولات وارد کنید.' : '');
+  const factoryError = pricingFactory && (loadingCosts ? 'در حال دریافت قیمت آخرین خرید…' : factoryLines.some((l) => factoryCosts[l.productId] === undefined) ? 'قیمت کارخانهٔ کالاهای بدون سابقهٔ خرید را وارد کنید.' : '');
   const offlineCreditError = !navigator.onLine && !customer && credit > 0 ? 'برای فروش نسیه آفلاین، یک مشتری ذخیره‌شده را انتخاب کنید.' : '';
   const error = factoryError || offlineCreditError || branchError || termsError(final, terms, !!customer || walkInNamed, settings.bankCards);
 
@@ -542,7 +528,7 @@ export const CheckoutSheet: React.FC<Props> = ({
           <div className="space-y-2 pt-1">
             {pricingFactory && (
               <p className="text-[10px] text-amber-800 leading-5">
-                قیمت کارخانه از آخرین فاکتور خرید هر محصول خوانده می‌شود. کارمزد تنظیمات: {formatToman(settings.factoryMarkupAmount)} برای هر {settings.factoryMarkupUnit === 'kg' ? 'کیلو' : 'بسته / واحد'} و {num(settings.factoryMarkupPercent)}٪ روی پایه.
+                قیمت کارخانه از تب «قیمت کارخانه» در مدیریت قیمت خوانده می‌شود؛ تا وقتی قیمت اختصاصی ثبت نکرده باشید، آخرین قیمت خرید استفاده می‌شود. قیمت فروش از قیمت محصول می‌آید و در همین فاکتور قابل تغییر است.
               </p>
             )}
             {pricingFactory && costError && <p role="alert" className="text-xs text-rose-700">{costError}</p>}
@@ -571,7 +557,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                         />
                         <button
                           type="button"
-                          onClick={() => { editedSellPrices.current.add(l.productId); setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) })); }}
+                          onClick={() => { setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) })); }}
                           className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
                         >
                           سود عمده روی قیمت کارخانه
@@ -580,7 +566,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                     </>
                   )}
                   <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری (دلخواه)</span>
-                  <AmountInput value={sell} onChange={(v) => { editedSellPrices.current.add(l.productId); setSellPrices((prev) => ({ ...prev, [l.productId]: v })); }} />
+                  <AmountInput value={sell} onChange={(v) => { setSellPrices((prev) => ({ ...prev, [l.productId]: v })); }} />
                   {pricingFactory && (
                     <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       سود این ردیف {formatToman(lineProfit)}
