@@ -74,9 +74,9 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
 
   const bump = (delta: number) => setText(faNum(r3(Math.max(0, typed + delta))));
 
-  const belowCost = !ignoreStock && (product.buyPrice || 0) > 0 && unitPrice > 0 && unitPrice < product.buyPrice;
+  const belowCost = !ignoreStock && (product.buyPrice || 0) > 0 && unitPrice < product.buyPrice;
   const confirm = () => {
-    if (quantity <= 0 || belowCost) return;
+    if (quantity <= 0) return;
     onConfirm({ product, quantity: r3(quantity), unitPrice, priceOverride: override && unitPrice !== listPrice });
   };
 
@@ -109,7 +109,7 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
           )}
           <button
             onClick={confirm}
-            disabled={quantity <= 0 || belowCost}
+            disabled={quantity <= 0}
             className="flex-1 py-3 rounded-2xl bg-sky-600 text-white text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition"
           >
             {existing ? 'به‌روزرسانی سبد' : 'افزودن به سبد'} · {formatToman(total)}
@@ -197,7 +197,7 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
         {belowCost && (
           <p className="text-[11px] text-rose-600 flex items-center gap-1">
             <AlertTriangle className="w-3.5 h-3.5" />
-            این قیمت از خرید ({formatToman(product.buyPrice)}) کمتر است و ثبت نمی‌شود.
+            این قیمت از خرید ({formatToman(product.buyPrice)}) کمتر است. پیش از ثبت فاکتور، تأیید فروش با ضرر از شما گرفته می‌شود.
           </p>
         )}
         <AmountInput

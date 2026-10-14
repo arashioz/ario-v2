@@ -30,6 +30,7 @@ import { OrderRequestSchema } from '../orders/order-requests.module';
 import { AppSettings, AppSettingsSchema } from '../settings/schemas/app-settings.schema';
 import { SettingsService } from '../settings/settings.service';
 import { CreateInvoiceDto } from '../invoices/dto/create-invoice.dto';
+import { runFifo } from '../accounting/fifo';
 
 // Real standalone MongoDB exercises conditional stock writes and failure recovery.
 // Supply MONGOD_BINARY when mongod is not on PATH. No application database is used.
@@ -356,6 +357,23 @@ describe('Workshop production (standalone MongoDB)', () => {
     await invoices.create({ invoiceNumber: 'PRICE-ZERO', type: 'purchase', invoiceDate: new Date('2026-01-03'), items: [line(output, 0)] });
     const prices = await invoiceService().lastShopPurchasePrices([String(material._id), String(output._id), String(packaging._id)]);
     expect(prices).toEqual({ [String(material._id)]: 120, [String(output._id)]: 0 });
+  });
+
+  it('records a backdated below-cost sale unchanged and reports its historical loss', async () => {
+    const pid = String(material._id);
+    const line = (price: number) => ({ productId: pid, productName: material.name, unit: material.unit, quantity: 10, unitPrice: price, totalPrice: price * 10 });
+    await invoices.create({ invoiceNumber: 'LOSS-OLD-BUY', type: 'purchase', customerName: 'شرکت قند بلالی', invoiceDate: new Date('2026-01-01'), totalAmount: 1000, finalAmount: 1000, items: [line(100)] });
+    await invoices.create({ invoiceNumber: 'LOSS-NEW-BUY', type: 'purchase', customerName: 'شرکت قند بلالی', invoiceDate: new Date('2026-02-01'), totalAmount: 2000, finalAmount: 2000, items: [line(200)] });
+    await products.updateOne({ _id: material._id }, { $set: { buyPrice: 200 } });
+    const sale = await invoiceService().create({ type: 'sale', invoiceDate: '2026-01-02', customerName: 'حضوری',
+      items: [{ ...line(80), quantity: 2, totalPrice: 160 }], totalAmount: 160, finalAmount: 160, paymentMethod: 'cash',
+    }, 'test');
+    expect(sale.items[0].unitPrice).toBe(80);
+    expect(sale.finalAmount).toBe(160);
+    expect((await products.findById(pid))!.stock).toBe(8);
+    const report = runFifo(await invoices.find().lean() as any, await products.find().lean() as any);
+    expect(report.invoiceProfit.get(String(sale._id))).toMatchObject({ revenue: 160, cost: 200, profit: -40 });
+    expect(report.saleLines.find((row) => row.invoiceId === String(sale._id))!.profit).toBe(-40);
   });
 
   it('keeps the chosen factory cost in both the sale and generated purchase without changing shop stock', async () => {

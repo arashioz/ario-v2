@@ -20,6 +20,7 @@ import { termsFinal, termsPayload } from '../../components/pos/PaymentTermsForm'
 import { kgPerUnit, lineKg, lineTotal, r3, tierPrice, toInvoiceItem, type CartLine } from '../../components/pos/cart';
 import { formatJalali, todayYmd } from '../../lib/jalali';
 import { formatToman, num, weight } from '../../lib/format';
+import { confirmSaleLoss } from '../../lib/saleLoss';
 import './PosTab.css';
 
 const TIERS: SaleType[] = ['retail', 'supermarket', 'wholesale'];
@@ -214,6 +215,10 @@ export const PosTab: React.FC = () => {
       branchName,
     };
     try {
+      if (!confirmSaleLoss(items.map((item, index) => ({
+        name: item.productName, quantity: item.quantity, unitPrice: item.unitPrice,
+        unitCost: fulfillment === 'factory' ? item.factoryUnitCost ?? 0 : lines[index].product.buyPrice || 0,
+      })), terms.discount, fulfillment === 'factory', asProforma)) return;
       setSubmitting(true);
       const order = enqueueOrder(asProforma ? 'proforma' : 'invoice', input);
       const saved = await sendOrder(order);

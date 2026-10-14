@@ -77,6 +77,19 @@ describe('workshop FIFO', () => {
     expect(result.lotsByProduct.get('raw')![0].kgLeft).toBe(10);
   });
 
+  it('retains negative factory profit and losses caused by invoice discounts', () => {
+    const factory = invoice('factory-loss', 'sale', '2026-10-03', 'raw', 2, 80);
+    factory.fulfillment = 'factory';
+    factory.items[0].factoryUnitCost = 100;
+    factory.items[0].factoryCostConfirmed = true;
+    const discounted = invoice('discount-loss', 'sale', '2026-10-03', 'raw', 2, 110);
+    discounted.discount = 30;
+    discounted.finalAmount = 190;
+    const result = runFifo([invoice('buy', 'purchase', '2026-10-01', 'raw', 10, 100), factory, discounted], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
+    expect(result.invoiceProfit.get('factory-loss')!.profit).toBe(-40);
+    expect(result.invoiceProfit.get('discount-loss')!.profit).toBe(-10);
+  });
+
   it('uses recorded cost for materials without purchase history and handles fractional units', () => {
     const result = runFifo(
       [],

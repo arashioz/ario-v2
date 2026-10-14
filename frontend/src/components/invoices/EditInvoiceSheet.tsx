@@ -13,6 +13,7 @@ import type { Product } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../services/settings.service';
 import { AccountPicker, defaultAccountId } from '../ui/AccountPicker';
+import { confirmSaleLoss } from '../../lib/saleLoss';
 import { formatToman, parseDecimal } from '../../lib/format';
 
 interface Row {
@@ -263,6 +264,11 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       notes,
       ...(isSale ? {} : { shippingPayer: freight > 0 ? ('me' as const) : ('none' as const), shippingCost: freight }),
     };
+
+    if (isSale && !confirmSaleLoss(rows.map((row) => ({
+      name: row.productName, quantity: row.quantity, unitPrice: row.unitPrice,
+      unitCost: fromCompany ? row.factoryUnitCost : products.find((p) => p._id === row.productId)?.buyPrice || 0,
+    })), discount, fromCompany)) return;
 
     try {
       setSaving(true);
