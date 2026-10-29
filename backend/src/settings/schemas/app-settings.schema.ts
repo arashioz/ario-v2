@@ -47,6 +47,10 @@ export class PosView {
 
   @Prop({ default: true })
   showStock: boolean;
+
+  /** Open the cart review first; the next step opens only from the cart's invoice button. */
+  @Prop({ default: false })
+  cartPopupBeforeInvoice: boolean;
 }
 
 export const POS_SECTIONS = ['tiers', 'cart', 'search', 'categories', 'products'] as const;

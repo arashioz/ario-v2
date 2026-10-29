@@ -233,6 +233,14 @@ export function priceListSms(
   return `${header}\n\n${kept.join('\n')}\nبقیه کالاها در لینک بالا`;
 }
 
+/** WhatsApp chat link with the text prefilled. Iranian mobiles (09…) get the 98 country code. */
+export function whatsappUrl(phone: string | undefined, text: string) {
+  let digits = toAsciiDigits(phone || '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  else if (digits.startsWith('0')) digits = `98${digits.slice(1)}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
 /** Copy the text and open the phone's SMS app addressed to `phone`. */
 export async function openSms(phone: string | undefined, text: string) {
   try {

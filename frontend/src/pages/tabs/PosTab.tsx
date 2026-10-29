@@ -14,6 +14,7 @@ import { InvoiceDateModal } from '../../components/pos/InvoiceDateModal';
 import { InvoiceDetailModal } from '../../components/invoices/InvoiceDetailModal';
 import { ProductBrowser } from '../../components/pos/ProductBrowser';
 import { QuantitySheet } from '../../components/pos/QuantitySheet';
+import { Sheet } from '../../components/ui/Sheet';
 import { CheckoutSheet, type CheckoutResult } from '../../components/pos/CheckoutSheet';
 import { ProformaSheet } from '../../components/proformas/ProformaSheet';
 import { termsFinal, termsPayload } from '../../components/pos/PaymentTermsForm';
@@ -46,6 +47,9 @@ export const PosTab: React.FC = () => {
   const fromFactory = shipFrom === 'factory' && !!settings.factorySalesEnabled;
   const [editing, setEditing] = useState<Product | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // Option: the cart opens as a popup first; "ثبت فاکتور" inside the popup goes to the next step.
+  const [cartOpen, setCartOpen] = useState(false);
+  const cartFirst = !!settings.posView?.cartPopupBeforeInvoice;
   const [preparingCheckout, setPreparingCheckout] = useState(false);
   const checkoutRequest = useRef(false);
   const submittingRef = useRef(false);
@@ -99,6 +103,10 @@ export const PosTab: React.FC = () => {
   useIonViewWillEnter(() => { void loadData(); void loadPending(); });
 
   const openCheckout = async () => {
+    if (cartFirst && !cartOpen) {
+      setCartOpen(true);
+      return;
+    }
     if (!hasInvoiceType || !lines.length || checkoutRequest.current) return;
     checkoutRequest.current = true;
     setPreparingCheckout(true);
@@ -477,6 +485,21 @@ export const PosTab: React.FC = () => {
           onRemove={remove}
           ignoreStock={fromFactory}
         />}
+
+        {cartFirst && cartOpen && (
+          <Sheet open title="سبد خرید" subtitle={`${num(lines.length)} قلم · ${weight(totalKg)}`} onClose={() => setCartOpen(false)}>
+            {cartBlock}
+            <button
+              type="button"
+              onClick={() => { setCartOpen(false); void openCheckout(); }}
+              disabled={preparingCheckout || !lines.length}
+              className="w-full h-12 rounded-2xl bg-sky-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <FileCheck2 className="w-4 h-4" />
+              ثبت فاکتور · {formatToman(subtotal)}
+            </button>
+          </Sheet>
+        )}
 
         {checkoutOpen && <CheckoutSheet
           open={checkoutOpen}

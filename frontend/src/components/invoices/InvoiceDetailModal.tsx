@@ -11,6 +11,8 @@ import {
   FileText,
   MessageSquare,
   Printer,
+  Copy,
+  MessageCircle,
   Calendar,
   User,
   Scale,
@@ -33,7 +35,7 @@ import { InvoiceProfitCard } from './InvoiceProfitCard';
 import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
-import { invoiceSms, openSms } from '../../lib/sms';
+import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
 import { formatToman, num, tons } from '../../lib/format';
 
 interface InvoiceDetailModalProps {
@@ -126,16 +128,36 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   );
 
   const handleCopyAndSms = async () => {
-    const balance = isSale && invoice.customerId
-      ? await customersService.getCustomer(invoice.customerId).then((c) => c.balance).catch(() => undefined)
-      : undefined;
-    const text = invoiceSms(invoice, settings, balance);
+    const text = await invoiceText();
     showNotification({
       title: 'متن فاکتور کپی شد',
       message: 'متن فاکتور در کلیپ‌بورد کپی شد و پیامک گوشی باز می‌شود.',
       type: 'success',
     });
     await openSms(invoice.customerPhone, text);
+  };
+
+  /** Full invoice text (same template as SMS). Balance is fetched for sales so the text is accurate. */
+  const invoiceText = async () => {
+    const balance = isSale && invoice.customerId
+      ? await customersService.getCustomer(invoice.customerId).then((c) => c.balance).catch(() => undefined)
+      : undefined;
+    return invoiceSms(invoice, settings, balance);
+  };
+
+  const handleCopyText = async () => {
+    const text = await invoiceText();
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotification({ title: 'فاکتور کپی شد', message: 'متن فاکتور در کلیپ‌بورد است.', type: 'success' });
+    } catch {
+      showNotification({ title: 'کپی انجام نشد', message: 'دسترسی کلیپ‌بورد مسدود است.', type: 'error' });
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    const text = await invoiceText();
+    window.open(whatsappUrl(invoice.customerPhone, text), '_blank', 'noopener');
   };
 
   const deposits = (['pos', 'transfer'] as const)
@@ -220,6 +242,23 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </span>
             </button>
           )}
+
+          <div className="grid grid-cols-2 gap-2 print:hidden">
+            <button
+              onClick={handleCopyText}
+              className="py-2.5 rounded-2xl bg-white border border-slate-200 flex items-center justify-center gap-2 text-[11px] font-bold text-sky-700 active:scale-95 transition"
+            >
+              <Copy className="w-4 h-4" />
+              کپی فاکتور
+            </button>
+            <button
+              onClick={handleWhatsApp}
+              className="py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 text-[11px] font-bold text-emerald-700 active:scale-95 transition"
+            >
+              <MessageCircle className="w-4 h-4" />
+              ارسال در واتساپ
+            </button>
+          </div>
 
           <div className="grid grid-cols-4 gap-2 print:hidden">
             {[

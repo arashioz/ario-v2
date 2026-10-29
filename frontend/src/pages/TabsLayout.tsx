@@ -1,6 +1,6 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { IonTabs, IonRouterOutlet, IonTabBar, IonTabButton, IonIcon, IonLabel } from '@ionic/react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { homeOutline, peopleOutline, cartOutline, receiptOutline, menuOutline } from 'ionicons/icons';
 import { PageLoader, PageLoadBoundary } from '../components/PageLoader';
 
@@ -45,8 +45,53 @@ const loadPage = (page: React.ReactNode) => (
   </PageLoadBoundary>
 );
 
+/**
+ * Safety net for a white screen: Ionic keeps a page element hidden
+ * (`ion-page-invisible`) until its enter transition runs. Whenever a second element
+ * mounts for the same navigation — the error boundary replacing a crashed page, or a
+ * re-render that React remounts — Ionic can see a repeated transition, skip it, and
+ * leave that element hidden with nothing else visible in the outlet. This reveals the
+ * newest page, but only when no page is visible at all, so a healthy transition
+ * (where the leaving page is still on screen) is never touched.
+ */
+const useRevealStuckPage = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const outlet = document.querySelector('ion-router-outlet');
+    if (!outlet) return;
+    let frame = 0;
+
+    const revealIfBlank = () => {
+      frame = 0;
+      if (document.querySelector('.app-splash')) return; // the splash still covers the app
+      const pages = Array.from(outlet.querySelectorAll<HTMLElement>(':scope > .ion-page'));
+      if (!pages.length) return;
+      const visible = pages.some(
+        (page) => !page.classList.contains('ion-page-invisible') && !page.classList.contains('ion-page-hidden'),
+      );
+      if (visible) return;
+      pages[pages.length - 1].classList.remove('ion-page-invisible', 'ion-page-hidden');
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(revealIfBlank);
+    };
+
+    const observer = new MutationObserver(schedule);
+    observer.observe(outlet, { childList: true });
+    const timers = [400, 1200, 3000].map((delay) => window.setTimeout(revealIfBlank, delay));
+    return () => {
+      observer.disconnect();
+      timers.forEach((timer) => window.clearTimeout(timer));
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [location.key, location.pathname]);
+};
+
 /** Standard Ionic tabs: the bar stays in the layout on every signed-in page. */
 export const TabsLayout: React.FC = () => {
+  useRevealStuckPage();
+
   return (
     <IonTabs>
       <IonRouterOutlet>

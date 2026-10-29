@@ -10,6 +10,7 @@ import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Invoice, InvoiceDocument } from './schemas/invoice.schema';
 import { CreateInvoiceDto, InvoiceItemDto } from './dto/create-invoice.dto';
+import { serverInvoiceTotals } from './server-totals';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { Customer, CustomerDocument } from '../customers/schemas/customer.schema';
 import { CustomersService } from '../customers/customers.service';
@@ -108,12 +109,52 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
   }
 
-  private async prepareItems(items: InvoiceItemDto[], isSale: boolean) {
+  /**
+   * A purchase line typed by hand arrives with a temporary id ("custom-…"), which is not an ObjectId.
+   * Create the product once (or reuse a same-named one) so the line gets a real product and stock.
+   */
+  private async resolvePurchasedProductId(item: InvoiceItemDto): Promise<string> {
+    const name = item.productName.trim();
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const same = await this.productModel.findOne({ name: new RegExp(`^${escaped}$`, 'i') }).exec();
+    if (same) return String(same._id);
+
+    const secondary = item.secondaryUnit || '';
+    const hasDualUnit = Boolean(secondary) && Number(item.secondaryQuantity) > 0;
+    const unitRatio = hasDualUnit && item.quantity > 0 ? Math.round((Number(item.secondaryQuantity) / item.quantity) * 100) / 100 : 1;
+    const weightPerUnitKg = hasDualUnit && secondary === 'کیلوگرم' ? unitRatio : item.unit === 'کیلوگرم' ? 1 : 0;
+
+    const product = await this.productModel.create({
+      name,
+      category: 'عمومی',
+      unit: item.unit || 'عدد',
+      hasDualUnit,
+      secondaryUnit: secondary || 'کیلوگرم',
+      unitRatio,
+      weightPerUnitKg,
+      buyPrice: Math.round(Number(item.unitPrice) || 0),
+      sellPrice: 0,
+      stock: 0,
+      openingStock: 0,
+      minStockAlert: 5,
+      isActive: true,
+      priceHistory: [{ oldPrice: 0, newPrice: 0, reason: 'ایجاد از فاکتور خرید', changedByName: 'کاربر سیستم', date: new Date() }],
+    });
+    return String(product._id);
+  }
+
+  private async prepareItems(rawItems: InvoiceItemDto[], isSale: boolean) {
     let totalWeightKg = 0;
     const prepared: any[] = [];
 
-    for (const item of items) {
-      const product = await this.productModel.findById(item.productId).exec();
+    for (const raw of rawItems) {
+      let item = raw;
+      if (!isSale && !Types.ObjectId.isValid(raw.productId)) {
+        item = { ...raw, productId: await this.resolvePurchasedProductId(raw) };
+      }
+      const product = Types.ObjectId.isValid(item.productId)
+        ? await this.productModel.findById(item.productId).exec()
+        : null;
       if (!product) {
         if (isSale) throw new NotFoundException(`کالای «${item.productName}» یافت نشد.`);
         const weight = item.weightKg || item.secondaryQuantity || 0;
@@ -493,12 +534,21 @@ export class InvoicesService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * Money is computed here, never trusted from the client: goods total = Σ quantity × unit price,
+   * final = max(0, goods − discount) + shipping paid by the customer (same rule as the sale screen).
+   */
+  private withServerTotals(dto: CreateInvoiceDto): CreateInvoiceDto {
+    return serverInvoiceTotals(dto);
+  }
+
   async create(
-    dto: CreateInvoiceDto,
+    rawDto: CreateInvoiceDto,
     recordedByName: string,
     extra: { proformaNumber?: string; shippedAt?: Date } = {},
     companyName?: string,
   ): Promise<InvoiceDocument> {
+    const dto = this.withServerTotals(rawDto);
     if (!companyName) {
       const parts = await this.divideByCompany(dto);
       if (parts.length > 1) {

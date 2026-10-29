@@ -23,6 +23,7 @@ export interface PosView {
   showImages: boolean;
   showPerKg: boolean;
   showStock: boolean;
+  cartPopupBeforeInvoice: boolean;
 }
 
 export type PosSectionId = 'tiers' | 'cart' | 'search' | 'categories' | 'products';
@@ -254,7 +255,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   proformaForBulk: true,
   factorySalesEnabled: false,
   salesView: { layout: 'cards', groupByDay: true, showWeight: true, showPayment: true, showItems: false, showSaleType: true },
-  posView: { layout: 'grid', size: 'sm', showImages: true, showPerKg: true, showStock: true },
+  posView: { layout: 'grid', size: 'sm', showImages: true, showPerKg: true, showStock: true, cartPopupBeforeInvoice: false },
   categoryOrder: [],
   subcategoryOrder: {},
   productOrder: [],

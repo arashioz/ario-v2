@@ -408,6 +408,7 @@ export const SettingsPage: React.FC = () => {
                   <Toggle label="عکس" checked={pos.showImages} disabled={!isAdmin} onChange={(v) => setPos({ showImages: v })} />
                   <Toggle label="قیمت کیلویی" checked={pos.showPerKg} disabled={!isAdmin} onChange={(v) => setPos({ showPerKg: v })} />
                   <Toggle label="موجودی" checked={pos.showStock} disabled={!isAdmin} onChange={(v) => setPos({ showStock: v })} />
+                  <Toggle label="سبد قبل از ثبت فاکتور" checked={!!pos.cartPopupBeforeInvoice} disabled={!isAdmin} onChange={(v) => setPos({ cartPopupBeforeInvoice: v })} />
                 </div>
                 {sample.length > 0 && (
                   <div className="rounded-xl bg-slate-50 p-2">

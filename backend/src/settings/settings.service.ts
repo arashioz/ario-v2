@@ -22,7 +22,7 @@ const SCALARS = [
 ] as const;
 
 const VIEW_FLAGS = ['groupByDay', 'showWeight', 'showPayment', 'showItems', 'showSaleType'] as const;
-const POS_FLAGS = ['showImages', 'showPerKg', 'showStock'] as const;
+const POS_FLAGS = ['showImages', 'showPerKg', 'showStock', 'cartPopupBeforeInvoice'] as const;
 
 @Injectable()
 export class SettingsService {

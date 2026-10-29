@@ -3,9 +3,18 @@ import { IonContent, IonPage } from '@ionic/react';
 import { SplashScreen } from './SplashScreen';
 import { pageActivity } from '../services/pageActivity';
 
+/**
+ * Suspense fallback for a lazily loaded page. It must NOT render an `IonPage`:
+ * Ionic registers the first page element of a navigation inside the outlet and runs
+ * the enter transition on it. A placeholder page would be replaced by the real page
+ * as soon as the chunk resolves, and the replacement element stays hidden
+ * (`ion-page-invisible`) because Ionic treats the repeat transition as a duplicate —
+ * which is what turned cold starts (and slow chunk loads) into a white screen.
+ * The splash is portalled to <body>, so it covers the outlet without being a page.
+ */
 export const PageLoader: React.FC = () => {
   useLayoutEffect(() => pageActivity.begin(), []);
-  return <IonPage><SplashScreen /></IonPage>;
+  return <SplashScreen />;
 };
 
 /** A failed chunk download must offer recovery, rather than leave a blank screen. */
