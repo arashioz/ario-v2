@@ -20,6 +20,15 @@ export class InvoiceItemDto {
   @IsNotEmpty()
   productName: string;
 
+  /** For a new product typed on a purchase: its category and subcategory. */
+  @IsOptional()
+  @IsString()
+  newCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  newSubcategory?: string;
+
   @IsNumber()
   @Min(0.001)
   quantity: number;

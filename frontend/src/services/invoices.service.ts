@@ -4,6 +4,9 @@ import { cachedGet } from './offlineCache';
 export interface InvoiceItem {
   productId: string;
   productName: string;
+  /** Category and subcategory for a product created from a purchase line. */
+  newCategory?: string;
+  newSubcategory?: string;
   quantity: number;
   unit: string;
   secondaryQuantity?: number;

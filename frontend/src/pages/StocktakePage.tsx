@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { IonContent, IonPage } from '@ionic/react';
 import { ReportHeader } from '../components/reports/ReportUI';
-import { AmountInput } from '../components/ui/AmountInput';
 import { productsService, type Product } from '../services/products.service';
 import { apiErrorMessage } from '../services/invoices.service';
 import { useNotification } from '../context/NotificationContext';
-import { num } from '../lib/format';
+import { num, parseDecimal } from '../lib/format';
 
 type Step = 'start' | 'count' | 'review' | 'done';
 
@@ -108,7 +107,12 @@ export const StocktakePage: React.FC = () => {
               </div>
               <div>
                 <div className="text-[11px] text-slate-500 mb-1">موجودی شمارش‌شده ({current.unit})</div>
-                <AmountInput value={draft} onChange={setDraft} />
+                <input
+                  inputMode="decimal"
+                  value={draft}
+                  onChange={(e) => setDraft(parseDecimal(e.target.value) || 0)}
+                  className="w-full p-3 rounded-2xl bg-slate-50 border border-slate-200 text-center font-mono text-base focus:outline-none focus:border-sky-500"
+                />
               </div>
               <button type="button" onClick={() => (index >= products.length - 1 ? finish(draft) : go(index + 1, draft))} className="w-full py-3 rounded-2xl bg-sky-600 text-white text-sm font-bold">
                 {index >= products.length - 1 ? 'پایان و دیدن اختلاف' : 'بعدی'}

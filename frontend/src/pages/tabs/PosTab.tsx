@@ -428,7 +428,7 @@ export const PosTab: React.FC = () => {
 
         <div className={`pos-workspace p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
           {tiersBlock}
-          <p id="pos-product-instruction" role="status" className="mb-3 px-1 text-xs text-blue-100">
+          <p id="pos-product-instruction" role="status" className="mb-3 px-1 text-xs text-slate-500">
             {hasInvoiceType ? 'محصولات سفارش را انتخاب کنید' : 'برای فعال شدن محصولات، ابتدا نوع فاکتور را از بالا انتخاب کنید.'}
           </p>
           {!loading && !products.length && <button onClick={() => void loadData()} className="mb-3 text-xs text-white underline">دریافت دوبارهٔ کالاها</button>}

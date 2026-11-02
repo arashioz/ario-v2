@@ -39,6 +39,9 @@ interface NewPurchaseInvoiceModalProps {
 interface PurchaseItemRow {
   productId: string;
   productName: string;
+  /** Only for a brand-new product typed in the form. */
+  newCategory?: string;
+  newSubcategory?: string;
   quantity: number; // تعداد واحد اصلی (مثلاً کارتن یا بسته)
   unit: string;
   hasDualUnit: boolean;
@@ -78,6 +81,10 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
   const [selectedProductId, setSelectedProductId] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [customProductName, setCustomProductName] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [newSubcategory, setNewSubcategory] = useState('');
+  const categoryOptions = Array.from(new Set(products.map((p) => p.category).filter(Boolean))).sort();
+  const subcategoryOptions = Array.from(new Set(products.filter((p) => !newCategory || p.category === newCategory).map((p) => p.subcategory).filter(Boolean) as string[])).sort();
   const [itemQuantity, setItemQuantity] = useState<string>('1');
   const [itemUnit, setItemUnit] = useState<string>('بسته');
   const [itemHasDual, setItemHasDual] = useState<boolean>(true);
@@ -173,6 +180,8 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
       {
         productId: p ? p._id : `custom-${Date.now()}`,
         productName: name,
+        newCategory: p ? undefined : newCategory.trim() || 'عمومی',
+        newSubcategory: p ? undefined : newSubcategory.trim() || undefined,
         quantity: qty,
         unit: itemUnit,
         hasDualUnit: itemHasDual,
@@ -188,6 +197,8 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
     // Reset item input
     setSelectedProductId('');
     setCustomProductName('');
+    setNewCategory('');
+    setNewSubcategory('');
     setItemQuantity('1');
     setItemSecondaryQty('5');
     setItemBuyPrice('0');
@@ -235,6 +246,8 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
         items: items.map((it) => ({
           productId: it.productId,
           productName: it.productName,
+          newCategory: it.newCategory,
+          newSubcategory: it.newSubcategory,
           quantity: it.quantity,
           unit: it.unit,
           secondaryQuantity: it.hasDualUnit ? it.secondaryQuantity : undefined,
@@ -430,7 +443,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
             </div>
 
             {!selectedProductId && (
-              <div>
+              <div className="space-y-2">
                 <input
                   type="text"
                   placeholder="نام کالای جدید در صورت نبود در لیست..."
@@ -438,6 +451,30 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                   onChange={(e) => setCustomProductName(e.target.value)}
                   className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    list="purchase-category-options"
+                    placeholder="دسته (مثلاً نبات)"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
+                  />
+                  <input
+                    type="text"
+                    list="purchase-subcategory-options"
+                    placeholder="زیر‌دسته (اختیاری)"
+                    value={newSubcategory}
+                    onChange={(e) => setNewSubcategory(e.target.value)}
+                    className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+                <datalist id="purchase-category-options">
+                  {categoryOptions.map((c) => <option key={c} value={c} />)}
+                </datalist>
+                <datalist id="purchase-subcategory-options">
+                  {subcategoryOptions.map((s) => <option key={s} value={s} />)}
+                </datalist>
               </div>
             )}
 

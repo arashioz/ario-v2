@@ -126,7 +126,8 @@ export class InvoicesService implements OnApplicationBootstrap {
 
     const product = await this.productModel.create({
       name,
-      category: 'عمومی',
+      category: (item.newCategory || '').trim() || 'عمومی',
+      subcategory: (item.newSubcategory || '').trim(),
       unit: item.unit || 'عدد',
       hasDualUnit,
       secondaryUnit: secondary || 'کیلوگرم',
