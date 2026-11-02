@@ -16,7 +16,7 @@ WORKDIR /build/backend
 COPY backend/package*.json ./
 RUN npm ci
 COPY backend/ ./
-RUN npm run build && npm prune --omit=dev
+RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build && npm prune --omit=dev
 
 FROM node:22-slim
 ENV NODE_ENV=production \
