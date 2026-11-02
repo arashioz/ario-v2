@@ -195,7 +195,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       </IonHeader>
 
       <IonContent className="bg-slate-50">
-        <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0">
+        <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0 print:max-w-none">
           {invoice.fulfillment === 'factory' && (
             <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5 print:hidden">
               {isSale
@@ -279,7 +279,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           </div>
 
           {/* Invoice Paper Card */}
-          <div className="bg-white rounded-2xl p-4 border border-sky-100 shadow-sm space-y-3 text-right">
+          <div className="invoice-print-sheet bg-white rounded-2xl p-4 border border-sky-100 shadow-sm space-y-3 text-right">
             {/* Store & Invoice Header */}
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
               <div>
@@ -362,47 +362,55 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             {/* Line Items Table (ریز اقلام) */}
             <div className="space-y-2">
               <span className="text-xs font-medium text-slate-700 block">ریز اقلام فاکتور:</span>
-              <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
-                {invoice.items.map((item, index) => {
-                  const lineKg =
-                    item.weightKg && item.weightKg > 0
-                      ? item.weightKg
-                      : item.secondaryUnit === 'کیلوگرم' && item.secondaryQuantity
-                        ? item.secondaryQuantity
-                        : item.unit === 'کیلوگرم'
-                          ? item.quantity
-                          : 0;
-                  const perKg = lineKg > 0 ? Math.round(item.totalPrice / lineKg) : 0;
-                  return (
-                  <div key={index} className="p-3 bg-white space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-800">
-                        {index + 1}. {item.productName}
-                        {!isSale && item.received === false && (
-                          <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">تحویل نشده</span>
-                        )}
-                        {!isSale && item.received !== false && (
-                          <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">تحویل شد</span>
-                        )}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-900 font-mono">
-                        {formatToman(item.totalPrice)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span>
-                        مقدار: {item.quantity} {item.unit}
-                        {item.secondaryQuantity ? ` (${item.secondaryQuantity} ${item.secondaryUnit})` : ''}
-                      </span>
-                      <span>فی: {formatToman(item.unitPrice)}</span>
-                    </div>
-                    {perKg > 0 && item.unit !== 'کیلوگرم' && (
-                      <div className="text-[11px] text-slate-500 font-mono">فی هر کیلو: {formatToman(perKg)}</div>
-                    )}
-                  </div>
-                  );
-                })}
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="invoice-print-table w-full text-[11px]">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="text-right font-bold px-2 py-2">ردیف</th>
+                      <th className="text-right font-bold px-2 py-2">کالا</th>
+                      <th className="text-right font-bold px-2 py-2">مقدار</th>
+                      <th className="text-right font-bold px-2 py-2">فی</th>
+                      <th className="text-right font-bold px-2 py-2">وزن</th>
+                      <th className="text-left font-bold px-2 py-2">مبلغ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoice.items.map((item, index) => {
+                      const lineKg =
+                        item.weightKg && item.weightKg > 0
+                          ? item.weightKg
+                          : item.secondaryUnit === 'کیلوگرم' && item.secondaryQuantity
+                            ? item.secondaryQuantity
+                            : item.unit === 'کیلوگرم'
+                              ? item.quantity
+                              : 0;
+                      const perKg = lineKg > 0 ? Math.round(item.totalPrice / lineKg) : 0;
+                      return (
+                        <tr key={index} className="border-t border-slate-100">
+                          <td className="px-2 py-2 font-mono text-slate-400">{num(index + 1)}</td>
+                          <td className="px-2 py-2 font-bold text-slate-800">
+                            {item.productName}
+                            {!isSale && (
+                              <span className={`mr-1 text-[9px] font-bold px-1 py-0.5 rounded ${item.received === false ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>
+                                {item.received === false ? 'نرسیده' : 'تحویل'}
+                              </span>
+                            )}
+                            {perKg > 0 && item.unit !== 'کیلوگرم' && (
+                              <div className="text-[10px] font-normal font-mono text-slate-400">کیلویی {formatToman(perKg)}</div>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 whitespace-nowrap">
+                            {num(item.quantity, 2)} {item.unit}
+                            {item.secondaryQuantity ? ` (${num(item.secondaryQuantity, 1)} ${item.secondaryUnit})` : ''}
+                          </td>
+                          <td className="px-2 py-2 font-mono whitespace-nowrap">{formatToman(item.unitPrice)}</td>
+                          <td className="px-2 py-2 font-mono whitespace-nowrap">{lineKg ? `${num(lineKg, 1)} کیلو` : '—'}</td>
+                          <td className="px-2 py-2 font-mono font-bold text-left whitespace-nowrap">{formatToman(item.totalPrice)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
 

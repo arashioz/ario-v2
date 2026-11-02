@@ -42,6 +42,7 @@ export interface SupplierInvoiceRow {
   settledAt: string | null;
   ageDays: number;
   payments: { paymentId: string; date: string; amount: number }[];
+  items?: { productName: string; quantity: number; unit: string; unitPrice: number; totalPrice: number; weightKg?: number; received?: boolean }[];
 }
 
 export interface SupplierAccount {
@@ -173,7 +174,15 @@ export interface SupplierTrade {
   profit: number;
   kg: number;
   salesCount: number;
-  sales: { invoiceId: string; invoiceNumber: string; date: string | null; customerName: string; amount: number; profit: number }[];
+  sales: {
+    invoiceId: string;
+    invoiceNumber: string;
+    date: string | null;
+    customerName: string;
+    amount: number;
+    profit: number;
+    items?: { productName: string; quantity: number; unit: string; kg: number; amount: number; profit: number }[];
+  }[];
 }
 
 export interface SupplierProfile {

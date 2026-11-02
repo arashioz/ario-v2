@@ -268,3 +268,73 @@ ion-header ion-toolbar::part(background) {
   border-bottom-right-radius: 22px;
 }
 
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  html,
+  body,
+  #root,
+  ion-app {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  ion-tab-bar,
+  ion-header,
+  ion-footer,
+  .print-hide {
+    display: none !important;
+  }
+  ion-modal.invoice-detail-modal {
+    position: static !important;
+    inset: auto !important;
+    --height: auto;
+    --width: 100%;
+    --max-width: 100%;
+    --box-shadow: none;
+    --backdrop-opacity: 0;
+  }
+  ion-modal.invoice-detail-modal::part(backdrop) {
+    display: none !important;
+  }
+  ion-modal.invoice-detail-modal::part(content) {
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  ion-modal.invoice-detail-modal ion-content {
+    --overflow: visible;
+    position: static !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  .invoice-print-sheet {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+  .invoice-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .invoice-print-table th,
+  .invoice-print-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px 8px;
+    text-align: right;
+  }
+  .invoice-print-table th {
+    background: #f1f5f9;
+    font-weight: 600;
+  }
+}
+

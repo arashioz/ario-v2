@@ -20,7 +20,17 @@ import {
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { suppliersService, SUPPLIER_METHOD_LABELS, formatAccountNumber } from '../services/suppliers.service';
-import type { SupplierAccount, SupplierAdjustmentRow, SupplierListItem, SupplierPaymentRow, SupplierProfile, SupplierStatement } from '../services/suppliers.service';
+import type {
+  SupplierAccount,
+  SupplierAdjustmentRow,
+  SupplierInvoiceRow,
+  SupplierListItem,
+  SupplierPaymentRow,
+  SupplierProductRow,
+  SupplierProfile,
+  SupplierStatement,
+  SupplierTrade,
+} from '../services/suppliers.service';
 import { CompanySheet } from '../components/suppliers/CompanySheet';
 import { useNotification } from '../context/NotificationContext';
 import { Empty, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
@@ -33,7 +43,109 @@ import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatToman, num, percent, toman, tons } from '../lib/format';
 
-type View = 'payments' | 'invoices' | 'adjustments' | 'products' | 'month' | 'ledger';
+type View = 'payments' | 'purchases' | 'sales' | 'aggregate' | 'adjustments' | 'products' | 'month' | 'ledger';
+
+const CompanyAggregate: React.FC<{
+  purchases: SupplierInvoiceRow[];
+  sales: NonNullable<SupplierTrade['sales']>;
+  products: SupplierProductRow[];
+}> = ({ purchases, sales, products }) => {
+  const days = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        day: string;
+        buyAmount: number;
+        buyKg: number;
+        buyCount: number;
+        sellAmount: number;
+        sellProfit: number;
+        sellCount: number;
+        buys: SupplierInvoiceRow[];
+        sells: NonNullable<SupplierTrade['sales']>;
+      }
+    >();
+    const row = (iso: string | null | undefined) => {
+      const day = iso ? dateToYmd(new Date(iso)) : '';
+      if (!map.has(day)) {
+        map.set(day, { day, buyAmount: 0, buyKg: 0, buyCount: 0, sellAmount: 0, sellProfit: 0, sellCount: 0, buys: [], sells: [] });
+      }
+      return map.get(day)!;
+    };
+    for (const i of purchases) {
+      const r = row(i.date);
+      r.buyAmount += i.amount;
+      r.buyKg += i.kg || 0;
+      r.buyCount += 1;
+      r.buys.push(i);
+    }
+    for (const s of sales) {
+      const r = row(s.date);
+      r.sellAmount += s.amount;
+      r.sellProfit += s.profit;
+      r.sellCount += 1;
+      r.sells.push(s);
+    }
+    const chronological = [...map.values()].sort((a, b) => a.day.localeCompare(b.day));
+    let buyUntil = 0;
+    let sellUntil = 0;
+    return chronological
+      .map((d) => {
+        buyUntil += d.buyAmount;
+        sellUntil += d.sellAmount;
+        return { ...d, buyUntil, sellUntil };
+      })
+      .reverse();
+  }, [purchases, sales]);
+
+  if (!days.length) return <Empty>هنوز فاکتور خرید یا فروشی برای این شرکت نیست.</Empty>;
+
+  return (
+    <div className="space-y-2.5">
+      {products.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-3">
+          <div className="text-[11px] font-bold text-slate-700 mb-2">جمع کالاهای این شرکت</div>
+          <div className="space-y-1.5">
+            {products.slice(0, 12).map((p) => (
+              <div key={p.productId} className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="truncate text-slate-700">{p.name}</span>
+                <span className="font-mono text-slate-800 shrink-0">{formatToman(p.amount)} · {num(p.invoices)} فاکتور</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {days.map((d) => (
+        <div key={d.day || 'none'} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-3 py-2 bg-slate-50 border-b border-slate-100">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-slate-800">{d.day ? formatJalali(d.day, { weekday: true, year: true }) : 'بدون تاریخ'}</span>
+              <span className="text-slate-400">تا پایان روز · خرید {formatToman(d.buyUntil)} · فروش {formatToman(d.sellUntil)}</span>
+            </div>
+            <div className="flex justify-between mt-1 text-[10px]">
+              <span className="text-emerald-700">خرید این روز {formatToman(d.buyAmount)} · {num(d.buyCount)} فاکتور</span>
+              <span className="text-sky-700">فروش این روز {formatToman(d.sellAmount)} · سود {formatToman(d.sellProfit)}</span>
+            </div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {d.buys.map((i) => (
+              <div key={i.invoiceId} className="px-3 py-2 text-[11px] flex justify-between">
+                <span className="font-mono text-emerald-800">خرید {i.invoiceNumber}</span>
+                <span className="font-mono font-bold">{formatToman(i.amount)}</span>
+              </div>
+            ))}
+            {d.sells.map((s) => (
+              <div key={s.invoiceId} className="px-3 py-2 text-[11px] flex justify-between">
+                <span className="text-sky-800 truncate">فروش {s.customerName} · {s.invoiceNumber}</span>
+                <span className="font-mono font-bold shrink-0">{formatToman(s.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const jDate = (iso: string | null | undefined) => (iso ? formatJalali(dateToYmd(new Date(iso)), { year: true }) : '—');
 
@@ -434,7 +546,9 @@ export const SupplierAccountPage: React.FC = () => {
             items={[
               ['payments', `پرداخت‌ها (${num(data?.payments.length ?? 0)})`],
               ['adjustments', `تعدیل (${num(data?.adjustments.length ?? 0)})`],
-              ['invoices', 'فاکتورهای خرید'],
+              ['purchases', `خرید (${num(data?.invoices.length ?? 0)})`],
+              ['sales', `فروش (${num(profile?.trade?.salesCount ?? 0)})`],
+              ['aggregate', 'تجمعی'],
               ['products', `محصولات (${num(profile?.products.length ?? 0)})`],
               ['month', 'ماهانه'],
               ['ledger', 'گردش حساب'],
@@ -509,7 +623,7 @@ export const SupplierAccountPage: React.FC = () => {
                 ))
               )}
             </div>
-          ) : view === 'invoices' ? (
+          ) : view === 'purchases' ? (
             <div className="space-y-2.5">
               <div className="flex gap-1.5">
                 {(
@@ -529,73 +643,135 @@ export const SupplierAccountPage: React.FC = () => {
                   </button>
                 ))}
               </div>
-              {profile?.trade && profile.trade.sales.length > 0 && channel === 'all' && (
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-slate-500">فروش کالاهای این شرکت</div>
-                  {profile.trade.sales.map((sale) => (
-                    <button key={sale.invoiceId} onClick={() => openInvoice(sale.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-sky-100 shadow-sm p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-800 truncate">{sale.customerName}</div>
-                          <div className="text-[10px] text-slate-400 font-mono" dir="ltr">{sale.invoiceNumber}</div>
-                        </div>
-                        <div className="text-left shrink-0">
-                          <div className="text-[11px] font-bold text-slate-800">{formatToman(sale.amount)}</div>
-                          <div className="text-[10px] text-emerald-700">سود {formatToman(sale.profit)}</div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {data.invoices
-                .filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel)
-                .map((i) => {
-                const share = i.credit ? Math.min(100, (i.paid / i.credit) * 100) : 100;
-                return (
-                  <button key={i.invoiceId} onClick={() => openInvoice(i.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <FileText className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-mono">{i.invoiceNumber}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {jDate(i.date)} · {i.fulfillment === 'factory' ? 'کارخانه' : 'دفتر'} · {num(i.kg)} کیلو · <Toman value={i.amount} />
-                        </div>
-                      </div>
-                      {i.remaining > 0 ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 bg-rose-50 text-rose-600 flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {num(i.ageDays)} روز
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 bg-emerald-50 text-emerald-700 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> {i.settledAt ? jDate(i.settledAt) : 'نقدی'}
-                        </span>
-                      )}
-                    </div>
-                    {i.credit > 0 && (
-                      <>
-                        <div className="mt-2.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${share}%` }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] mt-1">
-                          <span className="text-emerald-700">
-                            پرداخت‌شده <b>{formatToman(i.paid)}</b>
-                          </span>
-                          {i.remaining > 0 && (
-                            <span className="text-rose-600">
-                              مانده <b>{formatToman(i.remaining)}</b>
+              {data.invoices.filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel).length === 0 ? (
+                <Empty>فاکتور خریدی برای این شرکت ثبت نشده.</Empty>
+              ) : (
+                data.invoices
+                  .filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel)
+                  .map((i) => {
+                    const share = i.credit ? Math.min(100, (i.paid / i.credit) * 100) : 100;
+                    return (
+                      <button key={i.invoiceId} onClick={() => openInvoice(i.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-emerald-100 shadow-sm p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="font-mono">{i.invoiceNumber}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {jDate(i.date)} · {i.fulfillment === 'factory' ? 'کارخانه' : 'دفتر'} · {num(i.kg)} کیلو · <Toman value={i.amount} />
+                            </div>
+                          </div>
+                          {i.remaining > 0 ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 bg-rose-50 text-rose-600 flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {num(i.ageDays)} روز
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 bg-emerald-50 text-emerald-700 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> {i.settledAt ? jDate(i.settledAt) : 'نقدی'}
                             </span>
                           )}
                         </div>
-                      </>
-                    )}
-                    {i.upfront > 0 && <div className="text-[10px] text-slate-400 mt-1">پرداخت همان روز: {formatToman(i.upfront)}</div>}
-                  </button>
-                );
-              })}
+                        {!!i.items?.length && (
+                          <div className="mt-2 overflow-x-auto">
+                            <table className="w-full text-[10px]">
+                              <thead className="text-slate-400">
+                                <tr>
+                                  <th className="text-right font-bold py-1">کالا</th>
+                                  <th className="text-right font-bold py-1">مقدار</th>
+                                  <th className="text-left font-bold py-1">فی</th>
+                                  <th className="text-left font-bold py-1">مبلغ</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {i.items.map((it, idx) => (
+                                  <tr key={idx} className="text-slate-700">
+                                    <td className="py-0.5">{it.productName}</td>
+                                    <td className="py-0.5 whitespace-nowrap">{num(it.quantity, 2)} {it.unit}</td>
+                                    <td className="py-0.5 text-left font-mono">{formatToman(it.unitPrice)}</td>
+                                    <td className="py-0.5 text-left font-mono font-bold">{formatToman(it.totalPrice)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        {i.credit > 0 && (
+                          <>
+                            <div className="mt-2.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${share}%` }} />
+                            </div>
+                            <div className="flex justify-between text-[10px] mt-1">
+                              <span className="text-emerald-700">
+                                پرداخت‌شده <b>{formatToman(i.paid)}</b>
+                              </span>
+                              {i.remaining > 0 && (
+                                <span className="text-rose-600">
+                                  مانده <b>{formatToman(i.remaining)}</b>
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                        {i.upfront > 0 && <div className="text-[10px] text-slate-400 mt-1">پرداخت همان روز: {formatToman(i.upfront)}</div>}
+                      </button>
+                    );
+                  })
+              )}
             </div>
+          ) : view === 'sales' ? (
+            <div className="space-y-2.5">
+              {!profile?.trade?.sales.length ? (
+                <Empty>فروشی از کالاهای این شرکت ثبت نشده.</Empty>
+              ) : (
+                profile.trade.sales.map((sale) => (
+                  <button key={sale.invoiceId} onClick={() => openInvoice(sale.invoiceId)} className="w-full text-right bg-white rounded-2xl border border-sky-100 shadow-sm p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-800 truncate">{sale.customerName}</div>
+                        <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
+                          {sale.invoiceNumber} · {jDate(sale.date)}
+                        </div>
+                      </div>
+                      <div className="text-left shrink-0">
+                        <div className="text-[11px] font-bold text-slate-800">{formatToman(sale.amount)}</div>
+                        <div className="text-[10px] text-emerald-700">سود {formatToman(sale.profit)}</div>
+                      </div>
+                    </div>
+                    {!!sale.items?.length && (
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full text-[10px]">
+                          <thead className="text-slate-400">
+                            <tr>
+                              <th className="text-right font-bold py-1">کالا</th>
+                              <th className="text-right font-bold py-1">مقدار</th>
+                              <th className="text-left font-bold py-1">مبلغ</th>
+                              <th className="text-left font-bold py-1">سود</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sale.items.map((it, idx) => (
+                              <tr key={idx} className="text-slate-700">
+                                <td className="py-0.5">{it.productName}</td>
+                                <td className="py-0.5 whitespace-nowrap">{num(it.quantity, 2)} {it.unit}</td>
+                                <td className="py-0.5 text-left font-mono">{formatToman(it.amount)}</td>
+                                <td className="py-0.5 text-left font-mono text-emerald-700">{formatToman(it.profit)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          ) : view === 'aggregate' ? (
+            <CompanyAggregate
+              purchases={data.invoices.filter((i) => channel === 'all' || (i.fulfillment || 'shop') === channel)}
+              sales={profile?.trade?.sales ?? []}
+              products={profile?.products ?? []}
+            />
           ) : view === 'products' ? (
             <div className="space-y-2.5">
               {!!profile?.products.length && (

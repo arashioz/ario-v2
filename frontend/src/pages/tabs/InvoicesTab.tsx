@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { InvoiceList } from '../../components/invoices/InvoiceList';
+import { PurchaseInvoiceBoard } from '../../components/invoices/PurchaseInvoiceBoard';
 import { PendingProformasBanner } from '../../components/proformas/PendingProformasBanner';
 import { useSettings, type SalesLayout } from '../../services/settings.service';
 import { useNavigate } from 'react-router-dom';
@@ -45,7 +46,7 @@ import { dateToYmd } from '../../lib/jalali';
 const QUICK: { id: string; label: string; patch: Partial<InvoiceFilters>; match: (f: InvoiceFilters) => boolean }[] = [
   { id: 'all', label: 'همه', patch: { type: 'all', status: 'all', source: 'all' }, match: (f) => f.type === 'all' && f.status === 'all' && f.source === 'all' },
   { id: 'sale', label: 'فروش', patch: { type: 'sale', status: 'all', source: 'shop' }, match: (f) => f.type === 'sale' && f.status === 'all' && f.source === 'shop' },
-  { id: 'purchase', label: 'خرید', patch: { type: 'purchase', saleType: 'all', status: 'all', source: 'shop' }, match: (f) => f.type === 'purchase' && f.status === 'all' && f.source === 'shop' },
+  { id: 'purchase', label: 'خرید', patch: { type: 'purchase', saleType: 'all', status: 'all', source: 'all' }, match: (f) => f.type === 'purchase' && f.status === 'all' },
   { id: 'credit', label: 'نسیه', patch: { type: 'all', status: 'credit', source: 'all' }, match: (f) => f.type === 'all' && f.status === 'credit' && f.source === 'all' },
   { id: 'factory', label: 'از کارخانه', patch: { type: 'sale', status: 'all', source: 'factory' }, match: (f) => f.source === 'factory' },
 ];
@@ -319,6 +320,8 @@ export const InvoicesTab: React.FC = () => {
               <FileText className="w-8 h-8 mx-auto stroke-1 text-slate-300" />
               <p className="text-xs font-normal">فاکتوری یافت نشد</p>
             </div>
+          ) : filters.type === 'purchase' ? (
+            <PurchaseInvoiceBoard invoices={filteredInvoices} onOpen={setSelectedInvoice} />
           ) : (
             <InvoiceList invoices={filteredInvoices} view={view} onOpen={setSelectedInvoice} />
           )}

@@ -49,6 +49,7 @@ interface PurchaseRow {
   remainingDebt: number;
   isPaid: boolean;
   fulfillment?: string;
+  items?: { productId?: string; productName?: string; quantity?: number; unit?: string; unitPrice?: number; totalPrice?: number; weightKg?: number; received?: boolean }[];
 }
 
 @Injectable()
@@ -77,7 +78,7 @@ export class SuppliersService implements OnApplicationBootstrap {
   private async purchasesOf(supplier: string): Promise<PurchaseRow[]> {
     const all = await this.invoiceModel
       .find({ type: 'purchase' })
-      .select('invoiceNumber invoiceDate createdAt customerName finalAmount totalWeightKg creditAmount paidAmount remainingDebt isPaid fulfillment')
+      .select('invoiceNumber invoiceDate createdAt customerName finalAmount totalWeightKg creditAmount paidAmount remainingDebt isPaid fulfillment items')
       .lean<PurchaseRow[]>();
     return all
       .filter((i) => canonicalSupplier(i.customerName) === supplier)
@@ -278,6 +279,15 @@ export class SuppliersService implements OnApplicationBootstrap {
           settledAt: o.settledAt,
           ageDays: Math.floor((Date.now() - +new Date(o.inv.invoiceDate)) / 86400000),
           payments: o.pays.map((x) => ({ ...x, amount: r0(x.amount) })),
+          items: (o.inv.items || []).map((it) => ({
+            productName: it.productName || '',
+            quantity: it.quantity || 0,
+            unit: it.unit || '',
+            unitPrice: r0(it.unitPrice || 0),
+            totalPrice: r0(it.totalPrice || 0),
+            weightKg: it.weightKg || 0,
+            received: it.received !== false,
+          })),
         }))
         .reverse(),
       adjustments: adjustments
@@ -538,6 +548,19 @@ export class SuppliersService implements OnApplicationBootstrap {
       row.profit += l.revenue - l.cost;
       byInvoice.set(l.invoiceId, row);
     }
+    const saleItems = new Map<string, { productName: string; quantity: number; unit: string; kg: number; amount: number; profit: number }[]>();
+    for (const l of lines) {
+      const list = saleItems.get(l.invoiceId) ?? [];
+      list.push({
+        productName: l.productName,
+        quantity: l.quantity,
+        unit: l.unit,
+        kg: Math.round(l.kg * 10) / 10,
+        amount: r0(l.revenue),
+        profit: r0(l.revenue - l.cost),
+      });
+      saleItems.set(l.invoiceId, list);
+    }
     const sales = [...byInvoice.entries()]
       .map(([invoiceId, row]) => {
         const inv = invoices.find((i) => String(i._id) === invoiceId);
@@ -548,6 +571,7 @@ export class SuppliersService implements OnApplicationBootstrap {
           customerName: inv?.customerName || '',
           amount: r0(row.amount),
           profit: r0(row.profit),
+          items: saleItems.get(invoiceId) || [],
         };
       })
       .sort((a, b) => +new Date(b.date || 0) - +new Date(a.date || 0));
