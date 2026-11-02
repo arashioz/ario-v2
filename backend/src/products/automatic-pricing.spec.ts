@@ -15,4 +15,7 @@ describe('category base and product commissions', () => {
     expect(() => automaticPrice({ ...product, weightPerUnitKg: 0 }, { category: 'نبات', amount: 10000, unit: 'kg' })).toThrow('وزن');
     expect(() => automaticPrice(product, undefined)).toThrow('قیمت پایه');
   });
+  it('uses the purchase price as the base when the category has no list price', () => {
+    expect(automaticPrice({ ...product, buyPrice: 20000, commissionAmount: 0, commissionPercent: 10 }, undefined)).toBe(22000);
+  });
 });

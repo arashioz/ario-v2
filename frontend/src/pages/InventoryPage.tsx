@@ -14,8 +14,23 @@ import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/Perio
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatJalali, dateToYmd } from '../lib/jalali';
 import { formatToman, num, percent, profitColor, tons, weight } from '../lib/format';
+import { PARENT_COMPANY } from '../services/suppliers.service';
 
 type SortKey = 'stock' | 'sold' | 'profit' | 'value';
+const FILTER_KEY = 'ario.inventoryFilter.v1';
+
+const loadInvFilter = (): { companies: string[]; category: string } => {
+  try {
+    const raw = localStorage.getItem(FILTER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { companies?: string[]; category?: string };
+      if (Array.isArray(parsed.companies)) return { companies: parsed.companies, category: parsed.category || 'all' };
+    }
+  } catch {
+    /* keep default */
+  }
+  return { companies: [PARENT_COMPANY], category: 'all' };
+};
 
 const SORTS: [SortKey, string][] = [
   ['stock', 'بیشترین موجودی'],
@@ -36,6 +51,12 @@ export const InventoryPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('stock');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string[]>(() => loadInvFilter().companies);
+  const [categoryFilter, setCategoryFilter] = useState<string>(() => loadInvFilter().category);
+
+  useEffect(() => {
+    localStorage.setItem(FILTER_KEY, JSON.stringify({ companies: companyFilter, category: categoryFilter }));
+  }, [companyFilter, categoryFilter]);
 
   const load = useCallback(async () => {
     try {
@@ -74,9 +95,29 @@ export const InventoryPage: React.FC = () => {
       .finally(() => setRebuilding(false));
   };
 
+  const companies = useMemo(() => {
+    const names = new Set<string>([PARENT_COMPANY]);
+    for (const i of data?.items ?? []) if (i.supplier) names.add(i.supplier);
+    return [...names].sort((a, b) => (a === PARENT_COMPANY ? -1 : b === PARENT_COMPANY ? 1 : a.localeCompare(b, 'fa')));
+  }, [data]);
+
+  const categories = useMemo(() => {
+    const names = new Set<string>();
+    for (const i of data?.items ?? []) if (i.category) names.add(i.category);
+    return [...names].sort((a, b) => a.localeCompare(b, 'fa'));
+  }, [data]);
+
   const items = useMemo(() => {
     const q = search.trim();
-    const list = (data?.items ?? []).filter((i) => !q || i.name.includes(q));
+    const list = (data?.items ?? []).filter((i) => {
+      if (q && !i.name.includes(q)) return false;
+      if (categoryFilter !== 'all' && (i.category || '') !== categoryFilter) return false;
+      if (companyFilter.length) {
+        const supplier = i.supplier || PARENT_COMPANY;
+        if (!companyFilter.includes(supplier)) return false;
+      }
+      return true;
+    });
     const key: Record<SortKey, (i: InventoryItem) => number> = {
       stock: (i) => i.stockKg,
       value: (i) => i.stockValue,
@@ -84,10 +125,38 @@ export const InventoryPage: React.FC = () => {
       profit: (i) => i.profit,
     };
     return [...list].sort((a, b) => key[sort](b) - key[sort](a));
-  }, [data, search, sort]);
+  }, [data, search, sort, companyFilter, categoryFilter]);
 
-  const t = data?.totals;
-  const inStock = (data?.items ?? []).filter((i) => i.stockKg > 0).length;
+  const t = useMemo(() => {
+    if (!data) return undefined;
+    const sum = (k: keyof InventoryItem) => items.reduce((s, i) => s + (Number(i[k]) || 0), 0);
+    const stockKg = sum('stockKg');
+    const stockValue = sum('stockValue');
+    const soldRevenue = sum('soldRevenue');
+    const soldCost = sum('soldCost');
+    const profit = soldRevenue - soldCost;
+    const soldKg = sum('soldKg');
+    const currentValue = {
+      wholesale: items.reduce((s, i) => s + (i.currentValue?.wholesale || 0), 0),
+      supermarket: items.reduce((s, i) => s + (i.currentValue?.supermarket || 0), 0),
+      retail: items.reduce((s, i) => s + (i.currentValue?.retail || 0), 0),
+    };
+    return {
+      ...data.totals,
+      stockKg,
+      stockValue,
+      purchasedKg: sum('purchasedKg'),
+      purchasedAmount: sum('purchasedAmount'),
+      soldKg,
+      soldRevenue,
+      soldCost,
+      profit,
+      marginPercent: soldRevenue ? (profit / soldRevenue) * 100 : 0,
+      profitPerKg: soldKg ? profit / soldKg : 0,
+      currentValue,
+    };
+  }, [data, items]);
+  const inStock = items.filter((i) => i.stockKg > 0).length;
   const allTime = !period.from && !period.to;
 
   return (
@@ -224,6 +293,60 @@ export const InventoryPage: React.FC = () => {
               />
             </div>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+              <button
+                type="button"
+                onClick={() => setCompanyFilter([])}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
+                  companyFilter.length === 0 ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                }`}
+              >
+                همه شرکت‌ها
+              </button>
+              {companies.map((name) => {
+                const on = companyFilter.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() =>
+                      setCompanyFilter((prev) => (prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]))
+                    }
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
+                      on ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {name === PARENT_COMPANY ? 'انبار قند' : name}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
+                  categoryFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                }`}
+              >
+                همه دسته‌ها
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
+                    categoryFilter === cat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 leading-5">
+              فیلتر ورود ذخیره می‌شود. پیش‌فرض انبار قند بلالی است؛ نبات و شرکت‌های دیگر را از همین‌جا اضافه کنید.
+            </p>
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
               {SORTS.map(([k, label]) => (
                 <button
                   key={k}
@@ -273,7 +396,9 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
               {!i.exists && <span className="mr-1.5 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded">حذف‌شده</span>}
             </h3>
             <p className="text-[10px] text-slate-400 mt-0.5">
-              {i.weightPerUnitKg ? `هر ${i.unit || 'واحد'} ${num(i.weightPerUnitKg, 2)} کیلو` : i.unit}
+              {[i.supplier || PARENT_COMPANY, i.category, i.weightPerUnitKg ? `هر ${i.unit || 'واحد'} ${num(i.weightPerUnitKg, 2)} کیلو` : i.unit]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           </div>
           <div className="text-left shrink-0">
@@ -332,7 +457,7 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
                 <div key={`${l.invoiceNumber}-${idx}`} className="flex items-center justify-between px-3 py-2 text-[11px]">
                   <div>
                     <div className="font-bold text-slate-700">{formatJalali(dateToYmd(new Date(l.date)))}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{l.invoiceNumber}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{l.invoiceNumber}{l.supplier ? ` · ${l.supplier}` : ''}</div>
                   </div>
                   <div className="text-left">
                     <div className="font-mono font-bold text-slate-800">{weight(l.kgLeft)}</div>

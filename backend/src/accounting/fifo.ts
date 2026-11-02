@@ -13,10 +13,11 @@
  * trading profit (sell − latest cost) and inflation profit (latest cost − actual FIFO cost).
  * With 5t@133, sell 3t@155, buy 2t@142, sell 2t@155: trading 66M + 26M, inflation 18M.
  *
- * Only شرکت قند بلالی purchases become shop lots. Other companies' invoices stay on their own account.
+ * Every received shop purchase becomes a lot, whichever company it came from.
+ * Direct factory shipments never sit in Ario stock. Supplier accounts stay separate.
  */
 
-import { purchaseEntersShop } from '../suppliers/supplier-names';
+import { stockEntersShop } from '../suppliers/supplier-names';
 
 export interface FifoProduct {
   _id: string;
@@ -25,6 +26,8 @@ export interface FifoProduct {
   weightPerUnitKg?: number;
   buyPrice?: number;
   stock?: number;
+  supplierName?: string;
+  category?: string;
 }
 
 export interface FifoInvoice {
@@ -233,7 +236,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
   // Shop purchase price of each product, in invoice order. Factory shipments are not a price list.
   const unitBuys = new Map<string, { day: string; unitPrice: number }[]>();
   for (const inv of sorted) {
-    if (!purchaseEntersShop(inv)) continue;
+    if (!stockEntersShop(inv)) continue;
     const day = dayKey(inv.invoiceDate);
     for (const it of inv.items || []) {
       const unitPrice = Math.round(Number(it.unitPrice) || 0);
@@ -294,7 +297,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
     const id = String(inv._id);
     if (inv.type === 'purchase') {
       // Company invoice for a direct shipment: it is not stock Ario holds.
-      if (!purchaseEntersShop(inv)) continue;
+      if (!stockEntersShop(inv)) continue;
       const lines = inv.items.map((it, idx) => ({ it, idx })).filter((l) => l.it.received !== false);
       const costs = purchaseLineCosts({ ...inv, items: lines.map((l) => l.it) }, products);
       lines.forEach(({ it, idx }, i) => {

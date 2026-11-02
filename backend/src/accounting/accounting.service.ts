@@ -9,7 +9,7 @@ import {
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
 import { runFifo, dayKey, purchaseFreight } from './fifo';
-import { purchaseEntersShop } from '../suppliers/supplier-names';
+import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
@@ -90,7 +90,7 @@ export class AccountingService {
         .find()
         .select('invoiceNumber type invoiceDate createdAt updatedAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost fulfillment factoryPurchaseId factorySaleId items')
         .lean(),
-      this.productModel.find().select('name unit weightPerUnitKg buyPrice stock').lean(),
+      this.productModel.find().select('name unit weightPerUnitKg buyPrice stock supplierName category').lean(),
     ]);
     const result = runFifo(
       invoices.map((i: any) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as FifoInvoice[],
@@ -220,6 +220,8 @@ export class AccountingService {
           productId: pid,
           name: p?.name ?? name,
           unit: p?.unit ?? '',
+          category: p?.category || '',
+          supplier: p?.supplierName || '',
           weightPerUnitKg: p?.weightPerUnitKg ?? 0,
           exists: !!p,
           stockUnits: p?.stock ?? 0,
@@ -243,6 +245,7 @@ export class AccountingService {
     for (const p of f.products.values()) row(String(p._id), p.name);
     for (const lot of f.lots) {
       const r = row(lot.productId, lot.productName);
+      if (!r.supplier && lot.supplier) r.supplier = lot.supplier;
       r.purchasedKg += lot.kgIn;
       r.purchasedAmount += lot.kgIn * lot.costPerKg;
       r.purchaseCount++;
@@ -252,6 +255,7 @@ export class AccountingService {
         r.openLots.push({
           invoiceNumber: lot.invoiceNumber,
           date: lot.date,
+          supplier: lot.supplier,
           kgLeft: r1(lot.kgLeft),
           costPerKg: r0(lot.costPerKg),
         });
@@ -270,7 +274,7 @@ export class AccountingService {
     // must not be what flags a warehouse error.
     for (const inv of f.invoices) {
       const purchase = inv.type === 'purchase';
-      if (purchase ? !purchaseEntersShop(inv) : inv.fulfillment === 'factory') continue;
+      if (purchase ? !stockEntersShop(inv) : inv.fulfillment === 'factory') continue;
       for (const it of inv.items) {
         if (purchase && it.received === false) continue;
         if (!it.productId) continue;
@@ -290,7 +294,7 @@ export class AccountingService {
     };
 
     const items = [...byProduct.values()]
-      .filter((r) => r.exists || r.purchasedKg > 0 || r.soldKg > 0)
+      .filter((r) => r.exists || r.purchasedKg > 0 || r.soldKg > 0 || (r.purchasedUnits || 0) > 0)
       .map((r) => {
         // Current stock valued at the FIFO cost of the lots still on hand.
         const avgRemainingCost = r.fifoRemainingKg > 0 ? r.remainingValue / r.fifoRemainingKg : r.purchasedKg ? r.purchasedAmount / r.purchasedKg : 0;
@@ -1030,26 +1034,30 @@ export class AccountingService {
     if (!inv) throw new NotFoundException('فاکتور خرید یافت نشد');
 
     const itemLots = f.lots.filter((lot) => lot.invoiceId === invoiceId);
-    const pids = [...new Set(itemLots.map((l) => l.productId))];
-    const suggestions = await this.priceSuggestions({ ...opts, productIds: pids });
+    const pids = [...new Set([
+      ...itemLots.map((l) => l.productId),
+      ...(inv.items || []).map((it) => String(it.productId || '')).filter(Boolean),
+    ])];
+    const suggestions = pids.length ? await this.priceSuggestions({ ...opts, productIds: pids }) : [];
 
     const items = pids.map((pid) => {
       const lots = f.lotsByProduct.get(pid) ?? [];
       const mine = itemLots.filter((l) => l.productId === pid);
-      const idx = lots.indexOf(mine[0]);
+      const line = (inv.items || []).find((it) => String(it.productId) === pid);
+      const idx = mine[0] ? lots.indexOf(mine[0]) : -1;
       const prev = idx > 0 ? lots[idx - 1] : null;
-      const kg = mine.reduce((s, l) => s + l.kgIn, 0);
+      const kg = mine.reduce((s, l) => s + l.kgIn, 0) || line?.weightKg || 0;
       const avgOf = (k: 'costPerKg' | 'invoicePricePerKg' | 'freightPerKg') => (kg ? mine.reduce((s, l) => s + l.kgIn * l[k], 0) / kg : 0);
-      const newCost = avgOf('costPerKg');
+      const newCost = avgOf('costPerKg') || (kg > 0 && line ? (line.totalPrice || 0) / kg : 0);
       const change = f.priceChanges.find((c) => c.invoiceId === invoiceId && c.productId === pid);
       const isLatest = lots[lots.length - 1]?.invoiceId === invoiceId;
       return {
         productId: pid,
-        name: mine[0].productName,
+        name: mine[0]?.productName || line?.productName || '',
         kg: r1(kg),
         prevCostPerKg: prev ? r0(prev.costPerKg) : null,
         newCostPerKg: r0(newCost),
-        invoicePricePerKg: r0(avgOf('invoicePricePerKg')),
+        invoicePricePerKg: r0(avgOf('invoicePricePerKg') || newCost),
         freightPerKg: r0(avgOf('freightPerKg')),
         costChangePercent: prev ? pct(newCost - prev.costPerKg, prev.costPerKg) : null,
         stockKgHeld: change ? r1(change.stockKg) : null,

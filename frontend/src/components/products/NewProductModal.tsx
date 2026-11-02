@@ -112,7 +112,12 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const formKg =
     hasDualUnit && secondaryUnit === 'کیلوگرم' ? Number(unitRatio) || 0 : unit === 'کیلوگرم' ? 1 : 0;
   const categoryBase = settings.categoryBasePrices.find((rule) => rule.category === category.trim());
-  const automaticUnitPrice = categoryBase ? Math.round((categoryBase.amount * (categoryBase.unit === 'kg' ? formKg : 1) + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) * (1 + Number(commissionPercent) / 100)) : null;
+  const buyBase = Number(buyPrice) || 0;
+  const automaticUnitPrice = categoryBase
+    ? Math.round((categoryBase.amount * (categoryBase.unit === 'kg' ? formKg : 1) + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) * (1 + Number(commissionPercent) / 100))
+    : buyBase > 0
+      ? Math.round((buyBase + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) * (1 + Number(commissionPercent) / 100))
+      : null;
 
   const [roundStep, setRoundStep] = useState(500);
   const roundMoney = (n: number, step = roundStep) => {
@@ -223,8 +228,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       return;
     }
 
-    if (productionOutput && !category.trim()) {
-      showNotification({ title: 'دسته‌بندی محصول', message: 'دسته‌بندی محصول تولیدی را انتخاب کنید.', type: 'warning' });
+    if (!category.trim() || !subcategory.trim()) {
+      showNotification({ title: 'دسته‌بندی محصول', message: 'دسته و زیر‌دسته کالا را مشخص کنید.', type: 'warning' });
       return;
     }
 
@@ -802,7 +807,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               <label className="space-y-1 text-xs"><span>مبنای کارمزد</span><select value={commissionUnit} onChange={(e) => setCommissionUnit(e.target.value as 'kg' | 'unit')} className="w-full rounded-xl border p-2.5"><option value="unit">هر بسته / واحد</option><option value="kg">هر کیلو</option></select></label>
               <label className="space-y-1 text-xs"><span>درصد سود روی پایه + کارمزد</span><input type="number" min="0" max="1000" step="any" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} className="w-full rounded-xl border p-2.5" /></label>
             </div>
-            {autoPricing && <p className="text-[11px] leading-6 text-blue-800">{settings.categoryBasePrices.some((r) => r.category === category.trim()) ? 'قیمت هر سه سطح فروش = (پایه + کارمزد) × (۱ + درصد سود ÷ ۱۰۰).' : 'ابتدا قیمت پایهٔ هر کیلو را در مدیریت قیمت ثبت کنید.'}</p>}
+            {autoPricing && <p className="text-[11px] leading-6 text-blue-800">{settings.categoryBasePrices.some((r) => r.category === category.trim()) || Number(buyPrice) > 0 ? 'قیمت هر سه سطح فروش = (قیمت پایه که همان قیمت خرید است + کارمزد) × (۱ + درصد سود ÷ ۱۰۰).' : 'ابتدا قیمت پایه را مشخص کنید. قیمت پایه همان قیمت خرید این کالا است.'}</p>}
             {autoPricing && automaticUnitPrice !== null && <p className="text-sm font-bold text-blue-900">قیمت خودکار هر {unit}: {formatToman(automaticUnitPrice)}</p>}
           </section>
           {/* Description */}

@@ -168,6 +168,14 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
       });
       return;
     }
+    if (!p && (!newCategory.trim() || !newSubcategory.trim())) {
+      showNotification({
+        title: 'دسته کالا',
+        message: 'برای کالای جدید دسته و زیر‌دسته را مشخص کنید تا بعد از ثبت فاکتور به مدیریت همان کالا بروید.',
+        type: 'warning',
+      });
+      return;
+    }
 
     const qty = Number(itemQuantity) || 1;
     const price = Number(itemBuyPrice) || 0;
@@ -180,7 +188,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
       {
         productId: p ? p._id : `custom-${Date.now()}`,
         productName: name,
-        newCategory: p ? undefined : newCategory.trim() || 'عمومی',
+        newCategory: p ? undefined : newCategory.trim(),
         newSubcategory: p ? undefined : newSubcategory.trim() || undefined,
         quantity: qty,
         unit: itemUnit,
@@ -455,7 +463,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                   <input
                     type="text"
                     list="purchase-category-options"
-                    placeholder="دسته (مثلاً نبات)"
+                    placeholder="دسته * (قند، نبات، چای…)"
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
                     className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
@@ -463,7 +471,7 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                   <input
                     type="text"
                     list="purchase-subcategory-options"
-                    placeholder="زیر‌دسته (اختیاری)"
+                    placeholder="زیر‌دسته (مثلاً شکسته)"
                     value={newSubcategory}
                     onChange={(e) => setNewSubcategory(e.target.value)}
                     className="w-full h-10 px-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"

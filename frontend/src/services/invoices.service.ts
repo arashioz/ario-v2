@@ -53,6 +53,7 @@ export interface Invoice {
   supplierCompany?: string;
   /** Set on the first invoice when one save wrote several company invoices. */
   splitInto?: { _id: string; invoiceNumber: string; supplierCompany?: string; finalAmount: number; type: 'sale' | 'purchase' }[];
+  purchasedProductIds?: string[];
   /** Full cart when one order was split across companies. Stored on every piece. */
   orderBundle?: {
     id: string;

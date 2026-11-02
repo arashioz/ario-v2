@@ -33,9 +33,19 @@ export function isParentSupplier(name: string | null | undefined): boolean {
 }
 
 /**
- * Purchases from other companies stay on that company's account.
- * They do not change shop stock, cost, cash, or the main invoice list.
- * Direct factory shipments are the parent company's invoice, but the goods never enter Ario stock.
+ * Every received purchase adds to shop stock, whichever company it came from.
+ * Only direct factory shipments are kept out of Ario stock. Accounting (cost, cash, supplier
+ * accounts) keeps its own rules through purchaseEntersShop.
+ */
+export function stockEntersShop(inv: { type?: string | null; fulfillment?: string | null }): boolean {
+  if (inv.type && inv.type !== 'purchase') return false;
+  return inv.fulfillment !== 'factory';
+}
+
+/**
+ * Purchases from other companies stay on that company's account (cost, cash, supplier accounts).
+ * They do not change the main invoice list, and factory-shipment purchases are not Ario stock.
+ * Shop stock uses stockEntersShop instead.
  */
 export function purchaseEntersShop(inv: { type?: string | null; fulfillment?: string | null; customerName?: string | null }): boolean {
   if (inv.type && inv.type !== 'purchase') return false;

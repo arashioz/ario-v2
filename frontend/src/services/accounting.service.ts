@@ -23,6 +23,7 @@ export interface SalesSummary {
 export interface OpenLot {
   invoiceNumber: string;
   date: string;
+  supplier?: string;
   kgLeft: number;
   costPerKg: number;
 }
@@ -39,6 +40,8 @@ export interface InventoryItem {
   productId: string;
   name: string;
   unit: string;
+  category?: string;
+  supplier?: string;
   weightPerUnitKg: number;
   exists: boolean;
   stockUnits: number;

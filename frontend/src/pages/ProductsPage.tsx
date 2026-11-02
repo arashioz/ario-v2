@@ -42,7 +42,11 @@ import { kgPerUnit, pricePerKg, tierPrice } from '../components/pos/cart';
 export const ProductsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const focusedProductId = new URLSearchParams(location.search).get('productId');
+  const query = new URLSearchParams(location.search);
+  const focusedProductId = query.get('productId');
+  const setupIds = (query.get('ids') || '').split(',').filter(Boolean);
+  const setupMode = query.get('setup') === '1';
+  const setupOpened = useRef('');
   const { showNotification } = useNotification();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -57,11 +61,11 @@ export const ProductsPage: React.FC = () => {
   const [lowStockFilter, setLowStockFilter] = useState<boolean>(false);
 
   useEffect(() => {
-    if (location.pathname !== '/products' || !focusedProductId) return;
+    if (location.pathname !== '/products' || (!focusedProductId && !setupIds.length)) return;
     setSearch('');
     setSelectedCategory('all');
     setLowStockFilter(false);
-  }, [focusedProductId, location.key, location.pathname]);
+  }, [focusedProductId, setupIds.join(','), location.key, location.pathname]);
 
   useEffect(() => {
     if (location.pathname !== '/products' || !focusedProductId || loading) return;
@@ -90,9 +94,9 @@ export const ProductsPage: React.FC = () => {
     try {
       const [list, statsData] = await Promise.all([
         productsService.getProducts({
-          search,
-          category: selectedCategory,
-          lowStockOnly: lowStockFilter,
+          search: setupIds.length ? '' : search,
+          category: setupIds.length ? 'all' : selectedCategory,
+          lowStockOnly: setupIds.length ? false : lowStockFilter,
         }),
         productsService.getProductStats(),
       ]);
@@ -119,7 +123,7 @@ export const ProductsPage: React.FC = () => {
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  }, [search, selectedCategory, lowStockFilter, showNotification]);
+  }, [search, selectedCategory, lowStockFilter, setupIds.join(','), showNotification]);
 
   useEffect(() => {
     loadData();
@@ -133,9 +137,14 @@ export const ProductsPage: React.FC = () => {
     e.detail.complete();
   };
 
-  const handleProductSaved = () => {
+  const handleProductSaved = (saved?: Product) => {
     loadData();
     setEditingProduct(null);
+    setIsNewProductOpen(false);
+    if (setupMode && saved) {
+      setSelectedProductForPrice(saved);
+      setIsPriceModalOpen(true);
+    }
   };
 
   const handlePriceUpdated = (updated: Product) => {
@@ -184,6 +193,20 @@ export const ProductsPage: React.FC = () => {
     setEditingProduct(product);
     setIsNewProductOpen(true);
   };
+
+  useEffect(() => {
+    const key = setupIds.join(',');
+    if (!setupMode || loading || !key || setupOpened.current === key) return;
+    const list = products.filter((p) => setupIds.includes(p._id));
+    if (!list.length) return;
+    setupOpened.current = key;
+    const needsSetup = (p: Product) => !p.category || p.category === 'عمومی' || !p.subcategory;
+    const first = list.find(needsSetup) || list[0];
+    if (needsSetup(first)) openEditModal(first);
+    else openPriceModal(first);
+  }, [setupMode, loading, products, setupIds.join(',')]);
+
+  const visibleProducts = setupIds.length ? products.filter((p) => setupIds.includes(p._id)) : products;
 
   return (
     <IonPage>
@@ -234,6 +257,11 @@ export const ProductsPage: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3 space-y-3 max-w-md mx-auto pb-8">
+          {setupMode && setupIds.length > 0 && (
+            <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-xs leading-6 text-emerald-900">
+              این کالاها از فاکتور خرید آمده‌اند. دسته، زیر‌دسته و قیمت فروش را مشخص کنید. قیمت پایه همان قیمت خرید است.
+            </div>
+          )}
           {/* Top Inventory & Price Stats Banner */}
           <div className="bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 rounded-2xl p-3 text-white shadow-xl shadow-sky-400/20 space-y-3">
             <div className="flex items-center justify-between">
@@ -369,12 +397,12 @@ export const ProductsPage: React.FC = () => {
           </div>
 
           {/* Products List */}
-          {loading && products.length === 0 ? (
+          {loading && visibleProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2 text-slate-400">
               <div className="w-8 h-8 border-3 border-sky-200 border-t-sky-500 rounded-full animate-spin" />
               <span className="text-xs">در حال بارگذاری لیست محصولات...</span>
             </div>
-          ) : products.length === 0 ? (
+          ) : visibleProducts.length === 0 ? (
             <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-sky-200 space-y-3">
               <Boxes className="w-10 h-10 text-sky-300 mx-auto" />
               <h3 className="text-sm font-bold text-slate-700">کالایی یافت نشد</h3>
@@ -394,7 +422,7 @@ export const ProductsPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {products.map((product) => {
+              {visibleProducts.map((product) => {
                 const isLowStock = product.stock <= (product.minStockAlert ?? 5);
                 const margin = tierPrice(product, 'retail') - (product.buyPrice || 0);
 
@@ -402,7 +430,7 @@ export const ProductsPage: React.FC = () => {
                   <div
                     key={product._id}
                     id={`product-${product._id}`}
-                    className={`bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3 ${focusedProductId === product._id ? 'ring-2 ring-blue-500 scroll-mt-4' : ''}`}
+                    className={`bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3 ${focusedProductId === product._id || setupIds.includes(product._id) ? 'ring-2 ring-blue-500 scroll-mt-4' : ''}`}
                   >
                     {/* Header Row */}
                     <div className="flex items-start justify-between gap-2">

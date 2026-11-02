@@ -16,7 +16,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
-import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop } from '../suppliers/supplier-names';
+import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 import { PricePeriodService, priceOn } from '../pricing/price-period.service';
@@ -99,6 +99,16 @@ export class InvoicesService implements OnApplicationBootstrap {
     return purchase ? items.filter((item) => item.received !== false) : items;
   }
 
+  private withPurchasedProductIds(invoice: InvoiceDocument): InvoiceDocument {
+    const obj = (typeof (invoice as any).toObject === 'function' ? (invoice as any).toObject() : invoice) as InvoiceDocument & {
+      purchasedProductIds?: string[];
+    };
+    obj.purchasedProductIds = [
+      ...new Set((obj.items || []).map((it) => String(it.productId || '')).filter((id) => Types.ObjectId.isValid(id))),
+    ];
+    return obj as InvoiceDocument;
+  }
+
   /** Add `sign * quantity` of every item to stock. */
   private async shiftStock(items: { productId: string; quantity: number; received?: boolean }[], sign: 1 | -1, purchase = false) {
     for (const item of this.inShop(items, purchase)) {
@@ -113,49 +123,62 @@ export class InvoicesService implements OnApplicationBootstrap {
    * A purchase line typed by hand arrives with a temporary id ("custom-…"), which is not an ObjectId.
    * Create the product once (or reuse a same-named one) so the line gets a real product and stock.
    */
-  private async resolvePurchasedProductId(item: InvoiceItemDto): Promise<string> {
+  private async resolvePurchasedProductId(item: InvoiceItemDto, supplierName?: string): Promise<string> {
     const name = item.productName.trim();
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const same = await this.productModel.findOne({ name: new RegExp(`^${escaped}$`, 'i') }).exec();
-    if (same) return String(same._id);
+    if (same) {
+      if (supplierName && !same.supplierName) {
+        same.supplierName = canonicalSupplier(supplierName);
+        await same.save();
+      }
+      return String(same._id);
+    }
 
     const secondary = item.secondaryUnit || '';
     const hasDualUnit = Boolean(secondary) && Number(item.secondaryQuantity) > 0;
     const unitRatio = hasDualUnit && item.quantity > 0 ? Math.round((Number(item.secondaryQuantity) / item.quantity) * 100) / 100 : 1;
     const weightPerUnitKg = hasDualUnit && secondary === 'کیلوگرم' ? unitRatio : item.unit === 'کیلوگرم' ? 1 : 0;
 
+    const buy = Math.round(Number(item.unitPrice) || 0);
     const product = await this.productModel.create({
       name,
       category: (item.newCategory || '').trim() || 'عمومی',
       subcategory: (item.newSubcategory || '').trim(),
+      supplierName: supplierName ? canonicalSupplier(supplierName) : '',
       unit: item.unit || 'عدد',
       hasDualUnit,
       secondaryUnit: secondary || 'کیلوگرم',
       unitRatio,
       weightPerUnitKg,
-      buyPrice: Math.round(Number(item.unitPrice) || 0),
-      sellPrice: 0,
+      buyPrice: buy,
+      sellPrice: buy,
+      priceRetail: buy,
       stock: 0,
       openingStock: 0,
       minStockAlert: 5,
       isActive: true,
-      priceHistory: [{ oldPrice: 0, newPrice: 0, reason: 'ایجاد از فاکتور خرید', changedByName: 'کاربر سیستم', date: new Date() }],
+      priceHistory: [{ oldPrice: 0, newPrice: buy, reason: 'قیمت پایه از فاکتور خرید', changedByName: 'کاربر سیستم', date: new Date() }],
     });
     return String(product._id);
   }
 
-  private async prepareItems(rawItems: InvoiceItemDto[], isSale: boolean) {
+  private async prepareItems(rawItems: InvoiceItemDto[], isSale: boolean, supplierName?: string) {
     let totalWeightKg = 0;
     const prepared: any[] = [];
 
     for (const raw of rawItems) {
       let item = raw;
       if (!isSale && !Types.ObjectId.isValid(raw.productId)) {
-        item = { ...raw, productId: await this.resolvePurchasedProductId(raw) };
+        item = { ...raw, productId: await this.resolvePurchasedProductId(raw, supplierName) };
       }
       const product = Types.ObjectId.isValid(item.productId)
         ? await this.productModel.findById(item.productId).exec()
         : null;
+      if (!isSale && product && supplierName && !product.supplierName) {
+        product.supplierName = canonicalSupplier(supplierName);
+        await product.save();
+      }
       if (!product) {
         if (isSale) throw new NotFoundException(`کالای «${item.productName}» یافت نشد.`);
         const weight = item.weightKg || item.secondaryQuantity || 0;
@@ -578,6 +601,7 @@ export class InvoicesService implements OnApplicationBootstrap {
         await this.invoiceModel.updateMany({ _id: { $in: made.map((inv) => inv._id) } }, { $set: { orderBundle } });
         const first = made[0].toObject() as InvoiceDocument & { splitInto?: unknown[]; orderBundle?: unknown };
         first.orderBundle = orderBundle;
+        (first as any).purchasedProductIds = productIds;
         first.splitInto = made.map((inv) => ({
           _id: String(inv._id),
           invoiceNumber: inv.invoiceNumber,
@@ -592,9 +616,8 @@ export class InvoicesService implements OnApplicationBootstrap {
 
     const isSale = (dto.type || 'sale') === 'sale';
     const fromFactory = isSale && dto.fulfillment === 'factory';
-    const ledgerPurchase = !isSale && !isParentSupplier(dto.customerName);
     if (fromFactory) await this.assertFactoryEnabled();
-    const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory);
+    const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory, isSale ? undefined : dto.customerName);
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const branchName = this.branchName(customer, dto.branchName);
     // Purchases on credit go on the supplier's account (see SuppliersService).
@@ -606,7 +629,8 @@ export class InvoicesService implements OnApplicationBootstrap {
 
     if (isSale && !fromFactory) {
       await this.shiftStock(items, -1);
-    } else if (!isSale && !ledgerPurchase) {
+    } else if (!isSale) {
+      // Every received purchase adds stock, whichever company it came from.
       await this.shiftStock(items, 1, true);
       for (const item of items) {
         if (item.unitPrice > 0) {
@@ -641,7 +665,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       creditSurplus: 0,
       dueDays,
       dueDate: credit > 0 ? new Date(invoiceDate.getTime() + dueDays * 86400000) : undefined,
-      fulfillment: fromFactory ? 'factory' : ledgerPurchase ? 'ledger' : 'shop',
+      fulfillment: fromFactory ? 'factory' : 'shop',
       paidAmount: dto.finalAmount - credit,
       remainingDebt: credit,
       isPaid: credit === 0,
@@ -666,7 +690,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     if (!isSale) {
       await this.suppliersService.sync(invoice.customerName);
       if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
-      return this.findById(String(invoice._id));
+      return this.withPurchasedProductIds(await this.findById(String(invoice._id)));
     }
     return invoice;
   }
@@ -678,9 +702,9 @@ export class InvoicesService implements OnApplicationBootstrap {
     const willFactory = (dto.fulfillment ?? invoice.fulfillment) === 'factory';
     const nextSupplier = isSale ? invoice.customerName : canonicalSupplier(dto.customerName || invoice.customerName);
     const wasShopSale = isSale && !wasFactory;
-    const wasShopPurchase = !isSale && purchaseEntersShop(invoice);
+    const wasShopPurchase = !isSale && stockEntersShop(invoice) && !wasFactory;
     const willShopSale = isSale && !willFactory;
-    const willShopPurchase = !isSale && !wasFactory && !willFactory && isParentSupplier(nextSupplier);
+    const willShopPurchase = !isSale && !wasFactory && !willFactory;
     if (isSale && willFactory && !wasFactory) await this.assertFactoryEnabled();
 
     // Undo the old effects, then apply the new ones; restore on validation failure.
@@ -688,7 +712,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     else if (wasShopPurchase) await this.shiftStock(invoice.items as any, -1, true);
     let prepared: Awaited<ReturnType<InvoicesService['prepareItems']>>;
     try {
-      prepared = await this.prepareItems(dto.items, willShopSale);
+      prepared = await this.prepareItems(dto.items, willShopSale, isSale ? undefined : dto.customerName);
     } catch (err) {
       if (wasShopSale) await this.shiftStock(invoice.items as any, -1);
       else if (wasShopPurchase) await this.shiftStock(invoice.items as any, 1, true);
@@ -768,7 +792,7 @@ export class InvoicesService implements OnApplicationBootstrap {
         await this.suppliersService.sync(previousSupplier);
       }
       if (wasShopPurchase || willShopPurchase) await this.syncPricePeriods();
-      return this.findById(id);
+      return this.withPurchasedProductIds(await this.findById(id));
     }
     if (credit > 0 && customer) {
       invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
@@ -791,7 +815,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
 
     if (isSale && !fromFactory) await this.shiftStock(invoice.items as any, 1);
-    else if (purchaseEntersShop(invoice)) await this.shiftStock(invoice.items as any, -1, true);
+    else if (stockEntersShop(invoice) && !fromFactory) await this.shiftStock(invoice.items as any, -1, true);
     if (invoice.shippingExpenseId && Types.ObjectId.isValid(invoice.shippingExpenseId)) {
       await this.expenseModel.deleteOne({ _id: invoice.shippingExpenseId }).exec();
     }
@@ -1045,7 +1069,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     let sales = 0;
     for (const inv of invoices) {
       const purchase = inv.type === 'purchase';
-      if (purchase && !purchaseEntersShop(inv)) continue;
+      if (purchase && !stockEntersShop(inv)) continue;
       if (!purchase && inv.fulfillment === 'factory') continue;
       if (purchase) purchases++;
       else sales++;

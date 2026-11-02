@@ -341,7 +341,9 @@ export const InvoicesTab: React.FC = () => {
           onClose={() => setIsPurchaseModalOpen(false)}
           onInvoiceCreated={(inv) => {
             loadInvoices();
-            setPriceSheetInvoiceId(inv._id);
+            const ids = (inv.purchasedProductIds?.length ? inv.purchasedProductIds : inv.items.map((it) => it.productId)).filter(Boolean);
+            if (ids.length) navigate(`/products?ids=${ids.map(encodeURIComponent).join(',')}&setup=1`);
+            else setPriceSheetInvoiceId(inv._id);
           }}
         />
         <PurchasePriceSheet invoiceId={priceSheetInvoiceId} onClose={() => setPriceSheetInvoiceId(null)} />
