@@ -209,6 +209,8 @@ export interface CreditReport {
     creditInvoices: number;
     collected: number;
     realizedProfit: number;
+    /** Profit of money already collected in this period. The rest of realizedProfit is still unpaid credit. */
+    collectedProfit?: number;
     collectedPrior: number;
     collectedPriorProfit: number;
     outstanding: number;

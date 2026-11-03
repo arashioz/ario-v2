@@ -24,7 +24,11 @@ import { formatToman, num, weight } from '../../lib/format';
 import { confirmSaleLoss } from '../../lib/saleLoss';
 import './PosTab.css';
 
-const TIERS: SaleType[] = ['retail', 'supermarket', 'wholesale'];
+const TIER_FIELDS: { id: SaleType; label: string }[] = [
+  { id: 'retail', label: 'تکی' },
+  { id: 'supermarket', label: 'سوپرمارکت' },
+  { id: 'wholesale', label: 'عمده' },
+];
 
 export const PosTab: React.FC = () => {
   const { showNotification } = useNotification();
@@ -284,21 +288,21 @@ export const PosTab: React.FC = () => {
         </div>
       )}
     <div className="bg-white rounded-3xl p-1.5 border border-sky-100 shadow-sm">
-      <div className="grid gap-1 grid-cols-4">
-        {TIERS.map((t) => (
+      <div className="grid gap-1 grid-cols-3">
+        {TIER_FIELDS.map((t) => (
           <button
-            key={t}
+            key={t.id}
             type="button"
-            aria-pressed={hasInvoiceType && saleType === t}
+            aria-pressed={hasInvoiceType && saleType === t.id}
             onClick={() => {
-              setManualTier(t);
+              setManualTier(t.id);
               setTierMode('manual');
             }}
-            className={`py-2 rounded-2xl text-[11px] font-bold transition ${
-              hasInvoiceType && saleType === t ? `${SALE_TYPE_TONE[t].solid} shadow` : 'text-slate-500 bg-slate-50'
+            className={`py-2 px-1 rounded-2xl text-[12px] font-bold whitespace-nowrap transition ${
+              hasInvoiceType && saleType === t.id ? `${SALE_TYPE_TONE[t.id].solid} shadow` : 'text-slate-700 bg-slate-50'
             }`}
           >
-            {SALE_TYPE_LABELS[t]}
+            {t.label}
           </button>
         ))}
       </div>
@@ -365,7 +369,7 @@ export const PosTab: React.FC = () => {
         <IonToolbar className="pos-toolbar px-4 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex items-center gap-2">
-              <div className="flex items-center gap-2"><span className="pos-brand-icon"><ShoppingCart className="w-4 h-4" /></span><h1 className="text-sm font-bold text-white">فروش</h1></div>
+              <h1 className="text-sm font-bold text-white">فروش</h1>
               {settings.autoSaleType && (
                 <button
                   type="button"

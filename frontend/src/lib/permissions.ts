@@ -1,9 +1,12 @@
-/** Ask the browser for the permissions this app actually uses, once per session. */
+/**
+ * Clipboard can be queried quietly. Location and camera must be requested
+ * from the button tap itself, or the browser will not show Allow.
+ */
 export async function requestAppPermissions() {
   if (typeof window === 'undefined') return;
   if (sessionStorage.getItem('ario.permissionsAsked') === '1') return;
   sessionStorage.setItem('ario.permissionsAsked', '1');
-  await Promise.allSettled([askClipboard(), askGeo(), askCamera()]);
+  await askClipboard();
 }
 
 async function askClipboard() {
@@ -16,27 +19,6 @@ async function askClipboard() {
     await navigator.permissions?.query({ name: 'clipboard-read' as PermissionName });
   } catch {
     /* ignore */
-  }
-}
-
-async function askGeo() {
-  if (!navigator.geolocation) return;
-  await new Promise<void>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      () => resolve(),
-      () => resolve(),
-      { timeout: 4000, maximumAge: 60_000 },
-    );
-  });
-}
-
-async function askCamera() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    stream.getTracks().forEach((t) => t.stop());
-  } catch {
-    /* user may deny; camera is requested again when taking a product photo */
   }
 }
 

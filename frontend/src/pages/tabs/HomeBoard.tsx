@@ -10,7 +10,7 @@ import {
   PieChart,
   TrendingUp,
   Hourglass,
-  Flame,
+  Binoculars,
   Building2,
   Eye,
   EyeOff,
@@ -106,6 +106,8 @@ export const HomeBoard: React.FC<{
     return shown.find((house) => house.name === PARENT_COMPANY) || shown[0];
   }, [shown, warehouseNames]);
   const stockValue = defaultHouse ? defaultHouse.current || defaultHouse.cost : 0;
+  const stockKg = defaultHouse?.kg || 0;
+  const openWarehouse = () => navigate(defaultHouse ? `/inventory?company=${encodeURIComponent(defaultHouse.name)}` : '/inventory');
   const money = (n: number) => (showStockValue ? formatToman(n) : '••••••••');
   const toggleStockValue = () => {
     setShowStockValue((v) => {
@@ -120,37 +122,46 @@ export const HomeBoard: React.FC<{
 
   const widgets: Record<HomeWidgetId, React.ReactNode> = {
     warehouse: (
-      <button
-        type="button"
-        onClick={() => navigate(defaultHouse ? `/inventory?company=${encodeURIComponent(defaultHouse.name)}` : '/inventory')}
-        className="w-full rounded-2xl bg-[#007AFF] text-white px-3.5 py-2.5 flex items-center justify-between gap-3 shadow-[0_8px_20px_rgba(0,122,255,0.22)] active:scale-[0.99]"
-      >
-        <span className="min-w-0 text-right">
-          <span className="block text-[11px] font-semibold text-white/80">موجودی انبار</span>
-          <span className="block text-[17px] font-bold font-mono tracking-tight mt-0.5 leading-6">
-            {ready ? money(stockValue) : '—'}
-          </span>
-        </span>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleStockValue();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              e.stopPropagation();
-              toggleStockValue();
-            }
-          }}
-          className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0"
-          aria-label={showStockValue ? 'مخفی کردن مبلغ' : 'نمایش مبلغ'}
-        >
-          {showStockValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </span>
-      </button>
+      <section className="relative overflow-hidden rounded-[28px] text-white shadow-[0_12px_40px_rgba(0,122,255,0.28)]">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#64D2FF] via-[#007AFF] to-[#0040DD]" />
+        <div className="pointer-events-none absolute -left-6 -top-10 h-28 w-28 rounded-full bg-white/30 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-10 right-4 h-24 w-36 rounded-full bg-white/20 blur-2xl" />
+        <div className="relative grid grid-cols-2">
+          <button type="button" onClick={openWarehouse} className="min-w-0 px-4 pt-4 pb-3.5 text-right border-l border-white/25 active:bg-white/10">
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-semibold text-white/80">ارزش انبار</span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleStockValue();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleStockValue();
+                  }
+                }}
+                className="w-7 h-7 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0"
+                aria-label={showStockValue ? 'مخفی کردن مبلغ' : 'نمایش مبلغ'}
+              >
+                {showStockValue ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </span>
+            </span>
+            <span className="mt-2 block text-[15px] font-bold font-mono leading-6 tracking-tight break-words">
+              {ready ? money(stockValue) : '—'}
+            </span>
+          </button>
+          <button type="button" onClick={openWarehouse} className="min-w-0 px-4 pt-4 pb-3.5 text-right active:bg-white/10">
+            <span className="flex items-center h-7 text-[12px] font-semibold text-white/80">تناژ موجود</span>
+            <span className="mt-2 block text-[22px] font-bold leading-7 tracking-tight">
+              {ready ? weight(stockKg) : '—'}
+            </span>
+          </button>
+        </div>
+      </section>
     ),
     shortcuts: (
       <div className="bg-white rounded-3xl p-2.5 border border-sky-100 shadow-sm">
@@ -163,7 +174,7 @@ export const HomeBoard: React.FC<{
             ['چک‌ها', CreditCard, 'bg-indigo-600', () => navigate('/cheques')],
             ['مشتری جدید', Users, 'bg-teal-600', onNewCustomer],
             ['هزینه‌ها', PieChart, 'bg-purple-600', () => navigate('/expenses')],
-            ['تورم', Flame, 'bg-orange-500', () => navigate('/inflation')],
+            ['پایش مشتری', Binoculars, 'bg-sky-700', () => navigate('/watch')],
           ] as const).map(([label, Icon, bg, go]) => (
             <button key={label} onClick={go} className="flex flex-col items-center gap-1 py-1.5 rounded-2xl active:bg-slate-50">
               <span className={`w-8 h-8 rounded-lg ${bg} text-white flex items-center justify-center`}><Icon className="w-4 h-4" /></span>

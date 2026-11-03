@@ -83,7 +83,7 @@ export const CreditReportPage: React.FC = () => {
                 <div className="text-base font-bold font-mono">{num(s?.openInvoices)}</div>
               </div>
               <div>
-                <div className="text-[10px] text-amber-50">سودی که هنوز نقد نشده</div>
+                <div className="text-[10px] text-amber-50">سود محقق مانده نسیه</div>
                 <div className="text-base font-bold font-mono">{formatToman(s?.unrealizedProfit)}</div>
               </div>
             </div>
@@ -107,9 +107,9 @@ export const CreditReportPage: React.FC = () => {
             <StatCard
               icon={<TrendingUp className="w-4 h-4" />}
               tone="emerald"
-              title="سود محقق‌شده از وصول‌ها"
+              title="سود محقق نسیه"
               main={formatToman(s?.realizedProfit)}
-              sub="سهم سود پول‌های دریافتی"
+              sub={`وصول‌شده ${formatToman(s?.collectedProfit)} · مانده ${formatToman(s?.unrealizedProfit)}`}
             />
             <StatCard
               icon={<Clock className="w-4 h-4" />}
@@ -123,8 +123,8 @@ export const CreditReportPage: React.FC = () => {
           <div className="flex gap-2.5 bg-sky-50 border border-sky-100 rounded-2xl p-3 text-[11px] text-sky-900 leading-6">
             <Info className="w-4 h-4 shrink-0 mt-1 text-sky-600" />
             <div>
-              سود فاکتور نسیه به نسبت پولی که می‌رسد به دست می‌آید. مثلاً فاکتور ۱۰ میلیونی با ۵۰۰ هزار سود: اگر ۴ میلیون بدهد، همان روز ۲۰۰ هزار سود
-              محقق شده و ۳۰۰ هزار هنوز در دست مشتری است.
+              سود نسیه به نسبت مبلغ فاکتور حساب می‌شود، چه پول رسیده باشد چه نه. مثلاً فاکتور ۱۰ میلیونی با ۵۰۰ هزار سود: اگر ۴ میلیون مانده باشد،
+              ۲۰۰ هزار سود همان مانده هم محقق است و جدا نشان داده می‌شود.
             </div>
           </div>
 
@@ -271,7 +271,7 @@ const CreditCard: React.FC<{ inv: CreditInvoiceRow; onOpen: (id: string) => void
             <KV k="مبلغ فاکتور" v={formatToman(inv.amount)} />
             <KV k="پرداخت همان روز" v={formatToman(inv.upfront)} />
             <KV k="سود به‌دست‌آمده" v={showProfit ? formatToman(inv.realizedProfit) : '—'} vClass="text-emerald-700" />
-            <KV k="سود در انتظار وصول" v={showProfit ? formatToman(inv.unrealizedProfit) : '—'} vClass="text-amber-700" />
+            <KV k="سود محقق مانده" v={showProfit ? formatToman(inv.unrealizedProfit) : '—'} vClass="text-amber-700" />
           </div>
 
           <div className="text-[11px] font-bold text-slate-600">روند پرداخت و سود</div>
@@ -291,7 +291,15 @@ const CreditCard: React.FC<{ inv: CreditInvoiceRow; onOpen: (id: string) => void
               />
             ))}
             {inv.remaining > 0 && (
-              <TimelineItem color="bg-slate-300" title="در انتظار" detail={`${formatToman(inv.remaining)} مانده`} />
+              <TimelineItem
+                color="bg-slate-300"
+                title="هنوز دریافت نشده"
+                detail={
+                  showProfit
+                    ? `${formatToman(inv.remaining)} مانده · سود محقق ${formatToman(inv.unrealizedProfit)}`
+                    : `${formatToman(inv.remaining)} مانده`
+                }
+              />
             )}
           </div>
 

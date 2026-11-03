@@ -69,9 +69,7 @@ export const geoErrorMessage = (err: unknown) => {
   if (err instanceof Error && err.message && err.message !== 'unsupported') return err.message;
   const code = (err as GeolocationPositionError | undefined)?.code;
   if (code === 1) {
-    return window.isSecureContext
-      ? 'اجازه موقعیت داده نشد. کنار آدرس سایت Location را Allow کنید، GPS را روشن کنید، بعد دوباره بزنید.'
-      : 'مرورگر روی http لوکیشن نمی‌دهد. سایت را با https باز کنید، یا در نصب اپ دسترسی موقعیت را بدهید. فعلاً پین را روی نقشه بگذارید.';
+    return 'اجازه موقعیت داده نشد. در پیام مرورگر Location را Allow کنید، GPS را روشن کنید و دوباره بزنید. اگر پیامی نیامد، این مرورگر روی آدرس http دیالوگ لوکیشن را نشان نمی‌دهد.';
   }
   if (code === 3) return 'دریافت موقعیت طول کشید. GPS را روشن کنید و دوباره بزنید.';
   if (!navigator.geolocation) return 'این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.';
@@ -135,17 +133,11 @@ const readCapacitor = async (): Promise<GeoResult | null> => {
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 };
 
-/** Must be called from a tap so the browser shows the permission dialog. */
+/** Must be called directly from a tap so the browser shows the permission dialog. */
 export const getCurrentPosition = async (): Promise<GeoResult> => {
-  let permission: PermissionState | undefined;
-  try {
-    permission = (await navigator.permissions?.query({ name: 'geolocation' as PermissionName })).state;
-  } catch {
-    /* Safari has no geolocation permission query */
-  }
-  if (permission === 'denied') {
-    throw Object.assign(new Error(geoErrorMessage({ code: 1 })), { code: 1 });
-  }
+  // Start the browser request before any await. Awaiting first drops the tap
+  // and Chrome/Safari then refuse to show Allow.
+  const firstFix = readBrowser(true);
   try {
     const native = await readCapacitor();
     if (native) {
@@ -156,7 +148,7 @@ export const getCurrentPosition = async (): Promise<GeoResult> => {
     /* fall through to the browser GPS */
   }
   const errors: unknown[] = [];
-  for (const step of [() => readBrowser(true), () => readBrowser(false), () => watchOnce()]) {
+  for (const step of [() => firstFix, () => readBrowser(false), () => watchOnce()]) {
     try {
       const point = await step();
       remember(point);

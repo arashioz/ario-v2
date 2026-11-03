@@ -29,6 +29,7 @@ interface Row {
   altLabel: string;
   qtyBy: 'unit' | 'kg';
   priceBy: 'unit' | 'kg';
+  factoryBy: 'unit' | 'kg';
   qtyText?: string;
   received: boolean;
   factoryUnitCost: number;
@@ -98,6 +99,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
           altLabel: 'کیلوگرم',
           qtyBy: 'unit' as const,
           priceBy: 'unit' as const,
+          factoryBy: 'unit' as const,
           received: it.received !== false,
           factoryUnitCost: it.factoryUnitCost || 0,
         };
@@ -189,6 +191,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         altLabel: alt.label,
         qtyBy: byAlt ? 'kg' : 'unit',
         priceBy: byAlt ? 'kg' : 'unit',
+        factoryBy: 'unit',
         qtyText: byAlt ? '1' : undefined,
         received: true,
         factoryUnitCost: 0,
@@ -198,6 +201,9 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
   const shownQty = (r: Row) => (r.qtyBy === 'kg' && r.ratio > 0 ? r3(r.quantity * r.ratio) : r.quantity);
   const shownPrice = (r: Row) => (r.priceBy === 'kg' && r.ratio > 0 ? Math.round(r.unitPrice / r.ratio) : r.unitPrice);
+  const shownFactory = (r: Row) => (r.factoryBy === 'kg' && r.ratio > 0 ? Math.round((r.factoryUnitCost || 0) / r.ratio) : r.factoryUnitCost || 0);
+  const setFactory = (i: number, r: Row, typed: number) =>
+    updateRow(i, { factoryUnitCost: r.factoryBy === 'kg' && r.ratio > 0 ? Math.round(typed * r.ratio) : typed });
   const setQtyText = (i: number, r: Row, raw: string) => {
     const n = parseDecimal(raw);
     updateRow(i, { qtyText: raw, quantity: r.qtyBy === 'kg' && r.ratio > 0 ? n / r.ratio : n });
@@ -365,7 +371,14 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
                   {r.received ? 'تحویل شد' : 'تحویل نشده'}
                 </button>
               )}
-              <button onClick={() => setRows((prev) => prev.filter((_, idx) => idx !== i))} className="p-1 text-slate-300 hover:text-rose-600">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`مطمئنی «${r.productName}» از این فاکتور پاک شود؟`)) return;
+                  setRows((prev) => prev.filter((_, idx) => idx !== i));
+                }}
+                className="p-1 text-slate-300 hover:text-rose-600"
+              >
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -450,8 +463,28 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
             </div>
             {isSale && fromCompany && (
               <div>
-                <span className="text-[10px] text-amber-700 block mb-1">قیمت کارخانه (هر {r.unit}) — روی فاکتور مشتری نمی‌آید</span>
-                <AmountInput value={r.factoryUnitCost || 0} onChange={(v) => updateRow(i, { factoryUnitCost: v })} />
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-amber-700">
+                    قیمت کارخانه (هر {r.factoryBy === 'kg' ? r.altLabel : r.unit}) — روی فاکتور مشتری نمی‌آید
+                  </span>
+                  {canWeigh(r) && (
+                    <button
+                      type="button"
+                      onClick={() => updateRow(i, { factoryBy: r.factoryBy === 'kg' ? 'unit' : 'kg' })}
+                      className="text-[10px] font-bold text-amber-800"
+                    >
+                      {r.factoryBy === 'kg' ? `هر ${r.unit}` : `هر ${r.altLabel}`}
+                    </button>
+                  )}
+                </div>
+                <AmountInput value={shownFactory(r)} onChange={(v) => setFactory(i, r, v)} />
+                {canWeigh(r) && (r.factoryUnitCost || 0) > 0 && (
+                  <span className="text-[10px] text-amber-800 mt-1 block font-mono">
+                    {r.factoryBy === 'kg'
+                      ? `هر ${r.unit} ${formatToman(r.factoryUnitCost)}`
+                      : `هر ${r.altLabel} ${formatToman(Math.round(r.factoryUnitCost / r.ratio))}`}
+                  </span>
+                )}
               </div>
             )}
           </div>

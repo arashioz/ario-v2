@@ -196,8 +196,9 @@ export const kgPerStock = (product?: Pick<FifoProduct, 'unit' | 'weightPerUnitKg
 };
 
 /**
- * Weight of a line. Packaged goods (کیسه ۱۰ کیلویی) are quantity × pack weight.
- * If both quantity×pack and weightKg were stored, do not add them — that doubled 440kg to 880kg.
+ * Weight of a line. For a packaged good the invoice quantity is the package count,
+ * so the kilograms are quantity × pack weight. A stored weightKg is not added on top:
+ * it was sometimes the bag count, sometimes the real kg, and sometimes both (440 recorded as 880).
  */
 export const lineKg = (it: FifoInvoice['items'][number], product?: FifoProduct): number => {
   const qty = Number(it.quantity) || 0;
@@ -205,11 +206,7 @@ export const lineKg = (it: FifoInvoice['items'][number], product?: FifoProduct):
   const fromQty = per > 0 ? qty * per : 0;
   const w = Number(it.weightKg) || 0;
   const sec = Number(it.secondaryQuantity) || 0;
-  const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.6, b * 0.02);
-  if (fromQty > 0 && w > 0 && per > 1 && close(w, fromQty * 2)) return fromQty;
-  if (fromQty > 0 && w > 0 && close(w, fromQty)) return fromQty;
-  // 44 bags stored as weightKg=44 (same as quantity) is packs, not kilograms.
-  if (fromQty > 0 && per > 1 && (w <= 0 || close(w, qty))) return fromQty;
+  if (per > 0 && per !== 1 && qty > 0) return fromQty;
   if (w > 0) return w;
   if (fromQty > 0) return fromQty;
   if (sec > 0) return sec;

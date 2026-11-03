@@ -14,17 +14,6 @@
   box-shadow: 0 6px 20px -12px rgba(7, 24, 74, .55);
 }
 
-.pos-brand-icon {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 36px;
-  border-radius: 12px;
-  background: rgba(219, 234, 254, .14);
-  border: 1px solid rgba(219, 234, 254, .22);
-  color: #dbeafe;
-}
-
 .pos-content {
   --background: #f1f5f9;
 }
@@ -103,6 +92,3 @@
   .pos-page .pos-product-card { transition: none; }
 }
 
-@media (max-width: 380px) {
-  .pos-brand-icon { display: none; }
-}

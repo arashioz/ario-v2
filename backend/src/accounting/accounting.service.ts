@@ -277,6 +277,8 @@ export class AccountingService {
       }
     }
     for (const l of f.saleLines) {
+      // Direct factory shipments never sat in this warehouse.
+      if (l.fulfillment === 'factory') continue;
       if (!this.inPeriod(l.date, period)) continue;
       const r = row(l.productId, l.productName);
       r.soldKg += l.kg;
@@ -302,22 +304,24 @@ export class AccountingService {
     }
 
     for (const r of byProduct.values()) {
-      if (period.from || period.to) continue;
       const pack = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
-      if (!(pack > 1)) continue;
+      // Loose goods are already in kilograms. Packaged goods follow the invoices:
+      // packages bought or sold × the weight of one package, per company.
+      if (!(pack > 0) || pack === 1) continue;
+      const off = (kg: number, once: number) => once > 0 && kg > 0 && Math.abs(kg - once) / once > 0.08;
       const boughtOnce = (r.purchasedUnits || 0) * pack;
-      if (boughtOnce > 0 && r.purchasedKg > boughtOnce * 1.45 && r.purchasedKg < boughtOnce * 2.2) {
+      if (off(r.purchasedKg, boughtOnce)) {
         const scale = boughtOnce / r.purchasedKg;
         r.purchasedKg = boughtOnce;
-        r.purchasedAmount *= scale;
         r.fifoRemainingKg *= scale;
-        r.remainingValue *= scale;
-        for (const lot of r.openLots) lot.kgLeft = r1((lot.kgLeft || 0) * scale);
+        for (const lot of r.openLots) {
+          lot.kgLeft = r1((lot.kgLeft || 0) * scale);
+          lot.costPerKg = scale > 0 ? r0((lot.costPerKg || 0) / scale) : lot.costPerKg;
+        }
       }
+      if (period.from || period.to) continue;
       const soldOnce = (r.soldUnits || 0) * pack;
-      if (soldOnce > 0 && r.soldKg > soldOnce * 1.45 && r.soldKg < soldOnce * 2.2) {
-        r.soldKg = soldOnce;
-      }
+      if (off(r.soldKg, soldOnce)) r.soldKg = soldOnce;
     }
 
     const prices = new Map(
@@ -336,12 +340,11 @@ export class AccountingService {
         const profit = r.soldRevenue - (r.unknownSold || 0) - r.soldCost;
         const expectedUnits = (r.purchasedUnits || 0) - (r.soldUnits || 0);
         const p = prices.get(r.productId);
-        // On-hand weight is what the purchase lots still hold, not quantity × a catalog weight.
-        const onHandKg = r.fifoRemainingKg;
-        // Sell-today value must cover this same weight. Pricing product.stock instead
-        // drops packages that are still in the lots, so purchase value looks higher than supermarket.
+        // On-hand weight is the packages still unsold × the weight of one package.
+        // That is the same tonnage as the purchase invoices of each company, minus shop sales.
         const wpu = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
-        const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits);
+        const onHandUnits = wpu > 0 ? expectedUnits : Math.max(0, expectedUnits);
+        const onHandKg = wpu > 0 ? expectedUnits * wpu : r.fifoRemainingKg;
         return {
           ...r,
           expectedUnits: r1(expectedUnits),
@@ -924,7 +927,10 @@ export class AccountingService {
       const upfront = Math.max(0, inv.finalAmount - credit);
       const pays = (paysByInvoice.get(inv._id) ?? []).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       const paidLater = pays.reduce((s, p) => s + p.amount, 0);
-      const remaining = inv.remainingDebt ?? Math.max(0, credit - paidLater);
+      // A stored 0 must not hide an unpaid credit: profit on money still out is remaining × the invoice margin.
+      const unpaidByReceipts = Math.max(0, credit - paidLater);
+      const recordedDebt = Number(inv.remainingDebt);
+      const remaining = recordedDebt > 0 ? recordedDebt : unpaidByReceipts;
       const settledAt = remaining <= 0 && pays.length ? pays[pays.length - 1].date : null;
       const daysToSettle = settledAt
         ? Math.max(0, Math.round((new Date(settledAt).getTime() - new Date(inv.invoiceDate).getTime()) / 86400000))
@@ -990,6 +996,8 @@ export class AccountingService {
 
     const settledRows = rows.filter((r) => r.daysToSettle !== null);
     const sum = (arr: any[], k: string) => arr.reduce((s, r) => s + (r[k] || 0), 0);
+    const collectedProfit = sum(dayRows, 'realizedProfit');
+    const openProfit = sum(rows.filter((r) => r.remaining > 0), 'unrealizedProfit');
 
     return {
       summary: {
@@ -997,7 +1005,9 @@ export class AccountingService {
         creditSentProfit: r0(sum(dayRows, 'creditSentProfit')),
         creditInvoices: sum(dayRows, 'creditInvoices'),
         collected: r0(sum(dayRows, 'collected')),
-        realizedProfit: r0(sum(dayRows, 'realizedProfit')),
+        /** Cash already in, plus the profit still sitting in unpaid credit. */
+        realizedProfit: r0(collectedProfit + openProfit),
+        collectedProfit: r0(collectedProfit),
         collectedPrior: r0(sum(dayRows, 'collectedPrior')),
         collectedPriorProfit: r0(sum(dayRows, 'collectedPriorProfit')),
         outstanding: r0(sum(rows.filter((r) => r.remaining > 0), 'remaining')),
