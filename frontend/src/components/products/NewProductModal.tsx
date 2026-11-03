@@ -46,6 +46,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const settings = useSettings();
   const [autoPricing, setAutoPricing] = useState(false);
+  const [basePrice, setBasePrice] = useState('');
+  const [packageFee, setPackageFee] = useState('0');
   const [commissionAmount, setCommissionAmount] = useState('0');
   const [commissionPercent, setCommissionPercent] = useState('0');
   const [commissionUnit, setCommissionUnit] = useState<'kg' | 'unit'>('kg');
@@ -112,12 +114,15 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const formKg =
     hasDualUnit && secondaryUnit === 'کیلوگرم' ? Number(unitRatio) || 0 : unit === 'کیلوگرم' ? 1 : 0;
   const categoryBase = settings.categoryBasePrices.find((rule) => rule.category === category.trim());
+  const ownBase = Number(basePrice) || 0;
   const buyBase = Number(buyPrice) || 0;
-  const automaticUnitPrice = categoryBase
-    ? Math.round((categoryBase.amount * (categoryBase.unit === 'kg' ? formKg : 1) + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) * (1 + Number(commissionPercent) / 100))
-    : buyBase > 0
-      ? Math.round((buyBase + Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1)) * (1 + Number(commissionPercent) / 100))
-      : null;
+  const packFee = Number(packageFee) || 0;
+  const kgFee = Number(commissionAmount) * (commissionUnit === 'kg' ? formKg : 1);
+  const packExtra = (commissionUnit === 'unit' ? Number(commissionAmount) || 0 : 0) + packFee;
+  const pricedBase = ownBase > 0 ? (formKg > 0 ? ownBase * formKg : ownBase) : categoryBase ? categoryBase.amount * (categoryBase.unit === 'kg' ? formKg : 1) : buyBase;
+  const automaticUnitPrice = pricedBase > 0
+    ? Math.round((pricedBase + (commissionUnit === 'kg' ? kgFee : 0) + packExtra) * (1 + Number(commissionPercent) / 100))
+    : null;
 
   const [roundStep, setRoundStep] = useState(500);
   const roundMoney = (n: number, step = roundStep) => {
@@ -145,6 +150,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setAutoPricing(!!editProduct?.autoPricing);
+      setBasePrice(editProduct?.basePrice ? String(editProduct.basePrice) : '');
+      setPackageFee(String(editProduct?.packageFee || 0));
       setCommissionAmount(String(editProduct?.commissionAmount || 0));
       setCommissionPercent(String(editProduct?.commissionPercent || 0));
       setCommissionUnit(editProduct?.commissionUnit || 'kg');
@@ -234,7 +241,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
     }
 
     const payload: CreateProductInput = {
-      autoPricing, commissionAmount: Number(commissionAmount), commissionPercent: Number(commissionPercent), commissionUnit,
+      autoPricing, basePrice: Number(basePrice) || 0, packageFee: Number(packageFee) || 0, commissionAmount: Number(commissionAmount), commissionPercent: Number(commissionPercent), commissionUnit,
       name: name.trim(),
       barcode: barcode.trim() || undefined,
       category: category.trim() || 'عمومی',
@@ -800,14 +807,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
           </div>
 
           <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
-            <h3 className="text-sm font-bold text-blue-900">کارمزد و قیمت‌گذاری خودکار</h3>
-            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={autoPricing} onChange={(e) => setAutoPricing(e.target.checked)} />محاسبهٔ خودکار از قیمت پایه، کارمزد و سود</label>
+            <h3 className="text-sm font-bold text-blue-900">قیمت پایه و کارمزد بسته</h3>
+            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={autoPricing} onChange={(e) => setAutoPricing(e.target.checked)} />تیک قیمت پایه — فروش از پایه هر کیلو به‌علاوه کارمزد کیلو و عدد هر بسته</label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1 text-xs"><span>کارمزد ثابت (تومان)</span><MoneyTextInput value={commissionAmount} onChange={setCommissionAmount} className="w-full rounded-xl border p-2.5" /></label>
-              <label className="space-y-1 text-xs"><span>مبنای کارمزد</span><select value={commissionUnit} onChange={(e) => setCommissionUnit(e.target.value as 'kg' | 'unit')} className="w-full rounded-xl border p-2.5"><option value="unit">هر بسته / واحد</option><option value="kg">هر کیلو</option></select></label>
-              <label className="space-y-1 text-xs"><span>درصد سود روی پایه + کارمزد</span><input type="number" min="0" max="1000" step="any" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} className="w-full rounded-xl border p-2.5" /></label>
+              <label className="space-y-1 text-xs"><span>قیمت پایه هر کیلو (تومان)</span><MoneyTextInput value={basePrice} onChange={setBasePrice} allowZero className="w-full rounded-xl border p-2.5" /></label>
+              <label className="space-y-1 text-xs"><span>عدد اضافه هر بسته</span><MoneyTextInput value={packageFee} onChange={setPackageFee} allowZero className="w-full rounded-xl border p-2.5" /></label>
+              <label className="space-y-1 text-xs"><span>کارمزد هر کیلو (تومان)</span><MoneyTextInput value={commissionAmount} onChange={setCommissionAmount} className="w-full rounded-xl border p-2.5" /></label>
+              <label className="space-y-1 text-xs"><span>مبنای کارمزد</span><select value={commissionUnit} onChange={(e) => setCommissionUnit(e.target.value as 'kg' | 'unit')} className="w-full rounded-xl border p-2.5"><option value="kg">هر کیلو</option><option value="unit">هر بسته / واحد</option></select></label>
+              <label className="space-y-1 text-xs col-span-2"><span>درصد سود (اختیاری)</span><input type="number" min="0" max="1000" step="any" value={commissionPercent} onChange={(e) => setCommissionPercent(e.target.value)} className="w-full rounded-xl border p-2.5" /></label>
             </div>
-            {autoPricing && <p className="text-[11px] leading-6 text-blue-800">{settings.categoryBasePrices.some((r) => r.category === category.trim()) || Number(buyPrice) > 0 ? 'قیمت هر سه سطح فروش = (قیمت پایه که همان قیمت خرید است + کارمزد) × (۱ + درصد سود ÷ ۱۰۰).' : 'ابتدا قیمت پایه را مشخص کنید. قیمت پایه همان قیمت خرید این کالا است.'}</p>}
+            {autoPricing && <p className="text-[11px] leading-6 text-blue-800">قیمت هر بسته = (قیمت پایه × وزن کیلو) + (کارمزد هر کیلو × وزن) + عدد بسته. اگر قیمت پایه خالی باشد از قیمت خرید استفاده می‌شود.</p>}
             {autoPricing && automaticUnitPrice !== null && <p className="text-sm font-bold text-blue-900">قیمت خودکار هر {unit}: {formatToman(automaticUnitPrice)}</p>}
           </section>
           {/* Description */}

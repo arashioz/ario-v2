@@ -55,6 +55,49 @@ export class CustomersService implements OnModuleInit {
     return out;
   }
 
+  async touchSale(customerId: string, date?: Date) {
+    if (!Types.ObjectId.isValid(customerId)) return;
+    await this.customerModel.updateOne({ _id: customerId }, { $set: { lastTransactionDate: date || new Date() } }).exec();
+  }
+
+  /** Attach a real customer to every sale, including factory shipments, so they appear in the list. */
+  async findOrCreateForSale(input: {
+    customerId?: string;
+    name?: string;
+    phone?: string;
+    saleType?: string;
+  }): Promise<CustomerDocument | null> {
+    if (input.customerId && Types.ObjectId.isValid(input.customerId)) {
+      const existing = await this.customerModel.findById(input.customerId).exec();
+      if (existing && existing.isActive !== false) return existing;
+    }
+    const name = String(input.name || '').trim();
+    const phone = String(input.phone || '').trim();
+    if (!name && !phone) return null;
+    if (phone) {
+      const byPhone = await this.customerModel.findOne({ phoneNumber: phone, isActive: true }).exec();
+      if (byPhone) return byPhone;
+    }
+    if (name && name !== 'مشتری حضوری') {
+      const byName = await this.customerModel.findOne({ name, isActive: true }).exec();
+      if (byName) return byName;
+    }
+    if (name === 'مشتری حضوری' && !phone) {
+      const walkIn = await this.customerModel.findOne({ name: 'مشتری حضوری', isActive: true }).exec();
+      if (walkIn) return walkIn;
+    }
+    const shop = input.saleType === 'wholesale' || input.saleType === 'supermarket';
+    return this.customerModel.create({
+      name: name || 'مشتری حضوری',
+      phoneNumber: phone,
+      kind: shop ? 'shop' : 'walkin',
+      customerType: shop ? input.saleType : 'retail',
+      balance: 0,
+      isActive: true,
+      lastTransactionDate: new Date(),
+    });
+  }
+
   async create(createCustomerDto: CreateCustomerDto, recordedByName?: string): Promise<CustomerDocument> {
     if (createCustomerDto.branches) createCustomerDto.branches = this.cleanBranches(createCustomerDto.branches);
     if (createCustomerDto.kind === 'walkin') return this.createWalkIn(createCustomerDto);
@@ -319,37 +362,26 @@ export class CustomersService implements OnModuleInit {
     }
   }
 
-  /** Open walk-in credit that was never posted to a customer account. */
+  /** Sales without a customer id, including factory shipments, are attached to a real customer. */
   private async attachWalkInCredits(): Promise<void> {
     const orphans = await this.invoiceModel
       .find({
         type: 'sale',
-        remainingDebt: { $gt: 0 },
         $or: [{ customerId: { $exists: false } }, { customerId: null }],
       })
       .exec();
     for (const inv of orphans) {
-      const amount = Math.round(inv.remainingDebt || 0);
-      if (amount <= 0) continue;
-      const name = (inv.customerName || '').trim() || 'مشتری حضوری';
-      const phone = (inv.customerPhone || '').trim();
-      let customer = phone
-        ? await this.customerModel.findOne({ phoneNumber: phone, isActive: true, kind: 'walkin' }).exec()
-        : null;
-      if (!customer) customer = await this.customerModel.findOne({ name, isActive: true, kind: 'walkin' }).exec();
-      if (!customer) {
-        customer = await this.customerModel.create({
-          name,
-          phoneNumber: phone,
-          kind: 'walkin',
-          customerType: 'retail',
-          balance: 0,
-          isActive: true,
-          lastTransactionDate: inv.invoiceDate || new Date(),
-        });
-      }
+      const customer = await this.findOrCreateForSale({
+        name: inv.customerName,
+        phone: inv.customerPhone,
+        saleType: inv.saleType,
+      });
+      if (!customer) continue;
       inv.customerId = customer._id as any;
       await inv.save();
+      await this.touchSale(String(customer._id), inv.invoiceDate);
+      const amount = Math.round(inv.remainingDebt || 0);
+      if (amount <= 0) continue;
       const already = await this.transactionModel.findOne({ type: 'debt', invoiceId: inv._id }).exec();
       if (already) continue;
       const balance = await this.changeBalance(customer._id as any, amount);

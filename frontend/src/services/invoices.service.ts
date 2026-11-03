@@ -198,6 +198,11 @@ export const invoicesService = {
     return response.data;
   },
 
+  relations: async (id: string): Promise<{ linked: Invoice[]; related: Invoice[] }> => {
+    const response = await api.get<{ linked: Invoice[]; related: Invoice[] }>(`/invoices/${id}/relations`);
+    return response.data;
+  },
+
   getStats: async (): Promise<InvoiceStats> => {
     const response = await api.get<InvoiceStats>('/invoices/stats');
     return response.data;

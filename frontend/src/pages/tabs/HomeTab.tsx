@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -12,7 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { customersService } from '../../services/customers.service';
 import type { CustomerStats } from '../../services/customers.service';
 import { productsService } from '../../services/products.service';
-import type { ProductStats } from '../../services/products.service';
+import type { Product, ProductStats } from '../../services/products.service';
 import { invoicesService } from '../../services/invoices.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import { accountingService } from '../../services/accounting.service';
@@ -37,6 +37,7 @@ import {
   Tag,
   Scale,
   Boxes,
+  Warehouse,
   MapPin,
   BarChart3,
   CreditCard,
@@ -57,6 +58,7 @@ export const HomeTab: React.FC = () => {
 
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null);
   const [productStats, setProductStats] = useState<ProductStats | null>(null);
+  const [goods, setGoods] = useState<Product[]>([]);
   const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
   const [acc, setAcc] = useState<AccountingDashboard | null>(null);
   const [supplier, setSupplier] = useState<SupplierAccount | null>(null);
@@ -73,18 +75,20 @@ export const HomeTab: React.FC = () => {
     try {
       const today = homeDate;
       const j = ymdToJalali(today);
-      const [cStats, pStats, iStats, aStats, sAcc] = await Promise.all([
+      const [cStats, pStats, iStats, aStats, sAcc, catalog] = await Promise.all([
         customersService.getCustomerStats().catch(() => null),
         productsService.getStats().catch(() => null),
         invoicesService.getStats().catch(() => null),
         accountingService.dashboard(today, jalaliMonthRange(j.jy, j.jm).from).catch(() => null),
         suppliersService.account().catch(() => null),
+        productsService.getForSale().catch(() => [] as Product[]),
       ]);
       if (aStats) setAcc(aStats);
       if (sAcc) setSupplier(sAcc);
       if (cStats) setCustomerStats(cStats);
       if (pStats) setProductStats(pStats);
       if (iStats) setInvoiceStats(iStats);
+      setGoods(catalog);
     } catch (e) {
       console.warn('Stats load error', e);
     }
@@ -108,6 +112,21 @@ export const HomeTab: React.FC = () => {
       return !v;
     });
   };
+
+  const homeWarehouses = useMemo(() => {
+    const rows = new Map<string, { count: number; kg: number }>();
+    for (const product of goods) {
+      const name = product.category || 'عمومی';
+      const row = rows.get(name) || { count: 0, kg: 0 };
+      const perKg = product.weightPerUnitKg || (product.unit === 'کیلوگرم' ? 1 : 0);
+      row.count += 1;
+      row.kg += (product.stock || 0) * perKg;
+      rows.set(name, row);
+    }
+    return [...rows.entries()]
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((a, b) => b.kg - a.kg || a.name.localeCompare(b.name, 'fa'));
+  }, [goods]);
 
   const chartData = invoiceStats?.chartData || [];
   const maxVal = Math.max(
@@ -181,47 +200,47 @@ export const HomeTab: React.FC = () => {
             {formatJalali(homeDate, { weekday: true })}
           </button>
 
-          {/* Inventory Top Banner: Tonnage & Tomans (موجودی انبار تناژی و تومانی) */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-sky-700 to-blue-700 p-4 text-white shadow-lg shadow-sky-500/20 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold flex items-center gap-1.5">
+          <section className="rounded-3xl bg-white border border-sky-100 shadow-sm overflow-hidden">
+            <div className="bg-gradient-to-l from-sky-700 to-indigo-700 text-white px-4 py-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold flex items-center gap-1.5">
                 <Boxes className="w-4 h-4" />
-                موجودی انبار
+                انبارها
               </h2>
-              <button
-                onClick={() => navigate('/inventory')}
-                className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-medium px-2.5 py-1 rounded-xl transition"
-              >
-                جزئیات
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => navigate('/inventory')} className="text-[11px] font-bold bg-white/15 px-2.5 py-1 rounded-xl">جزئیات</button>
+                <button type="button" onClick={() => navigate('/warehouses')} className="text-[11px] font-bold bg-white text-sky-800 px-2.5 py-1 rounded-xl">همه انبارها</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-slate-100">
+              <button type="button" onClick={() => navigate('/inventory')} className="bg-white px-3 py-2.5 text-right">
+                <span className="text-[10px] text-slate-400 flex items-center gap-1"><Scale className="w-3 h-3" />موجودی کل</span>
+                <span className="block text-sm font-bold font-mono text-slate-800 mt-0.5">{acc ? `${num(acc.stockKg, 1)} کیلو` : '...'}</span>
+                <span className="text-[10px] text-slate-400">{acc ? `${tons(acc.stockKg)} تن` : ''} · {productStats ? num(productStats.totalProducts) : num(goods.length)} قلم</span>
+              </button>
+              <button type="button" onClick={() => navigate('/inventory')} className="bg-white px-3 py-2.5 text-right">
+                <span className="text-[10px] text-slate-400 flex items-center gap-1"><Wallet className="w-3 h-3" />ارزش عمده</span>
+                <span className="block text-sm font-bold font-mono text-slate-800 mt-0.5">{acc?.currentValue ? formatToman(acc.currentValue.wholesale) : '...'}</span>
               </button>
             </div>
-
-            <div className="grid grid-cols-2 gap-2.5 border-t border-white/20 pt-2.5">
-              <button onClick={() => navigate('/inventory')} className="bg-white/10 backdrop-blur-md p-3 rounded-2xl text-right">
-                <div className="flex items-center gap-1 text-[11px] text-sky-100 mb-0.5">
-                  <Scale className="w-3.5 h-3.5" />
-                  <span>موجودی دقیق</span>
-                </div>
-                <div className="text-base font-semibold font-mono">
-                  {acc ? num(acc.stockKg, 1) : '...'}
-                  <span className="text-xs font-normal mr-1">کیلو</span>
-                </div>
-                <span className="text-[10px] text-sky-200 block mt-0.5">
-                  {acc ? tons(acc.stockKg) : '...'} تن · {productStats ? num(productStats.totalProducts) : 0} قلم
-                </span>
-              </button>
-
-              <button onClick={() => navigate('/inventory')} className="bg-white/10 backdrop-blur-md p-3 rounded-2xl text-right">
-                <div className="flex items-center gap-1 text-[11px] text-sky-100 mb-0.5">
-                  <Wallet className="w-3.5 h-3.5" />
-                  <span>ارزش فعلی (عمده)</span>
-                </div>
-                <div className="text-base font-semibold font-mono">
-                  {acc?.currentValue ? formatToman(acc.currentValue.wholesale) : '...'}
-                </div>
-              </button>
+            <div className="p-2 space-y-1.5">
+              {homeWarehouses.length === 0 ? (
+                <button type="button" onClick={() => navigate('/warehouses')} className="w-full rounded-2xl border border-dashed border-sky-200 py-4 text-xs text-slate-400">انبارها بعد از دریافت کالاها اینجا می‌آیند</button>
+              ) : homeWarehouses.map((house) => (
+                <button
+                  key={house.name}
+                  type="button"
+                  onClick={() => navigate(`/warehouses?open=${encodeURIComponent(house.name)}`)}
+                  className="w-full flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2.5 text-right active:bg-sky-50"
+                >
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-800"><Warehouse className="w-3.5 h-3.5 text-indigo-600 shrink-0" />انبار {house.name}</span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5">{num(house.count)} کالا</span>
+                  </span>
+                  <span className="text-[11px] font-mono font-bold text-sky-800 shrink-0">{weight(house.kg)}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          </section>
 
           <div className="bg-white rounded-3xl p-2.5 border border-sky-100 shadow-sm">
             <div className="grid grid-cols-4 gap-1">
@@ -424,6 +443,9 @@ export const HomeTab: React.FC = () => {
                       <span className="font-mono">{formatToman(acc.work.sold)}</span>
                       <span className="block text-[10px] font-normal text-slate-400 font-mono">
                         {weight(acc.work.soldKg)} · {num(acc.work.invoices)} فاکتور
+                        {(acc.work.factoryInvoices || 0) > 0
+                          ? ` · ${num(acc.work.factoryInvoices)} ارسال از کارخانه ${formatToman(acc.work.factorySold || 0)}`
+                          : ''}
                       </span>
                     </>
                   ) : (

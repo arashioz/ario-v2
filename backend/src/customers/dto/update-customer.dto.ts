@@ -32,6 +32,10 @@ export class UpdateCustomerDto {
   kind?: CustomerKind;
 
   @IsOptional()
+  @IsIn(['retail', 'supermarket', 'wholesale'])
+  customerType?: 'retail' | 'supermarket' | 'wholesale';
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   creditLimit?: number;

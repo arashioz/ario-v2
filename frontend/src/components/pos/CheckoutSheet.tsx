@@ -6,7 +6,7 @@ import type { Customer, CustomerKind } from '../../services/customers.service';
 import { apiErrorMessage, invoicesService } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, type AppSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
-import { formatToman, num, parseDecimal, searchKey, weight } from '../../lib/format';
+import { formatToman, num, searchKey, weight } from '../../lib/format';
 import { AmountInput } from '../ui/AmountInput';
 import {
   PaymentTermsForm,
@@ -103,7 +103,6 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [costError, setCostError] = useState('');
   const editedCosts = useRef(new Set<string>());
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
-  const [margins, setMargins] = useState<Record<string, number>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const factoryOn = !!settings.factorySalesEnabled;
 
@@ -124,7 +123,6 @@ export const CheckoutSheet: React.FC<Props> = ({
     setFactoryCosts({});
     editedCosts.current.clear();
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
-    setMargins({});
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -164,7 +162,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   }, [customers, query]);
 
   const pricingFactory = factoryOn && fulfillment === 'factory';
-  const editingPrices = pricingFactory || (bulk && asProforma);
+  const editingPrices = bulk && asProforma;
   const goodsTotal = useMemo(() => {
     if (!editingPrices) return subtotal;
     return factoryLines.reduce((s, l) => s + Math.round(l.quantity * (sellPrices[l.productId] ?? l.sellPrice)), 0);
@@ -245,7 +243,7 @@ export const CheckoutSheet: React.FC<Props> = ({
       fulfillment: fromFactory ? 'factory' : 'shop',
       branchName: branches.includes(branch) ? branch : undefined,
       factoryUnitCosts: fromFactory ? factoryCosts : undefined,
-      factorySellPrices: fromFactory || (bulk && asProforma) ? sellPrices : undefined,
+      factorySellPrices: bulk && asProforma ? sellPrices : undefined,
     });
   };
 
@@ -524,19 +522,18 @@ export const CheckoutSheet: React.FC<Props> = ({
           <span>مبلغ نهایی</span>
           <span className="font-mono text-sky-700">{formatToman(final)}</span>
         </div>
-        {editingPrices && (
+        {(pricingFactory || editingPrices) && (
           <div className="space-y-2 pt-1">
             {pricingFactory && (
               <p className="text-[10px] text-amber-800 leading-5">
-                قیمت کارخانه از تب «قیمت کارخانه» در مدیریت قیمت خوانده می‌شود؛ تا وقتی قیمت اختصاصی ثبت نکرده باشید، آخرین قیمت خرید استفاده می‌شود. قیمت فروش از قیمت محصول می‌آید و در همین فاکتور قابل تغییر است.
+                قیمت نمایش به مشتری همان قیمت آریو است و عوض نمی‌شود. قیمت کارخانه فقط بهای خرید شرکت مادر است و روی فاکتور مشتری نمی‌آید.
               </p>
             )}
             {pricingFactory && costError && <p role="alert" className="text-xs text-rose-700">{costError}</p>}
             {factoryLines.map((l) => {
               const cost = factoryCosts[l.productId] || 0;
-              const sell = sellPrices[l.productId] ?? l.sellPrice;
+              const sell = l.sellPrice;
               const lineProfit = Math.round(l.quantity * sell) - Math.round(l.quantity * cost);
-              const pct = margins[l.productId] ?? 0;
               return (
                 <div key={l.productId} className="rounded-xl bg-white border border-amber-100 p-2 space-y-1.5">
                   <div className="text-[11px] font-bold text-slate-700">
@@ -544,33 +541,24 @@ export const CheckoutSheet: React.FC<Props> = ({
                   </div>
                   {pricingFactory && (
                     <>
-                      <span className="text-[10px] text-slate-500 block">قیمت کارخانه (هر {l.unit})</span>
+                      <span className="text-[10px] text-slate-500 block">قیمت کارخانه / شرکت مادر (هر {l.unit})</span>
                       <AmountInput value={cost} onChange={(v) => { editedCosts.current.add(l.productId); setFactoryCosts((prev) => ({ ...prev, [l.productId]: v })); }} />
                       {factoryCosts[l.productId] === undefined && !loadingCosts && <p className="text-[10px] text-amber-700">بدون قیمت خرید ذخیره‌شده؛ مبلغ را وارد کنید.</p>}
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          inputMode="decimal"
-                          value={pct ? String(pct) : ''}
-                          placeholder="٪"
-                          onChange={(e) => setMargins((prev) => ({ ...prev, [l.productId]: parseDecimal(e.target.value) || 0 }))}
-                          className="w-16 px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-mono text-center"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => { setSellPrices((prev) => ({ ...prev, [l.productId]: Math.round(cost * (1 + pct / 100)) })); }}
-                          className="flex-1 py-1.5 rounded-xl bg-amber-100 text-amber-800 text-[11px] font-bold"
-                        >
-                          سود عمده روی قیمت کارخانه
-                        </button>
-                      </div>
                     </>
                   )}
-                  <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری (دلخواه)</span>
-                  <AmountInput value={sell} onChange={(v) => { setSellPrices((prev) => ({ ...prev, [l.productId]: v })); }} />
+                  {editingPrices && !pricingFactory && (
+                    <>
+                      <span className="text-[10px] text-slate-500 block">قیمت فروش به مشتری</span>
+                      <AmountInput value={sellPrices[l.productId] ?? l.sellPrice} onChange={(v) => { setSellPrices((prev) => ({ ...prev, [l.productId]: v })); }} />
+                    </>
+                  )}
                   {pricingFactory && (
-                    <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                      سود این ردیف {formatToman(lineProfit)}
-                    </div>
+                    <>
+                      <div className="text-[11px] text-slate-700">قیمت آریو به مشتری: <b className="font-mono">{formatToman(sell)}</b></div>
+                      <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        سود این ردیف {formatToman(lineProfit)}
+                      </div>
+                    </>
                   )}
                 </div>
               );
@@ -582,7 +570,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                   {formatToman(
                     factoryLines.reduce((s, l) => {
                       const cost = (factoryCosts[l.productId] || 0) * l.quantity;
-                      const sell = (sellPrices[l.productId] ?? l.sellPrice) * l.quantity;
+                      const sell = l.sellPrice * l.quantity;
                       return s + Math.round(sell - cost);
                     }, 0),
                   )}

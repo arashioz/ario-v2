@@ -84,6 +84,11 @@ export class InvoicesController {
     return this.invoicesService.findAll({ type, saleType, customerId, search, isPaid, fulfillment });
   }
 
+  @Get(':id/relations')
+  relations(@Param('id') id: string) {
+    return this.invoicesService.relations(id);
+  }
+
   @Get(':id')
   findById(@Param('id') id: string) {
     return this.invoicesService.findById(id);

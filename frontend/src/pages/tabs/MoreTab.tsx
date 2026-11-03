@@ -23,6 +23,7 @@ import {
   Download,
   Info,
   ClipboardList,
+  Boxes,
   Settings,
   DatabaseBackup,
   LineChart,
@@ -115,6 +116,13 @@ const REPORTS: Item[] = [
     desc: 'وزن موجود و ارزش خرید کالاها',
     icon: Scale,
     tone: 'bg-sky-100 text-sky-600',
+  },
+  {
+    path: '/warehouses',
+    title: 'انبارهای جدا',
+    desc: 'انبار قند، روغن و هر دسته با خرید و فروش خودش',
+    icon: Boxes,
+    tone: 'bg-indigo-100 text-indigo-700',
   },
 ];
 

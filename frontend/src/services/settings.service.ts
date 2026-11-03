@@ -207,7 +207,7 @@ export const SMS_PLACEHOLDERS: Record<SmsTemplateKey, [string, string][]> = {
   ],
 };
 
-export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit' }
+export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }
 export interface AppSettings {
   categoryBasePrices: CategoryBasePrice[];
   shopName: string;

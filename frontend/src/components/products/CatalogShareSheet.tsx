@@ -24,7 +24,8 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
   const url = catalogUrl(tier);
 
   const copy = async () => {
-    await navigator.clipboard?.writeText(url).catch(() => undefined);
+    const { copyText } = await import('../../lib/permissions');
+    await copyText(url);
     showNotification({ title: 'لینک کپی شد', message: url, type: 'info' });
   };
 

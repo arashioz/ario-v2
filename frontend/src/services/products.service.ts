@@ -43,6 +43,8 @@ export interface PriceHistoryItem {
 
 export interface Product {
   autoPricing?: boolean;
+  basePrice?: number;
+  packageFee?: number;
   commissionAmount?: number;
   commissionPercent?: number;
   commissionUnit?: 'kg' | 'unit';
@@ -50,6 +52,7 @@ export interface Product {
   _id: string;
   name: string;
   barcode?: string;
+  sku?: string;
   category: string;
   subcategory?: string;
   supplierName?: string;
@@ -89,6 +92,8 @@ export interface ProductStats {
 
 export interface CreateProductInput {
   autoPricing?: boolean;
+  basePrice?: number;
+  packageFee?: number;
   commissionAmount?: number;
   commissionPercent?: number;
   commissionUnit?: 'kg' | 'unit';
@@ -160,8 +165,8 @@ export const productsService = {
   async setFactoryPrice(id: string, price: number | null): Promise<Product> {
     return (await api.patch(`/products/${id}/factory-price`, { price })).data;
   },
-  async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit' }) {
-    return (await api.post<{ modified: number }>('/products/category-price', rule)).data;
+  async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }) {
+    return (await api.post<{ modified: number; skipped?: string[] }>('/products/category-price', rule)).data;
   },
   async getForSale(): Promise<Product[]> {
     const data = await cachedGet<Omit<Product, 'priceHistory'>[]>('/products/pos');

@@ -36,7 +36,6 @@ import {
   CheckCircle2,
   PlusCircle,
   RefreshCw,
-  Wallet,
   Users,
   Eye,
   ChevronLeft,
@@ -44,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatToman } from '../../lib/format';
+import { ListSkeleton } from '../../components/ui/Skeleton';
 
 const WalkInSheet: React.FC<{ open: boolean; onClose: () => void; onCreated: (c: Customer) => void }> = ({ open, onClose, onCreated }) => {
   const { showNotification } = useNotification();
@@ -117,17 +117,12 @@ export const CustomersTab: React.FC = () => {
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'debtors' | 'settled' | 'creditors'>(
-    initialFilter === 'debtors' || initialFilter === 'settled' || initialFilter === 'creditors' ? initialFilter : 'all',
-  );
-  const [kind, setKind] = useState<CustomerKind>('shop');
+  const [view, setView] = useState<'book' | 'debtors' | 'payments'>(initialFilter === 'debtors' ? 'debtors' : 'book');
   const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
     const f = searchParams.get('filter');
-    if (f === 'debtors' || f === 'settled' || f === 'creditors' || f === 'all') {
-      setFilter(f);
-    }
+    if (f === 'debtors') setView('debtors');
   }, [searchParams]);
 
   // Modals state
@@ -137,7 +132,6 @@ export const CustomersTab: React.FC = () => {
   const [selectedCustomerIdForDetail, setSelectedCustomerIdForDetail] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailRefreshTrigger, setDetailRefreshTrigger] = useState(0);
-  const [view, setView] = useState<'customers' | 'payments'>('customers');
   const [paymentsRefresh, setPaymentsRefresh] = useState(0);
 
   useEffect(() => {
@@ -155,7 +149,7 @@ export const CustomersTab: React.FC = () => {
     try {
       setLoading(true);
       const [list, statsData] = await Promise.all([
-        customersService.getCustomers({ search, filter, ...(filter === 'debtors' ? {} : { kind }) }),
+        customersService.getCustomers({ search, filter: view === 'debtors' ? 'debtors' : 'all' }),
         customersService.getCustomerStats(),
       ]);
       if (id !== requestId.current) return;
@@ -171,7 +165,7 @@ export const CustomersTab: React.FC = () => {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [search, filter, kind, showNotification]);
+  }, [search, view, showNotification]);
 
   useEffect(() => {
     loadData();
@@ -191,7 +185,7 @@ export const CustomersTab: React.FC = () => {
     loadData();
   };
 
-  const openNew = () => (kind === 'walkin' ? setWalkInOpen(true) : setIsNewCustomerOpen(true));
+  const openNew = () => setIsNewCustomerOpen(true);
 
   const handleTransactionRecorded = (
     updatedCustomer: Customer,
@@ -249,22 +243,33 @@ export const CustomersTab: React.FC = () => {
     setIsDetailOpen(true);
   };
 
+  const directory = [...customers].sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+  const groups = directory.reduce<{ letter: string; rows: Customer[] }[]>((acc, customer) => {
+    const letter = customer.name.trim().charAt(0) || '#';
+    const last = acc[acc.length - 1];
+    if (!last || last.letter !== letter) acc.push({ letter, rows: [customer] });
+    else last.rows.push(customer);
+    return acc;
+  }, []);
+  const shown = view === 'book' ? groups.flatMap((g) => g.rows) : directory;
+
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
         <IonToolbar className="bg-white/80 backdrop-blur-md px-4 py-2 border-b border-sky-100">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-sm font-bold text-slate-800">مشتریان و بدهکاران</h1>
+              <h1 className="text-sm font-bold text-slate-800">دفترچه مشتریان</h1>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigate('/customers-map')}
-                className="p-2 rounded-2xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition active:scale-95 border border-purple-200/60"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-purple-600 text-white text-xs font-bold shadow-md shadow-purple-400/30 active:scale-95"
                 title="مشاهده نقشه مشتریان"
               >
                 <MapPin className="w-4 h-4" />
+                نقشه
               </button>
 
               <button
@@ -280,7 +285,7 @@ export const CustomersTab: React.FC = () => {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold shadow-md shadow-sky-400/20 active:scale-95 transition"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{kind === 'walkin' ? 'حضوری جدید' : 'مشتری جدید'}</span>
+                <span>مشتری جدید</span>
               </button>
             </div>
           </div>
@@ -293,9 +298,10 @@ export const CustomersTab: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3.5 space-y-4 max-w-md mx-auto pb-8">
-          <div className="grid grid-cols-2 p-1 bg-slate-200/70 rounded-2xl">
+          <div className="grid grid-cols-3 p-1 bg-slate-200/70 rounded-2xl">
             {([
-              ['customers', 'مشتریان'],
+              ['book', 'دفترچه'],
+              ['debtors', 'بدهکاران'],
               ['payments', 'دریافت‌ها'],
             ] as const).map(([k, label]) => (
               <button
@@ -310,47 +316,18 @@ export const CustomersTab: React.FC = () => {
             ))}
           </div>
 
+          {view === 'debtors' && (
+            <div className="rounded-3xl bg-rose-600 text-white p-4 shadow-lg shadow-rose-500/20">
+              <div className="text-xs text-rose-100">مطالبات باز</div>
+              <div className="text-2xl font-black mt-1">{stats ? formatToman(stats.totalDebt) : '...'}</div>
+              <div className="text-[11px] text-rose-100 mt-1">{stats ? stats.debtorsCount.toLocaleString('fa-IR') : '...'} نفر بدهکار</div>
+            </div>
+          )}
+
           {view === 'payments' ? (
             <CustomerPaymentsList refreshKey={paymentsRefresh} onOpenCustomer={openDetailModal} />
           ) : (
           <>
-          {/* Top Summary Card (Live Debt Metric) */}
-          <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-2xl p-3 text-white shadow-xl shadow-sky-400/20 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-1.5 text-xs text-sky-100">
-                <Wallet className="w-4 h-4" />
-                <span>کل مطالبات بازار (بدهکاران):</span>
-              </div>
-              <div className="text-xl font-bold mt-1">
-                {stats ? stats.totalDebt.toLocaleString('fa-IR') : '...'}
-                <span className="text-xs font-normal mr-1 text-sky-100">تومان</span>
-              </div>
-            </div>
-
-            <div className="bg-white/20 backdrop-blur-md px-3.5 py-2 rounded-2xl text-center">
-              <span className="text-[10px] text-sky-100 block">تعداد بدهکاران</span>
-              <span className="text-base font-bold">
-                {stats ? stats.debtorsCount : 0} نفر
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1 p-1 bg-white rounded-2xl border border-slate-200">
-            {([
-              ['shop', 'فروشندگان', stats?.shopsCount],
-              ['walkin', 'مشتریان حضوری', stats?.walkInCount],
-            ] as const).map(([k, label, count]) => (
-              <button
-                key={k}
-                onClick={() => setKind(k)}
-                className={`py-1.5 rounded-xl text-[11px] font-bold transition ${kind === k ? 'bg-sky-600 text-white' : 'text-slate-500'}`}
-              >
-                {label}
-                {count !== undefined && <span className="font-mono"> ({count.toLocaleString('fa-IR')})</span>}
-              </button>
-            ))}
-          </div>
-
           {/* Search Input */}
           <div className="relative flex items-center">
             <div className="absolute right-3.5 text-slate-400 pointer-events-none">
@@ -365,48 +342,8 @@ export const CustomersTab: React.FC = () => {
             />
           </div>
 
-          {/* Filter Chips */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-                filter === 'all'
-                  ? 'bg-sky-500 text-white shadow-sm shadow-sky-400/30'
-                  : 'bg-white text-slate-600 border border-slate-200'
-              }`}
-            >
-              همه
-            </button>
-            <button
-              onClick={() => setFilter('debtors')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 whitespace-nowrap ${
-                filter === 'debtors'
-                  ? 'bg-rose-500 text-white shadow-sm shadow-rose-400/30'
-                  : 'bg-white text-rose-600 border border-rose-200'
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>بدهکاران</span>
-            </button>
-            <button
-              onClick={() => setFilter('settled')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 whitespace-nowrap ${
-                filter === 'settled'
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-400/30'
-                  : 'bg-white text-emerald-700 border border-emerald-200'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>تسویه شده</span>
-            </button>
-          </div>
-
-          {/* Customers List */}
           {loading && customers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
-              <div className="w-8 h-8 border-3 border-sky-200 border-t-sky-500 rounded-full animate-spin" />
-              <span className="text-xs">در حال دریافت لیست مشتریان...</span>
-            </div>
+            <ListSkeleton />
           ) : customers.length === 0 ? (
             <div className="bg-white rounded-3xl p-8 text-center border border-dashed border-sky-200 space-y-3">
               <Users className="w-10 h-10 text-sky-300 mx-auto" />
@@ -424,11 +361,15 @@ export const CustomersTab: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {customers.map((customer) => (
+              {shown.map((customer, index) => {
+                const letter = customer.name.trim().charAt(0) || '#';
+                const showLetter = view === 'book' && (index === 0 || shown[index - 1].name.trim().charAt(0) !== letter);
+                return (
+                <React.Fragment key={customer._id}>
+                {showLetter && <div className="sticky top-0 z-10 px-2 py-1 text-[11px] font-black text-sky-700 bg-slate-50">{letter}</div>}
                 <div
-                  key={customer._id}
                   onClick={() => openDetailModal(customer._id)}
-                  className="bg-white rounded-3xl p-3.5 border border-sky-100 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col gap-2.5 active:scale-[0.99]"
+                  className={`rounded-3xl p-3.5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col gap-2.5 active:scale-[0.99] ${view === 'debtors' ? 'bg-rose-50 border border-rose-200' : 'bg-white border border-sky-100'}`}
                 >
                   {/* Card Header */}
                   <div className="flex items-start justify-between">
@@ -531,9 +472,11 @@ export const CustomersTab: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                </React.Fragment>
+                );
+              })}
               <p className="text-center text-[11px] text-slate-400 pt-2">
-                {customers.length.toLocaleString('fa-IR')} نفر{filter === 'debtors' ? ' بدهکار' : ''} در این لیست
+                {customers.length.toLocaleString('fa-IR')} نفر در این لیست
               </p>
             </div>
           )}

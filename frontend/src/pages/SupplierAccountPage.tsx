@@ -184,7 +184,8 @@ export const SupplierAccountPage: React.FC = () => {
   }, [name]);
 
   const copy = async (text: string) => {
-    await navigator.clipboard?.writeText(text).catch(() => undefined);
+    const { copyText } = await import('../lib/permissions');
+    await copyText(text);
     showNotification({ title: 'کپی شد', message: text, type: 'info' });
   };
 

@@ -201,6 +201,8 @@ export class AccountingService {
         sold: r0(sales.reduce((s, i) => s + (i.finalAmount || 0), 0)),
         soldKg: todaySummary.kg,
         invoices: sales.length,
+        factorySold: r0(sales.filter((i) => i.fulfillment === 'factory').reduce((s, i) => s + (i.finalAmount || 0), 0)),
+        factoryInvoices: sales.filter((i) => i.fulfillment === 'factory').length,
         credit: r0(sales.reduce((s, i) => s + (i.creditAmount || 0), 0)),
         creditInvoices: sales.filter((i) => (i.creditAmount ?? 0) > 0).length,
         priorCollected: await this.collectedPriorOn(day, f.invoices),

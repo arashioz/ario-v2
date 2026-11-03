@@ -213,6 +213,8 @@ export interface DayWork {
   sold: number;
   soldKg: number;
   invoices: number;
+  factorySold?: number;
+  factoryInvoices?: number;
   credit: number;
   creditInvoices: number;
   /** Credit from earlier days that was paid on this day. */

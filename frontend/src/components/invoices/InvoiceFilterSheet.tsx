@@ -97,7 +97,7 @@ export function activeInvoiceFilters(f: InvoiceFilters): { key: keyof InvoiceFil
   for (const key of ['type', 'saleType', 'status', 'method', 'sort'] as const) {
     if (f[key] !== DEFAULT_INVOICE_FILTERS[key]) chips.push({ key, label: LABELS[key][f[key]], reset: { [key]: DEFAULT_INVOICE_FILTERS[key] } });
   }
-  if (f.source !== 'all') chips.push({ key: 'source', label: f.source === 'factory' ? 'از کارخانه' : 'از دفتر', reset: { source: 'all' } });
+  if (f.source !== 'all') chips.push({ key: 'source', label: f.source === 'factory' ? 'ارسال از کارخانه' : 'از دفتر', reset: { source: 'all' } });
   if (f.min || f.max) {
     const fmt = (n: number) => n.toLocaleString('fa-IR');
     const label = f.min && f.max ? `${fmt(f.min)} تا ${fmt(f.max)}` : f.min ? `از ${fmt(f.min)}` : `تا ${fmt(f.max)}`;

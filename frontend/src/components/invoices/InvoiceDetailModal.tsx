@@ -36,6 +36,7 @@ import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
 import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
+import { copyText } from '../../lib/permissions';
 import { formatToman, num, tons } from '../../lib/format';
 
 interface InvoiceDetailModalProps {
@@ -58,6 +59,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const [invoice, setInvoice] = useState<Invoice | null>(invoiceProp);
   const [sheet, setSheet] = useState<'edit' | 'delete' | 'pay' | 'price' | null>(null);
   const [payments, setPayments] = useState<{ id: string; amount: number; date: string; method?: string }[]>([]);
+  const [relations, setRelations] = useState<{ linked: Invoice[]; related: Invoice[] }>({ linked: [], related: [] });
 
   useEffect(() => {
     setInvoice(invoiceProp);
@@ -65,6 +67,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   }, [invoiceProp]);
 
   useEffect(() => {
+    if (!invoiceProp?._id) return;
+    invoicesService.relations(invoiceProp._id).then(setRelations).catch(() => setRelations({ linked: [], related: [] }));
     if (!invoiceProp?.customerId || invoiceProp.type !== 'sale') {
       setPayments([]);
       return;
@@ -147,12 +151,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   const handleCopyText = async () => {
     const text = await invoiceText();
-    try {
-      await navigator.clipboard.writeText(text);
-      showNotification({ title: 'فاکتور کپی شد', message: 'متن فاکتور در کلیپ‌بورد است.', type: 'success' });
-    } catch {
-      showNotification({ title: 'کپی انجام نشد', message: 'دسترسی کلیپ‌بورد مسدود است.', type: 'error' });
-    }
+    const ok = await copyText(text);
+    showNotification(
+      ok
+        ? { title: 'فاکتور کپی شد', message: 'متن فاکتور در کلیپ‌بورد است.', type: 'success' }
+        : { title: 'کپی انجام نشد', message: 'دسترسی کپی را در تنظیمات مرورگر یا گوشی اجازه دهید.', type: 'error' },
+    );
   };
 
   const handleWhatsApp = async () => {
@@ -196,6 +200,17 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
       <IonContent className="bg-slate-50">
         <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0 print:max-w-none">
+          {(relations.linked.length > 0 || relations.related.length > 0) && (
+            <div className="rounded-2xl bg-white border border-slate-200 px-3 py-2 space-y-1.5 print:hidden">
+              <span className="text-[11px] font-bold text-slate-700">ارتباط‌های این فاکتور</span>
+              {[...relations.linked, ...relations.related].slice(0, 8).map((row) => (
+                <button key={row._id} type="button" onClick={() => setInvoice(row)} className="w-full flex items-center justify-between gap-2 text-[11px] text-right">
+                  <span>{row.type === 'purchase' ? 'خرید' : 'فروش'} {row.invoiceNumber} · {row.customerName}{row.fulfillment === 'factory' ? ' · ارسال از کارخانه' : ''}</span>
+                  <span className="font-mono shrink-0">{formatToman(row.finalAmount)}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {invoice.fulfillment === 'factory' && (
             <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5 print:hidden">
               {isSale
@@ -299,6 +314,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 font-medium inline-block mt-0.5">
                   {saleTypeLabel}
                 </span>
+                {invoice.fulfillment === 'factory' && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold inline-block mt-0.5 mr-1">
+                    ارسال از کارخانه
+                  </span>
+                )}
                 {invoice.proformaNumber && (
                   <span className="text-[9px] text-amber-700 block mt-1" dir="ltr">
                     {invoice.proformaNumber}

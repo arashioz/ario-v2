@@ -104,7 +104,7 @@ export function invoiceSms(inv: Invoice, s: AppSettings, customerBalance?: numbe
     'لطفاً پس از واریز رسید را ارسال کنید.',
   ].filter(Boolean);
   const cardBlock = owed && (cardNo || cards.holder) ? `\n${cardLines.join('\n')}` : '';
-  return renderSms(s.smsTemplates.invoice, {
+  const body = renderSms(s.smsTemplates.invoice, {
     ...shopVars(s),
     ...cards,
     card: cardNo,
@@ -125,6 +125,7 @@ export function invoiceSms(inv: Invoice, s: AppSettings, customerBalance?: numbe
     balance: customerBalance && customerBalance > 0 ? formatToman(customerBalance) : '',
     cardBlock,
   });
+  return inv.fulfillment === 'factory' ? `ارسال از کارخانه\n${body}` : body;
 }
 
 export function proformaSms(p: Proforma, s: AppSettings): string {
@@ -244,7 +245,8 @@ export function whatsappUrl(phone: string | undefined, text: string) {
 /** Copy the text and open the phone's SMS app addressed to `phone`. */
 export async function openSms(phone: string | undefined, text: string) {
   try {
-    await navigator.clipboard?.writeText(text);
+    const { copyText } = await import('./permissions');
+    await copyText(text);
   } catch {
     /* clipboard can be blocked; the SMS app still gets the body */
   }

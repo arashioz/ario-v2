@@ -29,6 +29,10 @@ export class Product {
   /** Manual factory purchase cost per stock unit; null follows the latest purchase invoice. */
   @Prop({ type: Number, default: null, min: 0 }) factoryPrice: number | null;
   @Prop({ default: false }) autoPricing: boolean;
+  /** Per-kilogram base used when autoPricing is on. Falls back to category then buyPrice. */
+  @Prop({ default: 0, min: 0 }) basePrice: number;
+  /** Extra toman added once per package on top of the per-kg amount. */
+  @Prop({ default: 0, min: 0 }) packageFee: number;
   @Prop({ default: 0, min: 0 }) commissionAmount: number;
   /** Profit percentage on base plus product fee; legacy field name retained for saved products. */
   @Prop({ default: 0, min: 0 }) commissionPercent: number;
@@ -39,6 +43,10 @@ export class Product {
 
   @Prop({ trim: true, index: true })
   barcode?: string;
+
+  /** Stable stock code, assigned automatically. */
+  @Prop({ trim: true, unique: true, sparse: true })
+  sku?: string;
 
   @Prop({ trim: true, default: 'عمومی', index: true })
   category: string;

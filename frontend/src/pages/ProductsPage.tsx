@@ -440,6 +440,9 @@ export const ProductsPage: React.FC = () => {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-100">
                             {product.category || 'عمومی'}
                           </span>
+                          {product.sku && (
+                            <span className="text-[10px] font-mono text-slate-500" dir="ltr">{product.sku}</span>
+                          )}
                           {product.barcode && (
                             <span
                               className="text-[10px] font-mono text-slate-400 flex items-center gap-0.5"

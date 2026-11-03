@@ -1,8 +1,9 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { IonApp } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { requestAppPermissions } from './lib/permissions';
 import { NotificationProvider } from './context/NotificationContext';
 import { Login } from './pages/Login';
 import { TabsLayout } from './pages/TabsLayout';
@@ -19,6 +20,10 @@ const isPublicPath = (path: string) => path === '/catalog' || path.startsWith('/
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (isAuthenticated) void requestAppPermissions();
+  }, [isAuthenticated]);
 
   if (isPublicPath(pathname)) return <PageLoadBoundary><Suspense fallback={<PageLoader />}><CatalogPage /></Suspense></PageLoadBoundary>;
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent } from '@ionic/react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronLeft,
@@ -368,6 +368,12 @@ export const SettingsPage: React.FC = () => {
       />
       <IonContent fullscreen className="bg-slate-50">
         <div className="p-3 space-y-4 max-w-md mx-auto pb-8">
+          {isAdmin && (
+            <Link to="/warehouses" className="block rounded-2xl bg-white border border-indigo-100 px-4 py-3 text-sm font-bold text-indigo-800">
+              انبارهای جدا
+              <span className="block text-[11px] font-normal text-slate-500 mt-1">موجودی، تاریخ خرید و فاکتورهای خرید و فروش هر دسته</span>
+            </Link>
+          )}
           {!adminPart && <Group title="صفحه فروش">
             <Row id="layout" title="نمایش کالاها" hint={LAYOUTS.find((l) => l.id === pos.layout)?.label} icon={LayoutGrid} tone="sky" {...row}>
               <div className="space-y-2.5">

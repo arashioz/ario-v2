@@ -132,7 +132,7 @@ export const PurchaseInvoiceBoard: React.FC<{
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           {num(inv.items.length)} قلم · {weight(inv.totalWeightKg)}
-                          {inv.fulfillment === 'factory' ? ' · کارخانه' : ''}
+                          {inv.fulfillment === 'factory' ? ' · ارسال از کارخانه' : ''}
                         </div>
                       </div>
                       <div className="text-left shrink-0 text-[12px] font-bold font-mono text-slate-800">{formatToman(inv.finalAmount)}</div>

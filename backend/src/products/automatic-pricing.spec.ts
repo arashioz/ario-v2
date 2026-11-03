@@ -1,4 +1,4 @@
-import { automaticPrice } from './automatic-pricing';
+import { automaticPrice, channelPrices } from './automatic-pricing';
 
 describe('category base and product commissions', () => {
   const product = { category: 'نبات', unit: 'بسته', weightPerUnitKg: 3, commissionAmount: 2000, commissionPercent: 5, commissionUnit: 'kg' };
@@ -17,5 +17,15 @@ describe('category base and product commissions', () => {
   });
   it('uses the purchase price as the base when the category has no list price', () => {
     expect(automaticPrice({ ...product, buyPrice: 20000, commissionAmount: 0, commissionPercent: 10 }, undefined)).toBe(22000);
+  });
+  it('uses the product base per kilogram plus a flat package amount', () => {
+    expect(automaticPrice({ ...product, basePrice: 10000, packageFee: 1500, commissionAmount: 2000, commissionPercent: 0 }, undefined)).toBe(37500);
+  });
+  it('applies a different percent to each sale channel from the same base', () => {
+    const tiers = channelPrices(
+      { ...product, commissionAmount: 0, commissionPercent: 0 },
+      { category: 'نبات', amount: 10000, unit: 'kg', retailPercent: 10, supermarketPercent: 5, wholesalePercent: 2 },
+    );
+    expect(tiers).toEqual({ retail: 33000, supermarket: 31500, wholesale: 30600 });
   });
 });

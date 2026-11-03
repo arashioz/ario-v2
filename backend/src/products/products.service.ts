@@ -13,7 +13,7 @@ import { join } from 'path';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { StockCount, StockCountDocument } from './schemas/stock-count.schema';
 import { SettingsService } from '../settings/settings.service';
-import { automaticPrice, CategoryBasePrice } from './automatic-pricing';
+import { channelPrices, CategoryBasePrice } from './automatic-pricing';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import {
@@ -187,6 +187,20 @@ export class ProductsService implements OnModuleInit {
 
   async onModuleInit() {
     await this.seedInitialProducts();
+    await this.ensureSkus().catch(() => undefined);
+  }
+
+  private async nextSku(): Promise<string> {
+    const last = await this.productModel.findOne({ sku: /^AR-\d+$/ }).sort({ sku: -1 }).select('sku').lean().exec();
+    const n = last?.sku ? Number(String(last.sku).slice(3)) + 1 : (await this.productModel.countDocuments()) + 1;
+    return `AR-${String(Number.isFinite(n) && n > 0 ? n : 1).padStart(5, '0')}`;
+  }
+
+  private async ensureSkus() {
+    const missing = await this.productModel.find({ $or: [{ sku: { $exists: false } }, { sku: '' }, { sku: null }] }).select('_id').exec();
+    for (const product of missing) {
+      await this.productModel.updateOne({ _id: product._id }, { $set: { sku: await this.nextSku() } }).exec();
+    }
   }
 
   private async seedInitialProducts() {
@@ -384,11 +398,14 @@ export class ProductsService implements OnModuleInit {
       ],
     });
 
+    if (!product.sku) product.sku = await this.nextSku();
     if (product.autoPricing) {
       const settings = await this.settings.get();
-      const price = automaticPrice(product, settings.categoryBasePrices?.find((r) => r.category === product.category));
-      product.sellPrice = product.priceRetail = product.priceSupermarket = product.priceWholesale = price;
-      product.priceHistory[0].oldPrice = product.priceHistory[0].newPrice = price;
+      const tiers = channelPrices(product, settings.categoryBasePrices?.find((r) => r.category === product.category));
+      product.sellPrice = product.priceRetail = tiers.retail;
+      product.priceSupermarket = tiers.supermarket;
+      product.priceWholesale = tiers.wholesale;
+      product.priceHistory[0].oldPrice = product.priceHistory[0].newPrice = tiers.retail;
     }
     return product.save();
   }
@@ -476,8 +493,8 @@ export class ProductsService implements OnModuleInit {
     if (updateDto.autoPricing ?? existing.autoPricing) {
       const merged = { ...existing.toObject(), ...updateDto };
       const settings = await this.settings.get();
-      const price = automaticPrice(merged, settings.categoryBasePrices?.find((r) => r.category === merged.category));
-      Object.assign(set, { sellPrice: price, priceRetail: price, priceSupermarket: price, priceWholesale: price });
+      const tiers = channelPrices(merged, settings.categoryBasePrices?.find((r) => r.category === merged.category));
+      Object.assign(set, { sellPrice: tiers.retail, priceRetail: tiers.retail, priceSupermarket: tiers.supermarket, priceWholesale: tiers.wholesale });
     }
     const priceChanged = ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale'].some((k) => set[k] !== undefined && set[k] !== existing[k]);
     if (priceChanged) set.priceSetAt = new Date();
@@ -493,25 +510,48 @@ export class ProductsService implements OnModuleInit {
 
   async saveCategoryPrice(rule: CategoryBasePrice, actor: string) {
     const category = String(rule.category || '').trim();
+    const pct = (n: unknown) => Math.min(1000, Math.max(0, Math.round(Number(n) || 0)));
     if (!category || !Number.isFinite(rule.amount) || rule.amount < 0 || rule.amount > 1e12 || !['kg', 'unit'].includes(rule.unit))
       throw new BadRequestException('دسته‌بندی، مبلغ یا واحد قیمت پایه نامعتبر است');
-    const next = { category, amount: rule.amount, unit: rule.unit };
-    const products = await this.productModel.find({ category, isActive: true, autoPricing: true });
-    // Validate every weight before changing either settings or product prices.
-    const changes = products.map((p) => ({ product: p, price: automaticPrice(p, next) }));
+    const next: CategoryBasePrice = {
+      category,
+      amount: rule.amount,
+      unit: rule.unit,
+      retailPercent: pct(rule.retailPercent),
+      supermarketPercent: pct(rule.supermarketPercent),
+      wholesalePercent: pct(rule.wholesalePercent),
+    };
+    const products = await this.productModel.find({ category, isActive: true });
+    const changes: { product: ProductDocument; tiers: ReturnType<typeof channelPrices> }[] = [];
+    const skipped: string[] = [];
+    for (const product of products) {
+      try {
+        changes.push({ product, tiers: channelPrices(product, next) });
+      } catch {
+        skipped.push(product.name);
+      }
+    }
     const settings = await this.settings.get();
     settings.categoryBasePrices = [...(settings.categoryBasePrices || []).filter((r) => r.category !== category), next];
     settings.markModified('categoryBasePrices');
     await settings.save();
-    if (changes.length) await this.productModel.bulkWrite(changes.map(({ product, price }) => ({ updateOne: {
-      filter: { _id: product._id, autoPricing: true, category },
+    if (changes.length) await this.productModel.bulkWrite(changes.map(({ product, tiers }) => ({ updateOne: {
+      filter: { _id: product._id, category },
       update: {
-        $set: { sellPrice: price, priceRetail: price, priceSupermarket: price, priceWholesale: price, priceSetAt: new Date() },
+        $set: {
+          sellPrice: tiers.retail,
+          priceRetail: tiers.retail,
+          priceSupermarket: tiers.supermarket,
+          priceWholesale: tiers.wholesale,
+          priceSetAt: new Date(),
+          autoPricing: true,
+          ...(next.unit === 'kg' ? { basePrice: next.amount } : {}),
+        },
         $unset: { priceCostBasisPerKg: 1 },
-        $push: { priceHistory: { $each: [{ oldPrice: product.sellPrice, newPrice: price, reason: 'قیمت پایه دسته + کارمزد محصول', changedByName: actor, date: new Date() }], $position: 0, $slice: 40 } },
+        $push: { priceHistory: { $each: [{ oldPrice: product.sellPrice, newPrice: tiers.retail, reason: 'تغییر قیمت پایه و درصد دسته', changedByName: actor, date: new Date() }], $position: 0, $slice: 40 } },
       },
     } })));
-    return { modified: changes.length };
+    return { modified: changes.length, skipped };
   }
 
   async updatePrice(

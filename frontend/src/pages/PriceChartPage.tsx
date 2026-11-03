@@ -255,7 +255,7 @@ export const PriceChartPage: React.FC = () => {
 
   const handleCopyReport = () => {
     if (!report?.copyText) return;
-    navigator.clipboard?.writeText(report.copyText);
+    void import('../lib/permissions').then(({ copyText }) => copyText(report.copyText));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

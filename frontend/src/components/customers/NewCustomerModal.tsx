@@ -252,29 +252,29 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
 
             {/* Address & Map Picker */}
             <div className="space-y-2 text-right">
-              <div className="flex items-center justify-between">
+              <div className="space-y-2">
                 <label className="text-xs font-medium text-slate-700 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-sky-500" />
                   <span>آدرس و موقعیت مکانی</span>
                 </label>
 
-                <div className="flex items-center gap-1">
+                <div className="grid grid-cols-2 gap-2 w-full">
                   <button
                     type="button"
                     onClick={requestLocation}
                     disabled={locating}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-700 bg-white px-2.5 py-1 rounded-xl border border-sky-200 active:scale-95 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 text-sm font-bold text-white bg-sky-600 px-3 py-3 rounded-2xl active:scale-95 disabled:opacity-50"
                   >
-                    <Navigation className="w-3.5 h-3.5" />
+                    <Navigation className="w-5 h-5" />
                     لوکیشن من
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsMapPickerOpen(true)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-600 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-xl transition active:scale-95 border border-sky-200/60"
+                    className="inline-flex items-center justify-center gap-1.5 text-sm font-bold text-sky-800 bg-white px-3 py-3 rounded-2xl border border-sky-300 active:scale-95"
                   >
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{latitude != null ? 'تنظیم روی نقشه' : 'انتخاب روی نقشه'}</span>
+                    <MapPin className="w-5 h-5" />
+                    <span>{latitude != null ? 'تنظیم نقشه' : 'نقشه'}</span>
                   </button>
                 </div>
               </div>

@@ -19,7 +19,7 @@ import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
-import { PricePeriodService, priceOn } from '../pricing/price-period.service';
+import { PricePeriodService } from '../pricing/price-period.service';
 
 interface ActingUser {
   id?: string;
@@ -48,6 +48,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   /** Shop purchases define the price of each date span. Factory shipments then use that span. */
   async onApplicationBootstrap() {
     await this.syncPricePeriods().catch(() => undefined);
+    await this.rebuildStock().catch(() => undefined);
   }
 
   // ---------------------------------------------------------------------------
@@ -62,22 +63,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   }
 
   private async syncPricePeriods() {
-    const periods = await this.pricePeriods.rebuild();
-    const sales = await this.invoiceModel.find({ type: 'sale', fulfillment: 'factory' }).exec();
-    for (const sale of sales) {
-      let changed = false;
-      for (const it of sale.items || []) {
-        if (it.factoryCostConfirmed || Number(it.factoryUnitCost) > 0) continue;
-        const price = priceOn(periods, String(it.productId), sale.invoiceDate);
-        if (!(price > 0) || Math.round(Number(it.factoryUnitCost) || 0) === price) continue;
-        it.factoryUnitCost = price;
-        changed = true;
-      }
-      if (!changed) continue;
-      sale.markModified('items');
-      await sale.save();
-      await this.attachFactoryPurchase(sale, sale.createdByName || '');
-    }
+    await this.pricePeriods.rebuild();
   }
 
   private async nextInvoiceNumber(isSale: boolean): Promise<string> {
@@ -233,8 +219,13 @@ export class InvoicesService implements OnApplicationBootstrap {
   }
 
   private async resolveCustomer(dto: CreateInvoiceDto) {
-    if (!dto.customerId || !Types.ObjectId.isValid(dto.customerId)) return null;
-    return this.customerModel.findById(dto.customerId).exec();
+    if ((dto.type || 'sale') !== 'sale') return null;
+    return this.customersService.findOrCreateForSale({
+      customerId: dto.customerId,
+      name: dto.customerName,
+      phone: dto.customerPhone,
+      saleType: dto.saleType,
+    });
   }
 
   /** Empty when the customer has no branches. Required, and must match a defined branch, when they do. */
@@ -618,6 +609,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     const fromFactory = isSale && dto.fulfillment === 'factory';
     if (fromFactory) await this.assertFactoryEnabled();
     const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory, isSale ? undefined : dto.customerName);
+    if (fromFactory) for (const it of items) it.factoryCostConfirmed = true;
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const branchName = this.branchName(customer, dto.branchName);
     // Purchases on credit go on the supplier's account (see SuppliersService).
@@ -681,11 +673,14 @@ export class InvoicesService implements OnApplicationBootstrap {
     await this.syncShippingExpense(invoice, recordedByName);
     if (fromFactory) await this.attachFactoryPurchase(invoice, recordedByName);
 
-    if (isSale && credit > 0 && customer) {
-      invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
-      await invoice.save();
-      await this.customersService.alignInvoiceDebts(String(customer._id));
-      return this.findById(String(invoice._id));
+    if (isSale && customer) {
+      await this.customersService.touchSale(String(customer._id), invoiceDate);
+      if (credit > 0) {
+        invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
+        await invoice.save();
+        await this.customersService.alignInvoiceDebts(String(customer._id));
+        return this.findById(String(invoice._id));
+      }
     }
     if (!isSale) {
       await this.suppliersService.sync(invoice.customerName);
@@ -720,6 +715,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
     if (willShopSale) await this.shiftStock(prepared.items, -1);
     else if (willShopPurchase) await this.shiftStock(prepared.items, 1, true);
+    if (willFactory && isSale) for (const it of prepared.items) it.factoryCostConfirmed = true;
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const branchName = this.branchName(customer, dto.branchName ?? invoice.branchName);
@@ -777,6 +773,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     await this.syncShippingExpense(invoice, recordedByName);
     if (isSale && willFactory) await this.attachFactoryPurchase(invoice, recordedByName);
     else if (isSale && wasFactory) await this.detachFactoryPurchase(invoice);
+    if (isSale && customer) await this.customersService.touchSale(String(customer._id), invoiceDate);
 
     if (!isSale) {
       if (invoice.fulfillment === 'factory' && invoice.factorySaleId) {
@@ -929,7 +926,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
     await invoice.save();
     if (invoice.type === 'purchase') await this.suppliersService.sync(invoice.customerName);
-    if (purchaseEntersShop(invoice) || invoice.fulfillment === 'factory') await this.syncPricePeriods();
+    if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
     return this.findById(id);
   }
 
@@ -1051,6 +1048,30 @@ export class InvoicesService implements OnApplicationBootstrap {
       totalInvoicesCount: allSales.length,
       chartData,
     };
+  }
+
+  /** Direct pair (factory purchase/sale) plus recent invoices that share a product. */
+  async relations(id: string) {
+    const invoice = await this.findById(id);
+    const linkedIds = [invoice.factoryPurchaseId, invoice.factorySaleId].filter((value) => value && Types.ObjectId.isValid(String(value)));
+    const select = 'invoiceNumber type customerName invoiceDate finalAmount fulfillment totalWeightKg';
+    const linked = linkedIds.length
+      ? await this.invoiceModel.find({ _id: { $in: linkedIds } }).select(select).lean().exec()
+      : [];
+    const productIds = [...new Set((invoice.items || []).map((item) => String(item.productId || '')).filter((value) => Types.ObjectId.isValid(value)))];
+    const related = productIds.length
+      ? await this.invoiceModel
+          .find({
+            _id: { $ne: invoice._id, $nin: linkedIds },
+            'items.productId': { $in: productIds },
+          })
+          .sort({ invoiceDate: -1 })
+          .limit(12)
+          .select(select)
+          .lean()
+          .exec()
+      : [];
+    return { linked, related };
   }
 
   /**

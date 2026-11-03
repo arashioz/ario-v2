@@ -1,6 +1,6 @@
 import React, { useLayoutEffect } from 'react';
 import { IonContent, IonPage } from '@ionic/react';
-import { SplashScreen } from './SplashScreen';
+import { PageSkeleton } from './ui/Skeleton';
 import { pageActivity } from '../services/pageActivity';
 
 /**
@@ -14,7 +14,7 @@ import { pageActivity } from '../services/pageActivity';
  */
 export const PageLoader: React.FC = () => {
   useLayoutEffect(() => pageActivity.begin(), []);
-  return <SplashScreen />;
+  return <PageSkeleton />;
 };
 
 /** A failed chunk download must offer recovery, rather than leave a blank screen. */

@@ -83,6 +83,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editBranches, setEditBranches] = useState<string[]>([]);
+  const [editType, setEditType] = useState<'walkin' | 'retail' | 'supermarket' | 'wholesale'>('supermarket');
   const [branchDraft, setBranchDraft] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -147,6 +148,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     setEditName(customer.name);
     setEditPhone(customer.phoneNumber || '');
     setEditBranches(customer.branches || []);
+    setEditType(customer.kind === 'walkin' ? 'walkin' : (customer.customerType || 'supermarket'));
     setBranchDraft('');
     setEditingProfile(true);
   };
@@ -161,6 +163,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         name: editName.trim(),
         phoneNumber: editPhone.trim(),
         branches,
+        kind: editType === 'walkin' ? 'walkin' : 'shop',
+        customerType: editType === 'walkin' ? 'retail' : editType,
       });
       setCustomer(updated);
       setEditingProfile(false);
@@ -324,6 +328,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-800">{customer.name}</h3>
+                    <span className="text-[10px] font-bold text-sky-700">{customer.kind === 'walkin' ? 'حضوری' : customer.customerType === 'wholesale' ? 'عمده‌فروش' : customer.customerType === 'retail' ? 'فروشنده' : 'سوپرمارکت'}</span>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-mono" dir="ltr">
                       <span>{customer.phoneNumber || 'بدون شماره'}</span>
                     </div>
@@ -359,6 +364,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     placeholder="نام مشتری"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white"
                   />
+                  <div className="grid grid-cols-2 gap-1">
+                    {([
+                      ['walkin', 'حضوری'],
+                      ['retail', 'فروشنده'],
+                      ['supermarket', 'سوپرمارکت'],
+                      ['wholesale', 'عمده‌فروش'],
+                    ] as const).map(([id, label]) => (
+                      <button key={id} type="button" onClick={() => setEditType(id)} className={`py-2 rounded-xl text-[11px] font-bold ${editType === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>{label}</button>
+                    ))}
+                  </div>
                   <input
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}

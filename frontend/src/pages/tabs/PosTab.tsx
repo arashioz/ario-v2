@@ -190,12 +190,12 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName, customerName, customerPhone }: CheckoutResult) => {
+  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, branchName, customerName, customerPhone }: CheckoutResult) => {
     if (!hasInvoiceType || !lines.length || submittingRef.current) return;
     submittingRef.current = true;
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
-      const unitPrice = Math.round(factorySellPrices?.[l.product._id] ?? base.unitPrice);
+      const unitPrice = Math.round(base.unitPrice);
       return {
         ...base,
         unitPrice,

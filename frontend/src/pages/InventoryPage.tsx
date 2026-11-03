@@ -15,6 +15,7 @@ import type { Period } from '../components/ui/PeriodPicker';
 import { formatJalali, dateToYmd } from '../lib/jalali';
 import { formatToman, num, percent, profitColor, tons, weight } from '../lib/format';
 import { PARENT_COMPANY } from '../services/suppliers.service';
+import { ListSkeleton } from '../components/ui/Skeleton';
 
 type SortKey = 'stock' | 'sold' | 'profit' | 'value';
 const FILTER_KEY = 'ario.inventoryFilter.v1';
@@ -174,6 +175,7 @@ export const InventoryPage: React.FC = () => {
 
         <div className="p-3 space-y-3 max-w-2xl mx-auto pb-8">
           {error && <div className="text-xs text-rose-700 bg-rose-50 rounded-2xl p-3">{error}</div>}
+          {!data && !error && <ListSkeleton rows={5} />}
 
           {/* Stock on hand */}
           <div className="rounded-2xl p-4 text-white bg-gradient-to-br from-sky-600 to-indigo-700 shadow-xl shadow-sky-700/20">

@@ -123,7 +123,7 @@ export class BackupSettings {
 /** Single document holding shop-wide preferences. */
 @Schema({ timestamps: true, collection: 'appsettings' })
 export class AppSettings {
-  @Prop({ type: [Object], default: [] }) categoryBasePrices: { category: string; amount: number; unit: 'kg' | 'unit' }[];
+  @Prop({ type: [Object], default: [] }) categoryBasePrices: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }[];
 
   @Prop({ trim: true, default: 'فروشگاه آریو' })
   shopName: string;

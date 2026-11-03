@@ -16,6 +16,7 @@ const ChequesPage = lazy(() => import('./ChequesPage').then((m) => ({ default: m
 const ExpensesPage = lazy(() => import('./ExpensesPage').then((m) => ({ default: m.ExpensesPage })));
 const FollowUpsPage = lazy(() => import('./FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })));
 const InventoryPage = lazy(() => import('./InventoryPage').then((m) => ({ default: m.InventoryPage })));
+const WarehousesPage = lazy(() => import('./WarehousesPage').then((m) => ({ default: m.WarehousesPage })));
 const StocktakePage = lazy(() => import('./StocktakePage').then((m) => ({ default: m.StocktakePage })));
 const ProfitPage = lazy(() => import('./ProfitPage').then((m) => ({ default: m.ProfitPage })));
 const CreditReportPage = lazy(() => import('./CreditReportPage').then((m) => ({ default: m.CreditReportPage })));
@@ -110,6 +111,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/cashbox" element={loadPage(<CashboxPage />)} />
           <Route path="/follow-ups" element={loadPage(<FollowUpsPage />)} />
           <Route path="/inventory" element={loadPage(<InventoryPage />)} />
+          <Route path="/warehouses" element={loadPage(<WarehousesPage />)} />
           <Route path="/stocktake" element={loadPage(<StocktakePage />)} />
           <Route path="/profit" element={loadPage(<ProfitPage />)} />
           <Route path="/credit-report" element={loadPage(<CreditReportPage />)} />
