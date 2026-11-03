@@ -412,37 +412,35 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                 انتخاب از کالاهای موجود یا نام دلخواه:
               </label>
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-5 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="search"
                   value={productQuery}
                   onChange={(e) => setProductQuery(e.target.value)}
-                  placeholder="جستجوی کالا…"
+                  placeholder="جستجوی نام، دسته یا کد کالا…"
                   className="w-full h-10 pr-10 pl-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-emerald-500 transition"
                 />
-              </div>
-              <div className="max-h-52 overflow-y-auto rounded-2xl border border-slate-200 bg-white">
-                {products.filter((p) => {
-                  const q = searchKey(productQuery);
-                  if (!q) return true;
-                  return searchKey(`${p.name} ${p.category || ''} ${p.subcategory || ''} ${p.barcode || ''} ${p.sku || ''}`).includes(q);
-                }).slice(0, 40).map((p) => {
-                  const ratio = p.unitRatio || p.weightPerUnitKg || 1;
-                  const units = Math.round((p.stock || 0) * 100) / 100;
-                  return (
-                    <button
-                      key={p._id}
-                      type="button"
-                      onClick={() => handleProductSelect(p._id)}
-                      className={`w-full px-3 py-2 text-right text-xs border-b border-slate-100 last:border-0 ${selectedProductId === p._id ? 'bg-emerald-50 text-emerald-800' : 'text-slate-700'}`}
-                    >
-                      <span className="font-bold">{p.name}</span>
-                      <span className="block text-[10px] text-slate-400">{p.category}{p.sku ? ` · ${p.sku}` : ''} · موجودی {units.toLocaleString('fa-IR')} {p.unit}{ratio !== 1 ? ` · ${(Math.round(units * ratio * 100) / 100).toLocaleString('fa-IR')} کیلو` : ''}</span>
-                    </button>
-                  );
-                })}
-                {productQuery.trim() && products.every((p) => !searchKey(`${p.name} ${p.category || ''} ${p.sku || ''}`).includes(searchKey(productQuery))) && (
-                  <p className="px-3 py-3 text-[11px] text-slate-400">کالایی با این نام در انبار نیست. پایین می‌توانید کالای جدید بنویسید.</p>
+                {productQuery.trim() && (
+                  <div className="absolute right-0 left-0 top-full z-30 mt-1 max-h-52 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lg">
+                    {products.filter((p) => searchKey(`${p.name} ${p.category || ''} ${p.subcategory || ''} ${p.barcode || ''} ${p.sku || ''}`).includes(searchKey(productQuery))).slice(0, 40).map((p) => {
+                      const ratio = p.unitRatio || p.weightPerUnitKg || 1;
+                      const units = Math.round((p.stock || 0) * 100) / 100;
+                      return (
+                        <button
+                          key={p._id}
+                          type="button"
+                          onClick={() => { handleProductSelect(p._id); setProductQuery(''); }}
+                          className="w-full px-3 py-2 text-right text-xs border-b border-slate-100 last:border-0 text-slate-700 active:bg-emerald-50"
+                        >
+                          <span className="font-bold">{p.name}</span>
+                          <span className="block text-[10px] text-slate-400">{p.category}{p.sku ? ` · ${p.sku}` : ''} · موجودی {units.toLocaleString('fa-IR')} {p.unit}{ratio !== 1 ? ` · ${(Math.round(units * ratio * 100) / 100).toLocaleString('fa-IR')} کیلو` : ''}</span>
+                        </button>
+                      );
+                    })}
+                    {products.every((p) => !searchKey(`${p.name} ${p.category || ''} ${p.subcategory || ''} ${p.barcode || ''} ${p.sku || ''}`).includes(searchKey(productQuery))) && (
+                      <p className="px-3 py-3 text-[11px] text-slate-400">کالایی با این عبارت در انبار نیست. پایین می‌توانید کالای جدید بنویسید.</p>
+                    )}
+                  </div>
                 )}
               </div>
               {loadError && (
