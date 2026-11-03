@@ -190,6 +190,7 @@ export class ProformasService {
     this.applyTerms(doc, body);
     await this.applyBranch(doc);
     const shippedAt = new Date();
+    const orderDate = doc.orderDate ? new Date(doc.orderDate) : shippedAt;
 
     const dto: CreateInvoiceDto = {
       type: 'sale',
@@ -198,7 +199,7 @@ export class ProformasService {
       customerName: doc.customerName,
       customerPhone: doc.customerPhone,
       branchName: doc.branchName || '',
-      invoiceDate: body.date || shippedAt.toISOString(),
+      invoiceDate: orderDate.toISOString(),
       items: doc.items.map((i) => ({
         productId: i.productId,
         productName: i.productName,
@@ -231,7 +232,7 @@ export class ProformasService {
       dueDays: doc.dueDays,
     };
 
-    const invoice = await this.invoices.create(dto, recordedByName, { proformaNumber: doc.number, shippedAt });
+    const invoice = await this.invoices.create(dto, recordedByName, { proformaNumber: doc.number, shippedAt, proformaDate: orderDate });
     const split = (invoice as { splitInto?: { invoiceNumber: string }[] }).splitInto;
     doc.status = 'shipped';
     doc.shippedAt = shippedAt;

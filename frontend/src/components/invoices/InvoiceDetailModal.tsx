@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Clock,
   Building,
+  Factory,
   Pencil,
   Trash2,
   Wallet,
@@ -38,6 +39,15 @@ import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customer
 import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
 import { copyText } from '../../lib/permissions';
 import { formatToman, num, tons } from '../../lib/format';
+import { dateToYmd, formatJalali } from '../../lib/jalali';
+import { JalaliDateSheet } from '../ui/JalaliDatePicker';
+
+const personOf = (invoice: Invoice) => {
+  if (invoice.type !== 'purchase' || invoice.fulfillment !== 'factory') return invoice.customerName;
+  if (invoice.endCustomerName) return invoice.endCustomerName;
+  const named = String(invoice.notes || '').match(/برای\s+([^،.]+)/)?.[1]?.trim() || '';
+  return named && !named.startsWith('فاکتور') ? named : invoice.customerName;
+};
 
 interface InvoiceDetailModalProps {
   isOpen: boolean;
@@ -59,7 +69,8 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const [invoice, setInvoice] = useState<Invoice | null>(invoiceProp);
   const [sheet, setSheet] = useState<'edit' | 'delete' | 'pay' | 'price' | null>(null);
   const [payments, setPayments] = useState<{ id: string; amount: number; date: string; method?: string }[]>([]);
-  const [relations, setRelations] = useState<{ linked: Invoice[]; related: Invoice[] }>({ linked: [], related: [] });
+  const [showFactoryCost, setShowFactoryCost] = useState(false);
+  const [dateKind, setDateKind] = useState<'proforma' | 'ship' | 'paid' | null>(null);
 
   useEffect(() => {
     setInvoice(invoiceProp);
@@ -68,7 +79,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   useEffect(() => {
     if (!invoiceProp?._id) return;
-    invoicesService.relations(invoiceProp._id).then(setRelations).catch(() => setRelations({ linked: [], related: [] }));
     if (!invoiceProp?.customerId || invoiceProp.type !== 'sale') {
       setPayments([]);
       return;
@@ -89,6 +99,20 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       })
       .catch(() => setPayments([]));
   }, [invoiceProp]);
+
+  const saveDate = async (ymd: string) => {
+    if (!invoice || !dateKind) return;
+    const patch = dateKind === 'proforma' ? { proformaDate: ymd } : dateKind === 'ship' ? { shippedAt: ymd } : { paidAt: ymd };
+    try {
+      const updated = await invoicesService.setDates(invoice._id, patch);
+      setInvoice(updated);
+      onChanged?.(updated);
+    } catch {
+      showNotification({ title: 'تاریخ ذخیره نشد', message: 'دوباره تلاش کنید.', type: 'error' });
+    } finally {
+      setDateKind(null);
+    }
+  };
 
   if (!invoice) return null;
 
@@ -198,26 +222,19 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         </IonToolbar>
       </IonHeader>
 
-      <IonContent className="bg-slate-50">
-        <div className="p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0 print:max-w-none">
-          {(relations.linked.length > 0 || relations.related.length > 0) && (
-            <div className="rounded-2xl bg-white border border-slate-200 px-3 py-2 space-y-1.5 print:hidden">
-              <span className="text-[11px] font-bold text-slate-700">ارتباط‌های این فاکتور</span>
-              {[...relations.linked, ...relations.related].slice(0, 8).map((row) => (
-                <button key={row._id} type="button" onClick={() => setInvoice(row)} className="w-full flex items-center justify-between gap-2 text-[11px] text-right">
-                  <span>{row.type === 'purchase' ? 'خرید' : 'فروش'} {row.invoiceNumber} · {row.customerName}{row.fulfillment === 'factory' ? ' · ارسال از کارخانه' : ''}</span>
-                  <span className="font-mono shrink-0">{formatToman(row.finalAmount)}</span>
-                </button>
-              ))}
-            </div>
-          )}
+      <IonContent className={invoice.fulfillment === 'factory' ? 'bg-[#fbf7f0]' : 'bg-slate-50'}>
+        <div className={`p-3 space-y-3 max-w-md mx-auto pb-6 print:p-0 print:m-0 print:max-w-none ${invoice.fulfillment === 'factory' ? 'bg-[#fbf7f0]' : ''}`}>
           {invoice.fulfillment === 'factory' && (
-            <div className="rounded-2xl bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900 leading-5 print:hidden">
-              {isSale
-                ? `این بار از کارخانه رفته است. فاکتور مشتری به نام آریو است و از موجودی آریو کم نشده${
-                    invoice.factoryPurchaseNumber ? ` (خرید شرکت: ${invoice.factoryPurchaseNumber})` : ''
-                  }. سود فقط با دکمهٔ سود فاکتور دیده می‌شود.`
-                : 'این خرید شرکت مادر برای ارسال مستقیم از کارخانه است و به موجودی آریو اضافه نشده.'}
+            <div className="flex items-center justify-between gap-2 print:hidden">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-900/80">
+                <Factory className="w-3.5 h-3.5" />
+                کارخانه
+              </span>
+              {isSale && (
+                <button type="button" onClick={() => setShowFactoryCost((v) => !v)} className="text-[10px] font-bold text-slate-500 underline underline-offset-2">
+                  {showFactoryCost ? 'بستن قیمت کارخانه' : 'قیمت خرید و فروش'}
+                </button>
+              )}
             </div>
           )}
           {isSale && payments.length > 0 && (
@@ -315,8 +332,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   {saleTypeLabel}
                 </span>
                 {invoice.fulfillment === 'factory' && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold inline-block mt-0.5 mr-1">
-                    ارسال از کارخانه
+                  <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100/90 text-amber-900 font-semibold mt-0.5 mr-1">
+                    <Factory className="w-3 h-3" />
+                    کارخانه
                   </span>
                 )}
                 {invoice.proformaNumber && (
@@ -340,9 +358,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               >
                 <div className="flex items-center gap-1 text-slate-400 text-[11px]">
                   <User className="w-3.5 h-3.5" />
-                  <span>{isSale ? 'خریدار:' : 'تأمین‌کننده:'}</span>
+                  <span>مشتری:</span>
                 </div>
-                <span className="font-semibold text-slate-800 block">{invoice.customerName}</span>
+                <span className="font-semibold text-slate-800 block">{personOf(invoice)}</span>
                 {invoice.branchName && <span className="text-[11px] text-sky-700 block">شعبه {invoice.branchName}</span>}
                 {invoice.customerPhone && (
                   <span className="text-[11px] text-slate-500 font-mono block" dir="ltr">
@@ -353,12 +371,18 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </button>
 
               <div className="space-y-1 text-left">
-                <div className="flex items-center justify-end gap-1 text-slate-400 text-[11px]">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>تاریخ فاکتور:</span>
-                </div>
-                <span className="font-medium text-slate-700 block">{invoiceDateString}</span>
-                <span className="text-[10px] text-slate-400 block">ثبت: {invoice.createdByName}</span>
+                <button type="button" onClick={() => setDateKind('proforma')} className="w-full text-left">
+                  <span className="flex items-center justify-end gap-1 text-slate-400 text-[11px]"><Calendar className="w-3.5 h-3.5" />تاریخ پیش‌فاکتور</span>
+                  <span className="font-medium text-slate-700 block">{invoice.proformaDate ? formatJalali(dateToYmd(new Date(invoice.proformaDate))) : invoiceDateString}</span>
+                </button>
+                <button type="button" onClick={() => setDateKind('ship')} className="w-full text-left">
+                  <span className="text-[11px] text-slate-400">تاریخ ارسال</span>
+                  <span className="font-medium text-slate-700 block">{invoice.shippedAt ? formatJalali(dateToYmd(new Date(invoice.shippedAt))) : '—'}</span>
+                </button>
+                <button type="button" onClick={() => setDateKind('paid')} className="w-full text-left">
+                  <span className="text-[11px] text-slate-400">تاریخ پرداخت</span>
+                  <span className="font-medium text-slate-700 block">{invoice.paidAt ? formatJalali(dateToYmd(new Date(invoice.paidAt))) : payments[0] ? formatJalali(dateToYmd(new Date(payments[0].date))) : '—'}</span>
+                </button>
               </div>
             </div>
 
@@ -423,7 +447,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                             {num(item.quantity, 2)} {item.unit}
                             {item.secondaryQuantity ? ` (${num(item.secondaryQuantity, 1)} ${item.secondaryUnit})` : ''}
                           </td>
-                          <td className="px-2 py-2 font-mono whitespace-nowrap">{formatToman(item.unitPrice)}</td>
+                          <td className="px-2 py-2 font-mono whitespace-nowrap">
+                            {formatToman(item.unitPrice)}
+                            {showFactoryCost && (item.factoryUnitCost || 0) > 0 && (
+                              <div className="text-[10px] font-normal text-amber-800">خرید {formatToman(item.factoryUnitCost || 0)}</div>
+                            )}
+                          </td>
                           <td className="px-2 py-2 font-mono whitespace-nowrap">{lineKg ? `${num(lineKg, 1)} کیلو` : '—'}</td>
                           <td className="px-2 py-2 font-mono font-bold text-left whitespace-nowrap">{formatToman(item.totalPrice)}</td>
                         </tr>
@@ -557,6 +586,17 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
       <EditInvoiceSheet invoice={sheet === 'edit' ? invoice : null} onClose={() => setSheet(null)} onSaved={handleUpdated} />
       <InvoicePaymentSheet invoice={sheet === 'pay' ? invoice : null} onClose={() => setSheet(null)} onPaid={handleUpdated} />
       <PurchasePriceSheet invoiceId={sheet === 'price' ? invoice._id : null} onClose={() => setSheet(null)} />
+      <JalaliDateSheet
+        open={!!dateKind}
+        value={dateToYmd(new Date(
+          dateKind === 'ship' ? invoice.shippedAt || invoice.invoiceDate
+          : dateKind === 'paid' ? invoice.paidAt || payments[0]?.date || invoice.invoiceDate
+          : invoice.proformaDate || invoice.invoiceDate,
+        ))}
+        title={dateKind === 'ship' ? 'تاریخ ارسال' : dateKind === 'paid' ? 'تاریخ پرداخت' : 'تاریخ پیش‌فاکتور'}
+        onClose={() => setDateKind(null)}
+        onSelect={(ymd) => void saveDate(ymd)}
+      />
       <DeleteInvoiceSheet
         invoice={sheet === 'delete' ? invoice : null}
         onClose={() => setSheet(null)}

@@ -348,20 +348,37 @@ export class InvoicesService implements OnApplicationBootstrap {
     return Math.min(1000, Math.max(0, Math.round(Number(raw) || 0)));
   }
 
+  private arioUnit(product: { sellPrice?: number; priceRetail?: number; priceSupermarket?: number; priceWholesale?: number; priceDistributor?: number } | undefined, saleType?: string) {
+    if (!product) return 0;
+    const tier = saleType === 'supermarket' ? product.priceSupermarket
+      : saleType === 'wholesale' ? product.priceWholesale
+      : saleType === 'distributor' ? product.priceDistributor
+      : product.priceRetail;
+    return Math.round(Number(tier) || Number(product.sellPrice) || 0);
+  }
+
   private async fillFactorySalePrices(items: { productId: any; quantity?: number; unitPrice?: number; totalPrice?: number; factoryUnitCost?: number }[], dto: CreateInvoiceDto) {
-    const missing = items.filter((it) => !(Number(it.unitPrice) > 0) && Number(it.factoryUnitCost) > 0);
+    const missing = items.filter((it) => !(Number(it.unitPrice) > 0));
     if (!missing.length) return;
-    const ids = missing.map((it) => it.productId).filter((id) => Types.ObjectId.isValid(String(id)));
-    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category').lean() : [];
-    const category = new Map(products.map((p) => [String(p._id), p.category]));
+    const ids = [...new Set(items.map((it) => it.productId).filter((id) => Types.ObjectId.isValid(String(id))))];
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category sellPrice priceRetail priceSupermarket priceWholesale priceDistributor buyPrice').lean() : [];
+    const byId = new Map(products.map((p) => [String(p._id), p]));
     const settings = await this.settingsService.get();
+    let filled = false;
     for (const it of missing) {
-      const rule = (settings.categoryBasePrices || []).find((row) => row.category === category.get(String(it.productId)));
+      const product = byId.get(String(it.productId));
+      const catalog = this.arioUnit(product, dto.saleType);
+      const cost = Math.round(Number(it.factoryUnitCost) || Number(product?.buyPrice) || 0);
+      if (!(it.factoryUnitCost > 0) && cost > 0) it.factoryUnitCost = cost;
+      const rule = (settings.categoryBasePrices || []).find((row) => row.category === product?.category);
       const percent = this.channelPercent(rule, dto.saleType);
-      it.unitPrice = Math.round(Number(it.factoryUnitCost) * (1 + percent / 100));
-      it.totalPrice = Math.round((it.quantity || 0) * it.unitPrice);
+      const priced = catalog > 0 ? catalog : (cost > 0 ? Math.round(cost * (1 + percent / 100)) : 0);
+      if (!(priced > 0)) continue;
+      it.unitPrice = priced;
+      it.totalPrice = Math.round((it.quantity || 0) * priced);
+      filled = true;
     }
-    if (!(dto.totalAmount > 0)) {
+    if (filled) {
       const goods = items.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
       const discount = Math.max(0, Math.round(Number(dto.discount) || 0));
       const shipping = dto.shippingPayer === 'customer' ? Math.max(0, Math.round(Number(dto.shippingCost) || 0)) : 0;
@@ -377,7 +394,11 @@ export class InvoicesService implements OnApplicationBootstrap {
   private async attachFactoryPurchase(sale: InvoiceDocument, recordedByName: string) {
     const items = [];
     for (const it of sale.items || []) {
-      const unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
+      let unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
+      if (!unitPrice && Types.ObjectId.isValid(String(it.productId))) {
+        const product = await this.productModel.findById(it.productId).select('buyPrice').lean();
+        unitPrice = Math.max(0, Math.round(Number(product?.buyPrice) || 0));
+      }
       items.push({
         productId: it.productId,
         productName: it.productName,
@@ -397,6 +418,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       type: 'purchase',
       saleType: 'wholesale',
       customerName: canonicalSupplier(sale.supplierCompany || PARENT_COMPANY),
+      endCustomerName: sale.customerName || '',
       customerPhone: '',
       invoiceDate: sale.invoiceDate,
       items,
@@ -592,7 +614,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   async create(
     rawDto: CreateInvoiceDto,
     recordedByName: string,
-    extra: { proformaNumber?: string; shippedAt?: Date } = {},
+    extra: { proformaNumber?: string; shippedAt?: Date; proformaDate?: Date } = {},
     companyName?: string,
   ): Promise<InvoiceDocument> {
     const dto = this.withServerTotals(rawDto);
@@ -701,6 +723,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       notes: dto.notes || '',
       ...this.shippingFields(dto, isSale),
       proformaNumber: extra.proformaNumber || '',
+      proformaDate: extra.proformaDate,
       shippedAt: extra.shippedAt,
       createdByName: recordedByName || 'مدیر سیستم',
     });
@@ -965,6 +988,38 @@ export class InvoicesService implements OnApplicationBootstrap {
     await invoice.save();
     if (invoice.type === 'purchase') await this.suppliersService.sync(invoice.customerName);
     if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
+    return this.findById(id);
+  }
+
+  /** The order day, the ship day, and the payment day are three different facts. */
+  async setDates(id: string, body: { proformaDate?: string; shippedAt?: string; paidAt?: string }) {
+    const invoice = await this.findById(id);
+    const at = (value?: string) => {
+      if (!value) return undefined;
+      const next = this.invoiceInstant(value);
+      if (Number.isNaN(+next)) throw new BadRequestException('تاریخ نامعتبر است');
+      return next;
+    };
+    const proformaDate = at(body.proformaDate);
+    const shippedAt = at(body.shippedAt);
+    const paidAt = at(body.paidAt);
+    if (!proformaDate && !shippedAt && !paidAt) throw new BadRequestException('تاریخی برای ذخیره نیست');
+    if (proformaDate) {
+      invoice.proformaDate = proformaDate;
+      invoice.invoiceDate = proformaDate;
+      if ((invoice.creditAmount || 0) > 0 && invoice.dueDays) {
+        invoice.dueDate = new Date(proformaDate.getTime() + invoice.dueDays * 86400000);
+      }
+      if (invoice.factoryPurchaseId && Types.ObjectId.isValid(invoice.factoryPurchaseId)) {
+        await this.invoiceModel.updateOne({ _id: invoice.factoryPurchaseId }, { $set: { invoiceDate: proformaDate, proformaDate } }).exec();
+      }
+    }
+    if (shippedAt) invoice.shippedAt = shippedAt;
+    if (paidAt) {
+      invoice.paidAt = paidAt;
+      await this.customersService.movePaymentDate(String(invoice._id), paidAt);
+    }
+    await invoice.save();
     return this.findById(id);
   }
 

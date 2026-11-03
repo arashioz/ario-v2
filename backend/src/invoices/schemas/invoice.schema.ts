@@ -101,6 +101,10 @@ export class Invoice {
   @Prop({ required: true, trim: true, default: 'مشتری حضوری' })
   customerName: string;
 
+  /** On a factory purchase: the customer the goods were sold to. The company stays in customerName for the supplier ledger. */
+  @Prop({ trim: true, default: '' })
+  endCustomerName?: string;
+
   /** Company whose goods are on this invoice. Mixed carts are split so each company gets its own invoice. */
   @Prop({ trim: true, default: '' })
   supplierCompany?: string;
@@ -228,8 +232,16 @@ export class Invoice {
   @Prop({ trim: true, default: '' })
   proformaNumber?: string;
 
+  /** Day the order was taken. Period lists follow this, not the day the truck left. */
+  @Prop({ type: Date })
+  proformaDate?: Date;
+
   @Prop({ type: Date })
   shippedAt?: Date;
+
+  /** Day the money was received. Independent of the order date and the ship date. */
+  @Prop({ type: Date })
+  paidAt?: Date;
 
   @Prop({ default: 0 })
   customerPrevBalance: number;

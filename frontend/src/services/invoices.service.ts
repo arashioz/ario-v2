@@ -93,12 +93,16 @@ export interface Invoice {
   factoryPurchaseNumber?: string;
   /** On that company purchase: the customer sale it belongs to. */
   factorySaleId?: string;
+  /** On a factory purchase, the person the goods were sold to. */
+  endCustomerName?: string;
   customerPrevBalance: number;
   customerNewBalance: number;
   shippingPayer?: ShippingPayer;
   shippingCost?: number;
   proformaNumber?: string;
+  proformaDate?: string;
   shippedAt?: string;
+  paidAt?: string;
   legacyPayments?: { date: string; amount: number; method?: string; accountId?: string }[];
   notes?: string;
   createdByName: string;
@@ -232,6 +236,11 @@ export const invoicesService = {
 
   remove: async (id: string, password: string): Promise<{ message: string }> => {
     const response = await api.post(`/invoices/${id}/delete`, { password });
+    return response.data;
+  },
+
+  setDates: async (id: string, dates: { proformaDate?: string; shippedAt?: string; paidAt?: string }): Promise<Invoice> => {
+    const response = await api.patch<Invoice>(`/invoices/${id}/dates`, dates);
     return response.data;
   },
 

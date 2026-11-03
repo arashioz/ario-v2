@@ -14,7 +14,7 @@ import {
 import { InvoicesService } from './invoices.service';
 import { OrderRequestsService } from '../orders/order-requests.service';
 import { Type } from 'class-transformer';
-import { IsDateString, IsNotEmpty, IsNumber, Min } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -25,6 +25,20 @@ class SetInvoiceDateDto {
   @IsDateString({}, { message: 'تاریخ نامعتبر است' })
   @IsNotEmpty()
   invoiceDate: string;
+}
+
+class SetInvoiceDatesDto {
+  @IsOptional()
+  @IsDateString({}, { message: 'تاریخ پیش‌فاکتور نامعتبر است' })
+  proformaDate?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'تاریخ ارسال نامعتبر است' })
+  shippedAt?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'تاریخ پرداخت نامعتبر است' })
+  paidAt?: string;
 }
 
 class SetDueDaysDto {
@@ -97,6 +111,12 @@ export class InvoicesController {
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: CreateInvoiceDto, @Request() req: any) {
     return this.invoicesService.update(id, dto, actorName(req));
+  }
+
+  /** Order day, ship day, and payment day. The order day is what period lists use. */
+  @Patch(':id/dates')
+  setDates(@Param('id') id: string, @Body() body: SetInvoiceDatesDto) {
+    return this.invoicesService.setDates(id, body);
   }
 
   /** Date only. Stock, prices, and lines stay as they are. */

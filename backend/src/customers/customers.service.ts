@@ -626,6 +626,16 @@ export class CustomersService implements OnModuleInit {
     if (writes.length) await this.transactionModel.bulkWrite(writes);
   }
 
+  /** Move the date of payments that settled this invoice, without changing the amount. */
+  async movePaymentDate(invoiceId: string, date: Date) {
+    if (!Types.ObjectId.isValid(invoiceId)) return;
+    const id = new Types.ObjectId(invoiceId);
+    await this.transactionModel.updateMany(
+      { type: 'payment', $or: [{ invoiceId: id }, { 'allocations.invoiceId': id }] },
+      { $set: { date } },
+    ).exec();
+  }
+
   /** Put the credit portion of a sale invoice on the customer's account. */
   async addInvoiceDebt(invoice: InvoiceDocument, recordedByName: string): Promise<number> {
     if (!invoice.customerId || !invoice.creditAmount) return 0;

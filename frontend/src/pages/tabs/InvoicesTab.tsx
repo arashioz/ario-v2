@@ -53,6 +53,7 @@ export const InvoicesTab: React.FC = () => {
   const [book, setBook] = useState<'sale' | 'purchase'>('sale');
   const [company, setCompany] = useState<string | null>(null);
   const [purchasesReady, setPurchasesReady] = useState(false);
+  const [lateShipOnly, setLateShipOnly] = useState(false);
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -99,7 +100,7 @@ export const InvoicesTab: React.FC = () => {
     const inPeriod =
       period.from || period.to
         ? invoices.filter((inv) => {
-            const day = dateToYmd(new Date(inv.invoiceDate || inv.createdAt));
+            const day = dateToYmd(new Date(inv.proformaDate || inv.invoiceDate || inv.createdAt));
             if (period.from && day < period.from) return false;
             if (period.to && day > period.to) return false;
             return true;
@@ -133,7 +134,12 @@ export const InvoicesTab: React.FC = () => {
       .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'fa'));
   }, [filteredInvoices]);
 
-  const visibleInvoices = company ? filteredInvoices.filter((inv) => companyOf(inv) === company) : filteredInvoices;
+  const sameDay = (a?: string, b?: string) => {
+    if (!a || !b) return true;
+    return dateToYmd(new Date(a)) === dateToYmd(new Date(b));
+  };
+  const visibleInvoices = (company ? filteredInvoices.filter((inv) => companyOf(inv) === company) : filteredInvoices)
+    .filter((inv) => !lateShipOnly || (inv.shippedAt && !sameDay(inv.shippedAt, inv.proformaDate || inv.invoiceDate)));
 
   const turnover = useMemo(() => {
     let sales = 0;
@@ -162,8 +168,8 @@ export const InvoicesTab: React.FC = () => {
             <h1 className="text-sm font-semibold text-slate-800">فاکتورها</h1>
 
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => navigate('/tabs/pos')} className="text-[12px] font-bold text-sky-700">فروش جدید</button>
-              <button type="button" onClick={() => setIsPurchaseModalOpen(true)} className="text-[12px] font-bold text-slate-700">خرید جدید</button>
+              <button type="button" onClick={() => navigate('/tabs/pos')} className="h-8 px-3 rounded-full bg-slate-900 text-white text-[11px] font-bold">فروش جدید</button>
+              <button type="button" onClick={() => setIsPurchaseModalOpen(true)} className="h-8 px-3 rounded-full bg-white border border-slate-200 text-slate-800 text-[11px] font-bold">خرید جدید</button>
               <button
                 onClick={loadInvoices}
                 className="p-2 rounded-2xl bg-slate-50 text-slate-500 active:bg-slate-100"
@@ -229,6 +235,13 @@ export const InvoicesTab: React.FC = () => {
                     : 'در حال آوردن خریدها'}
             </p>
             <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setLateShipOnly((v) => !v)}
+                className={`h-8 px-2.5 rounded-xl text-[10px] font-bold border ${lateShipOnly ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}
+              >
+                ارسال دیرتر
+              </button>
               <PeriodPicker value={period} onChange={setPeriod} />
               <button
                 onClick={() => setFilterOpen(true)}

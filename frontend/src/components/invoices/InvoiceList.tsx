@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CheckCircle2, Clock, FileText, Truck } from 'lucide-react';
+import { CheckCircle2, Clock, Factory, FileText, Truck } from 'lucide-react';
 import { isOverdue, type Invoice } from '../../services/invoices.service';
 import type { SalesView } from '../../services/settings.service';
 import { dateToYmd, formatJalali } from '../../lib/jalali';
@@ -26,7 +26,20 @@ const typeTone = (inv: Invoice) =>
     ? 'bg-sky-100 text-sky-800'
     : 'bg-slate-100 text-slate-600';
 
-const dayOf = (inv: Invoice) => dateToYmd(new Date(inv.invoiceDate || inv.createdAt));
+const dayOf = (inv: Invoice) => dateToYmd(new Date(inv.proformaDate || inv.invoiceDate || inv.createdAt));
+const personName = (inv: Invoice) => {
+  if (inv.type !== 'purchase' || inv.fulfillment !== 'factory') return inv.customerName;
+  if (inv.endCustomerName) return inv.endCustomerName;
+  const named = String(inv.notes || '').match(/برای\s+([^،.]+)/)?.[1]?.trim() || '';
+  return named && !named.startsWith('فاکتور') ? named : inv.customerName;
+};
+
+const FactoryMark: React.FC = () => (
+  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-900/80 bg-amber-100/80 px-1.5 py-0.5 rounded-full">
+    <Factory className="w-3 h-3" />
+    کارخانه
+  </span>
+);
 
 const PaidBadge: React.FC<{ inv: Invoice }> = ({ inv }) =>
   inv.isPaid ? (
@@ -40,7 +53,7 @@ const PaidBadge: React.FC<{ inv: Invoice }> = ({ inv }) =>
   );
 
 const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate: boolean }> = ({ inv, v, onOpen, showDate }) => (
-  <button onClick={onOpen} className="w-full bg-white rounded-2xl p-3 border border-sky-100 shadow-sm text-right active:scale-[0.99] transition space-y-2.5">
+  <button onClick={onOpen} className={`w-full rounded-2xl p-3 border shadow-sm text-right active:scale-[0.99] transition space-y-2.5 ${inv.fulfillment === 'factory' ? 'bg-amber-50/80 border-amber-100' : 'bg-white border-sky-100'}`}>
     <div className="flex items-start justify-between gap-2">
       <div className="flex items-center gap-2.5 min-w-0">
         <div className="w-9 h-9 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
@@ -52,13 +65,12 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
               {inv.invoiceNumber}
             </span>
             {v.showSaleType && <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${typeTone(inv)}`}>{typeLabel(inv)}</span>}
-            {inv.fulfillment === 'factory' && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">ارسال از کارخانه</span>}
+            {inv.fulfillment === 'factory' && <FactoryMark />}
             {isOverdue(inv) && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-600 text-white">تاخیر</span>}
           </div>
           <h4 className="text-xs font-bold text-slate-800 mt-1 truncate">
-            {inv.customerName}
+            {personName(inv)}
             {inv.branchName ? ` · ${inv.branchName}` : ''}
-            {inv.type === 'sale' && inv.supplierCompany ? ` · ${inv.supplierCompany}` : ''}
           </h4>
         </div>
       </div>
@@ -84,12 +96,12 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
 );
 
 const Compact: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate: boolean }> = ({ inv, v, onOpen, showDate }) => (
-  <button onClick={onOpen} className="w-full flex items-center gap-2 px-3 py-2.5 text-right active:bg-slate-50">
+  <button onClick={onOpen} className={`w-full flex items-center gap-2 px-3 py-2.5 text-right ${inv.fulfillment === 'factory' ? 'bg-amber-50/70' : 'active:bg-slate-50'}`}>
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-bold text-slate-800 truncate">{inv.customerName}</span>
+        <span className="text-xs font-bold text-slate-800 truncate">{personName(inv)}</span>
         {v.showSaleType && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${typeTone(inv)}`}>{typeLabel(inv)}</span>}
-        {inv.fulfillment === 'factory' && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 bg-amber-100 text-amber-800">ارسال از کارخانه</span>}
+        {inv.fulfillment === 'factory' && <FactoryMark />}
         {isOverdue(inv) && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 bg-rose-600 text-white">تاخیر</span>}
       </div>
       <div className="text-[10px] text-slate-400 mt-0.5 truncate">
@@ -125,7 +137,7 @@ const Table: React.FC<{ list: Invoice[]; v: SalesView; onOpen: (i: Invoice) => v
       <tbody className="divide-y divide-slate-100">
         {list.map((inv) => (
           <tr key={inv._id} onClick={() => onOpen(inv)} className="active:bg-sky-50 cursor-pointer">
-            <td className="px-2 py-2 font-bold text-slate-800 max-w-[110px] truncate">{inv.customerName}</td>
+            <td className="px-2 py-2 font-bold text-slate-800 max-w-[110px] truncate">{personName(inv)}</td>
             {showDate && <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{formatJalali(dayOf(inv), { year: false })}</td>}
             {v.showSaleType && <td className="px-2 py-2 text-slate-500">{typeLabel(inv)}</td>}
             {v.showWeight && <td className="px-2 py-2 font-mono text-slate-500 whitespace-nowrap">{num(inv.totalWeightKg)}</td>}
