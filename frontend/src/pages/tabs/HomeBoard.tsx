@@ -28,7 +28,6 @@ import type { AccountingDashboard } from '../../services/accounting.service';
 import type { SupplierAccount } from '../../services/suppliers.service';
 import { formatJalali, todayYmd } from '../../lib/jalali';
 import { formatToman, num, percent, profitCaption, weight } from '../../lib/format';
-import { Bone } from '../../components/ui/Skeleton';
 import Toman from '../../components/ui/Toman';
 import { FollowUpCard } from '../../components/followups/FollowUpCard';
 import { StickyNotesCard } from '../../components/notes/StickyNotesCard';
