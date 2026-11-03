@@ -79,6 +79,43 @@ export class Customer {
 
   @Prop({ trim: true })
   lastContactNote?: string;
+
+  /** RFM grade from the last پایش scan: A طلایی … D راکد. */
+  @Prop({ trim: true, default: '', index: true })
+  watchGrade?: string;
+
+  @Prop({ default: 0 })
+  watchScore?: number;
+
+  @Prop({ default: 0 })
+  watchMonthAmount?: number;
+
+  @Prop({ default: 0 })
+  watchMonthKg?: number;
+
+  @Prop({ default: 0 })
+  watchYearAmount?: number;
+
+  @Prop({ default: 0 })
+  watchYearKg?: number;
+
+  @Prop({ default: 0 })
+  watchDropAmount?: number;
+
+  @Prop({ default: 0 })
+  watchDropKg?: number;
+
+  @Prop({ trim: true, default: '' })
+  watchTopProductName?: string;
+
+  @Prop({ trim: true, default: '' })
+  watchReason?: string;
+
+  @Prop({ trim: true, default: '' })
+  watchAction?: string;
+
+  @Prop({ type: Date })
+  watchScoredAt?: Date;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

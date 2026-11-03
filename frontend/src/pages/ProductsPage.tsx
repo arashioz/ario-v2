@@ -15,7 +15,6 @@ import { productsService } from '../services/products.service';
 import { invoicesService } from '../services/invoices.service';
 import type { Product, ProductStats } from '../services/products.service';
 import { UpdatePriceModal } from '../components/products/UpdatePriceModal';
-import { UpdateStockModal } from '../components/products/UpdateStockModal';
 import { NewProductModal } from '../components/products/NewProductModal';
 import { BulkPriceModal } from '../components/products/BulkPriceModal';
 import {
@@ -78,9 +77,6 @@ export const ProductsPage: React.FC = () => {
 
   const [selectedProductForPrice, setSelectedProductForPrice] = useState<Product | null>(null);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
-
-  const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
-  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
 
   const [isBulkPriceOpen, setIsBulkPriceOpen] = useState(false);
   const [priceBy, setPriceBy] = useState<'unit' | 'kg'>('unit');
@@ -152,10 +148,6 @@ export const ProductsPage: React.FC = () => {
     loadData();
   };
 
-  const handleStockUpdated = (updated: Product) => {
-    setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
-    loadData();
-  };
 
   const handleDelete = async (product: Product) => {
     if (!window.confirm(`آیا از حذف کالای «${product.name}» مطمئن هستید؟`)) {
@@ -182,11 +174,6 @@ export const ProductsPage: React.FC = () => {
   const openPriceModal = (product: Product) => {
     setSelectedProductForPrice(product);
     setIsPriceModalOpen(true);
-  };
-
-  const openStockModal = (product: Product) => {
-    setSelectedProductForStock(product);
-    setIsStockModalOpen(true);
   };
 
   const openEditModal = (product: Product) => {
@@ -223,7 +210,7 @@ export const ProductsPage: React.FC = () => {
               </button>
               <div>
                 <h1 className="text-sm font-bold text-slate-800">کالاها</h1>
-                <p className="text-[10px] text-slate-400 font-normal">ویرایش، قیمت و موجودی</p>
+                <p className="text-[10px] text-slate-400 font-normal">ویرایش و قیمت · موجودی فقط با فاکتور یا انبارگردانی</p>
               </div>
             </div>
 
@@ -521,11 +508,11 @@ export const ProductsPage: React.FC = () => {
                         قیمت
                       </button>
                       <button
-                        onClick={() => openStockModal(product)}
+                        onClick={() => navigate('/stocktake')}
                         className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold active:scale-95 border border-slate-100"
                       >
                         <Boxes className="w-4 h-4 text-slate-500" />
-                        موجودی
+                        انبارگردانی
                       </button>
                     </div>
                   </div>
@@ -544,16 +531,6 @@ export const ProductsPage: React.FC = () => {
             setSelectedProductForPrice(null);
           }}
           onPriceUpdated={handlePriceUpdated}
-        />
-
-        <UpdateStockModal
-          isOpen={isStockModalOpen}
-          product={selectedProductForStock}
-          onClose={() => {
-            setIsStockModalOpen(false);
-            setSelectedProductForStock(null);
-          }}
-          onStockUpdated={handleStockUpdated}
         />
 
         <NewProductModal

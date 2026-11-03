@@ -284,7 +284,7 @@ export const PosTab: React.FC = () => {
         </div>
       )}
     <div className="bg-white rounded-3xl p-1.5 border border-sky-100 shadow-sm">
-      <div className="grid gap-1 grid-cols-3">
+      <div className="grid gap-1 grid-cols-4">
         {TIERS.map((t) => (
           <button
             key={t}

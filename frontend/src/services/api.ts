@@ -19,7 +19,11 @@ api.interceptors.request.use(async (config) => {
   if (token && config.headers && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (config.method?.toLowerCase() === 'delete' && config.headers && !config.headers[CONFIRM_HEADER]) {
+  const method = config.method?.toLowerCase();
+  const path = String(config.url || '').split('?')[0];
+  const needsPassword =
+    method === 'delete' || (method === 'put' && /\/?invoices\/[^/]+$/.test(path));
+  if (needsPassword && config.headers && !config.headers[CONFIRM_HEADER]) {
     const password = await askPassword(deleteTitle(config.url));
     config.headers[CONFIRM_HEADER] = encodeURIComponent(password);
   }

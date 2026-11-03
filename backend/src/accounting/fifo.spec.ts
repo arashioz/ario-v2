@@ -1,4 +1,4 @@
-import { FifoInvoice, FifoWorkshop, runFifo } from './fifo';
+import { FifoInvoice, FifoWorkshop, lineKg, runFifo } from './fifo';
 
 const invoice = (
   id: string,
@@ -25,6 +25,15 @@ const invoice = (
       totalPrice: quantity * unitPrice,
     },
   ],
+});
+
+describe('packaged line weight', () => {
+  const rice = { _id: 'rice', name: 'برنج ۱۰ کیلویی', unit: 'کیسه', weightPerUnitKg: 10 };
+  it('counts 44 bags as 440kg, not 880kg when weight was stored twice', () => {
+    expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 880 }, rice)).toBe(440);
+    expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 440 }, rice)).toBe(440);
+    expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44 }, rice)).toBe(440);
+  });
 });
 
 describe('workshop FIFO', () => {
@@ -88,6 +97,39 @@ describe('workshop FIFO', () => {
     const result = runFifo([invoice('buy', 'purchase', '2026-10-01', 'raw', 10, 100), factory, discounted], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
     expect(result.invoiceProfit.get('factory-loss')!.profit).toBe(-40);
     expect(result.invoiceProfit.get('discount-loss')!.profit).toBe(-10);
+  });
+
+  it('uses the linked factory purchase as cost instead of treating the sale as profit', () => {
+    const buy = invoice('fp', 'purchase', '2026-10-03', 'raw', 2, 100);
+    buy.fulfillment = 'factory';
+    buy.factorySaleId = 'factory';
+    const sale = invoice('factory', 'sale', '2026-10-03', 'raw', 2, 200);
+    sale.fulfillment = 'factory';
+    sale.factoryPurchaseId = 'fp';
+    const result = runFifo([buy, sale], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
+    expect(result.invoiceProfit.get('factory')!.cost).toBe(200);
+    expect(result.invoiceProfit.get('factory')!.profit).toBe(200);
+    expect(result.saleLines[0].unknownCost).toBeFalsy();
+  });
+
+  it('does not count a factory sale with no cost as profit', () => {
+    const sale = invoice('factory', 'sale', '2026-10-03', 'raw', 2, 200);
+    sale.fulfillment = 'factory';
+    const result = runFifo([sale], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
+    expect(result.saleLines[0].unknownCost).toBe(true);
+    expect(result.invoiceProfit.get('factory')!.profit).toBe(0);
+    expect(result.invoiceProfit.get('factory')!.revenue).toBe(400);
+    expect(result.lots[0].firstSoldAt).toBeTruthy();
+  });
+
+  it('prefers typed factory cost over a shop purchase of the same day', () => {
+    const sale = invoice('factory', 'sale', '2026-10-03', 'raw', 2, 200);
+    sale.fulfillment = 'factory';
+    sale.items[0].factoryUnitCost = 140;
+    const result = runFifo([invoice('buy', 'purchase', '2026-10-01', 'raw', 10, 100), sale], [{ _id: 'raw', name: 'نبات', unit: 'کیلوگرم', weightPerUnitKg: 1 }]);
+    expect(result.invoiceProfit.get('factory')!.cost).toBe(280);
+    expect(result.invoiceProfit.get('factory')!.profit).toBe(120);
+    expect(result.lotsByProduct.get('raw')![0].kgLeft).toBe(10);
   });
 
   it('uses recorded cost for materials without purchase history and handles fractional units', () => {

@@ -1,5 +1,6 @@
 import type { Invoice } from '../services/invoices.service';
 import type { Proforma } from '../services/proformas.service';
+import type { WatchSuggestion } from '../services/customerWatch.service';
 import type { Customer } from '../services/customers.service';
 import type { AppSettings, BankCard, SmsTemplateKey } from '../services/settings.service';
 import { dateToYmd, formatJalaliIso, formatJalaliNumeric, faNum, ymdToJalali } from './jalali';
@@ -126,6 +127,23 @@ export function invoiceSms(inv: Invoice, s: AppSettings, customerBalance?: numbe
     cardBlock,
   });
   return inv.fulfillment === 'factory' ? `ارسال از کارخانه\n${body}` : body;
+}
+
+export function suggestSms(
+  customer: Pick<Customer, 'name' | 'phoneNumber'>,
+  suggestion: WatchSuggestion,
+  s: AppSettings,
+): string {
+  return renderSms(s.smsTemplates.suggest || s.smsTemplates.proforma, {
+    ...shopVars(s),
+    ...cardVars(s),
+    customer: customer.name,
+    mobile: toAsciiDigits(customer.phoneNumber || '').replace(/[^\d+]/g, ''),
+    date: slashDate(new Date()),
+    items: itemLines(suggestion.items),
+    weight: suggestion.totalWeightKg ? weight(suggestion.totalWeightKg) : '',
+    total: formatToman(suggestion.totalAmount),
+  });
 }
 
 export function proformaSms(p: Proforma, s: AppSettings): string {

@@ -82,3 +82,39 @@ export const searchKey = (s: string) =>
     .toLowerCase();
 
 export const profitColor = (n: number) => (n > 0 ? 'text-emerald-600' : n < 0 ? 'text-rose-600' : 'text-slate-500');
+
+/** Kilograms inside one stock unit. A 10kg rice bag is 10. */
+export const kgPerStock = (p: {
+  unit?: string;
+  weightPerUnitKg?: number;
+  hasDualUnit?: boolean;
+  secondaryUnit?: string;
+  unitRatio?: number;
+  sellBy?: string;
+}) => {
+  const w = Number(p.weightPerUnitKg) || 0;
+  if (w > 0) return w;
+  if (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' && Number(p.unitRatio) > 0) return Number(p.unitRatio);
+  if (p.unit === 'کیلوگرم' || p.sellBy === 'kg') return 1;
+  return 0;
+};
+
+/** «۴۴ کیسه · ۴۴۰ کیلو» — count first, weight second. Never show only kg for bags. */
+export const formatStock = (
+  stock: number,
+  p: { unit?: string; weightPerUnitKg?: number; hasDualUnit?: boolean; secondaryUnit?: string; unitRatio?: number; sellBy?: string },
+) => {
+  const unit = (p.unit || 'عدد').trim() || 'عدد';
+  const per = kgPerStock(p);
+  const qty = `${num(stock, Math.abs(stock % 1) > 0.001 ? 1 : 0)} ${unit}`;
+  if (per > 0 && unit !== 'کیلوگرم') return `${qty} · ${weight(stock * per)}`;
+  if (unit === 'کیلوگرم') return weight(stock);
+  return qty;
+};
+
+/** When cost is missing, the sale is not profit. Zero known profit is shown as «سود ندارد». */
+export const profitCaption = (profit: number, opts: { sold?: number; unknown?: number } = {}) => {
+  if ((opts.unknown || 0) > 0.5 && Math.abs(profit) < 0.5) return 'سود نامشخص';
+  if ((opts.sold || 0) > 0 && Math.abs(profit) < 0.5) return 'سود ندارد';
+  return formatToman(profit);
+};

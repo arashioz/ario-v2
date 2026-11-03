@@ -10,12 +10,10 @@ import {
 import type { RefresherEventDetail } from '@ionic/react';
 import { useAuth } from '../../context/AuthContext';
 import { customersService } from '../../services/customers.service';
-import { productsService } from '../../services/products.service';
-import type { Product } from '../../services/products.service';
 import { invoicesService } from '../../services/invoices.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import { accountingService } from '../../services/accounting.service';
-import type { AccountingDashboard } from '../../services/accounting.service';
+import type { AccountingDashboard, InventoryReport } from '../../services/accounting.service';
 import { formatJalali, jalaliMonthRange, todayYmd, ymdToJalali } from '../../lib/jalali';
 import { JalaliDateSheet } from '../../components/ui/JalaliDatePicker';
 import { useSettings } from '../../services/settings.service';
@@ -34,7 +32,7 @@ export const HomeTab: React.FC = () => {
   const settings = useSettings();
 
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null);
-  const [goods, setGoods] = useState<Product[]>([]);
+  const [stock, setStock] = useState<InventoryReport | null>(null);
   const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
   const [acc, setAcc] = useState<AccountingDashboard | null>(null);
   const [ready, setReady] = useState(false);
@@ -48,18 +46,18 @@ export const HomeTab: React.FC = () => {
     try {
       const today = homeDate;
       const j = ymdToJalali(today);
-      const [cStats, iStats, aStats, sAcc, catalog] = await Promise.all([
+      const [cStats, iStats, aStats, sAcc, inv] = await Promise.all([
         customersService.getCustomerStats().catch(() => null),
         invoicesService.getStats().catch(() => null),
         accountingService.dashboard(today, jalaliMonthRange(j.jy, j.jm).from).catch(() => null),
         suppliersService.account().catch(() => null),
-        productsService.getForSale().catch(() => [] as Product[]),
+        accountingService.inventory().catch(() => null),
       ]);
       if (aStats) setAcc(aStats);
       if (sAcc) setSupplier(sAcc);
       if (cStats) setCustomerStats(cStats);
       if (iStats) setInvoiceStats(iStats);
-      setGoods(catalog);
+      setStock(inv);
     } catch (e) {
       console.warn('Stats load error', e);
     } finally {
@@ -87,76 +85,63 @@ export const HomeTab: React.FC = () => {
   };
 
   const houses = useMemo(() => {
-    const rows = new Map<string, { count: number; kg: number; cost: number }>();
-    for (const product of goods) {
-      const name = (product.supplierName || '').trim() || 'بدون شرکت';
-      const row = rows.get(name) || { count: 0, kg: 0, cost: 0 };
-      const perKg = product.weightPerUnitKg || (product.unit === 'کیلوگرم' ? 1 : 0);
+    const rows = new Map<string, { count: number; kg: number; cost: number; current: number; empty: number }>();
+    for (const item of stock?.items || []) {
+      const name = (item.supplier || '').trim();
+      if (!name) continue;
+      const row = rows.get(name) || { count: 0, kg: 0, cost: 0, current: 0, empty: 0 };
       row.count += 1;
-      row.kg += (product.stock || 0) * perKg;
-      row.cost += (product.stock || 0) * (product.buyPrice || 0);
+      row.kg += item.stockKg || 0;
+      row.cost += item.stockValue || 0;
+      row.current += item.currentValue?.wholesale || item.stockValue || 0;
+      if ((item.stockKg || 0) <= 0) row.empty += 1;
       rows.set(name, row);
     }
     return [...rows.entries()]
       .map(([name, row]) => ({ name, ...row }))
       .sort((a, b) => b.cost - a.cost);
-  }, [goods]);
+  }, [stock]);
 
-  const warehouseNames = user?.homeWarehouses?.length ? user.homeWarehouses : settings.homeWarehouses || [];
+  const warehouseNames = (user?.homeWarehouses?.length ? user.homeWarehouses : settings.homeWarehouses || []).filter((name) => name && name !== 'بدون شرکت');
 
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
-        <IonToolbar className="bg-white/95 backdrop-blur-md px-4 py-2 border-b border-sky-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-600 to-sky-400 flex items-center justify-center text-white">
-                <span className="font-semibold text-xs">آ</span>
-              </div>
-              <div className="text-right">
-                <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm font-semibold text-slate-800">{user?.fullName || 'کاربر گرامی'}</h1>
-                  <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                      user?.role === 'admin'
-                        ? 'bg-sky-50 text-sky-800 border border-sky-200'
-                        : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    }`}
-                  >
-                    {user?.role === 'admin' ? (
-                      <>
-                        <ShieldCheck className="w-3 h-3 text-sky-600" />
-                        <span>مدیر</span>
-                      </>
-                    ) : (
-                      <>
-                        <Briefcase className="w-3 h-3 text-emerald-600" />
-                        <span>بازاریاب</span>
-                      </>
-                    )}
-                  </span>
-                </div>
-              </div>
+        <IonToolbar className="bg-[#F2F2F7] px-4 pt-3 pb-1">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0 text-right">
+              <p className="text-[12px] text-slate-500">{user?.fullName || 'آریو'}</p>
+              <h1 className="text-[28px] font-bold tracking-tight text-slate-900 leading-8 mt-0.5">خانه</h1>
             </div>
-            <button
-              onClick={() => navigate('/customers-map')}
-              className="p-1.5 rounded-xl bg-sky-50 text-sky-600 hover:bg-sky-100 transition active:scale-95 border border-sky-200/60"
-              title="نقشه مشتریان"
-            >
-              <MapPin className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 pb-1">
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
+                  user?.role === 'admin' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {user?.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <Briefcase className="w-3 h-3" />}
+                {user?.role === 'admin' ? 'مدیر' : 'بازاریاب'}
+              </span>
+              <button
+                onClick={() => navigate('/customers-map')}
+                className="w-9 h-9 rounded-full bg-white text-sky-600 shadow-sm flex items-center justify-center"
+                title="نقشه مشتریان"
+              >
+                <MapPin className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </IonToolbar>
       </IonHeader>
 
-      <IonContent fullscreen className="bg-slate-50">
+      <IonContent fullscreen className="bg-[#F2F2F7]">
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
 
-        <div className="p-3.5 space-y-4 max-w-md mx-auto pb-8">
+        <div className="px-4 pt-2 space-y-4 max-w-md mx-auto pb-10">
           <PendingProformasBanner refreshKey={refreshKey} />
-          <button type="button" onClick={() => setDateOpen(true)} className="w-full text-center text-xs font-medium text-slate-500 py-0.5 active:opacity-70">
+          <button type="button" onClick={() => setDateOpen(true)} className="w-full text-[13px] font-semibold text-[#007AFF] py-0.5 active:opacity-70">
             {formatJalali(homeDate, { weekday: true })}
           </button>
           <HomeBoard

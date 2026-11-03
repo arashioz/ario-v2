@@ -11,7 +11,7 @@ import type { Period } from '../components/ui/PeriodPicker';
 import { Empty, KV, Mini, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
 import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
 import { dateToYmd, formatJalali } from '../lib/jalali';
-import { formatToman, num, percent, profitColor, toman, tons, weight } from '../lib/format';
+import { formatToman, num, percent, profitCaption, profitColor, toman, tons, weight } from '../lib/format';
 
 type View = 'watch' | 'lot' | 'product' | 'day' | 'customer' | 'check';
 
@@ -79,7 +79,13 @@ export const ProfitPage: React.FC = () => {
               سود ناخالص · {period.label}
             </div>
             <div className="mt-2 text-3xl font-bold font-mono">
-              {toman(s?.profit)} <span className="text-sm font-normal text-emerald-100">تومان</span>
+              {(s?.unknownRevenue || 0) > 0 && Math.abs(s?.profit || 0) < 0.5 ? (
+                <span className="text-lg">سود نامشخص</span>
+              ) : (
+                <>
+                  {toman(s?.profit)} <span className="text-sm font-normal text-emerald-100">تومان</span>
+                </>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/15 text-center">
               <div>
@@ -185,11 +191,21 @@ export const ProfitPage: React.FC = () => {
             />
           </div>
 
-          {data && data.warnings.estimatedLines > 0 && (
+          {data && ((s?.unknownRevenue || 0) > 0 || data.warnings.estimatedLines > 0) && (
             <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-800 leading-6">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-1" />
               <div>
-                <b className="font-mono">{weight(data.warnings.estimatedKg)}</b> از فروش ({num(data.warnings.estimatedLines)} ردیف) قبل از فاکتور خریدِ همان روز است. این بخش با قیمت خریدهای بعدی ضرر حساب نمی‌شود.
+                {(s?.unknownRevenue || 0) > 0 && (
+                  <span>
+                    <b className="font-mono">{formatToman(s?.unknownRevenue)}</b> فروش بهای ثبت‌شده ندارد (اغلب ارسال از کارخانه بدون فاکتور خرید). این مبلغ سود حساب نشده.
+                    {' '}
+                  </span>
+                )}
+                {data.warnings.estimatedLines > 0 && (
+                  <span>
+                    <b className="font-mono">{weight(data.warnings.estimatedKg)}</b> از فروش ({num(data.warnings.estimatedLines)} ردیف) بهای قطعی روی فاکتور ندارد.
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -224,7 +240,7 @@ export const ProfitPage: React.FC = () => {
           ) : !data ? null : view === 'lot' ? (
             <div className="space-y-2.5">
               <p className="text-[11px] text-slate-500 leading-5 px-1">
-                هر بار خرید جدا حساب می‌شود: فروش‌ها اول از قدیمی‌ترین بار کم می‌شوند، پس سود هر فروش با قیمت همان باری که از آن رفته حساب می‌شود.
+                هر بار خرید جدا حساب می‌شود: تاریخی که خریدی تا تاریخی که از همان بار فروختی، و سود واقعی همان فاکتور.
               </p>
               {data.byLot.length === 0 ? <Empty>باری در این بازه خریداری نشده.</Empty> : data.byLot.map((l, i) => <LotCard key={`${l.invoiceId}-${i}`} lot={l} onOpen={openInvoice} />)}
             </div>
@@ -240,7 +256,9 @@ export const ProfitPage: React.FC = () => {
                         <Package className="w-4 h-4 text-slate-400 shrink-0" />
                         <h3 className="text-xs font-bold text-slate-800 truncate">{p.name}</h3>
                       </div>
-                      <span className={`text-sm font-bold font-mono ${profitColor(p.profit)}`}>{formatToman(p.profit)}</span>
+                      <span className={`text-sm font-bold font-mono ${profitColor(p.profit)}`}>
+                        {profitCaption(p.profit, { sold: p.revenue, unknown: p.unknownRevenue })}
+                      </span>
                     </div>
                     <div className="grid grid-cols-4 gap-1.5 mt-3">
                       <Mini label="فروش" value={weight(p.kg)} />
@@ -266,7 +284,9 @@ export const ProfitPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-left">
-                      <div className={`text-xs font-bold font-mono ${profitColor(d.profit)}`}>{formatToman(d.profit)}</div>
+                      <div className={`text-xs font-bold font-mono ${profitColor(d.profit)}`}>
+                        {profitCaption(d.profit, { sold: d.revenue, unknown: d.unknownRevenue })}
+                      </div>
                       <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                         {percent(d.marginPercent)} · هر کیلو {formatToman(d.profitPerKg)}
                       </div>
@@ -291,7 +311,9 @@ export const ProfitPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-left shrink-0">
-                    <div className={`text-xs font-bold font-mono ${profitColor(c.profit)}`}>{formatToman(c.profit)}</div>
+                    <div className={`text-xs font-bold font-mono ${profitColor(c.profit)}`}>
+                      {profitCaption(c.profit, { sold: c.revenue, unknown: c.unknownRevenue })}
+                    </div>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5">{percent(c.marginPercent)}</div>
                   </div>
                 </div>
@@ -328,10 +350,20 @@ const LotCard: React.FC<{ lot: LotRow; onOpen: (id: string) => void }> = ({ lot:
         </p>
       </div>
       <div className="text-left shrink-0">
-        <div className={`text-sm font-bold font-mono ${profitColor(l.profit)}`}>{formatToman(l.profit)}</div>
-        <div className="text-[10px] text-slate-400">{l.kgSold ? `سود ${percent(l.marginPercent)}` : 'هنوز فروش نرفته'}</div>
+        <div className={`text-sm font-bold font-mono ${l.unknownCost ? 'text-amber-700' : profitColor(l.profit)}`}>
+          {l.unknownCost ? 'سود نامشخص' : l.kgSold ? formatToman(l.profit) : 'سود ندارد'}
+        </div>
+        <div className="text-[10px] text-slate-400">
+          {l.unknownCost ? 'بهای کارخانه ثبت نشده' : l.kgSold ? `سود ${percent(l.marginPercent)}` : 'هنوز فروش نرفته'}
+        </div>
       </div>
     </div>
+    <p className="text-[11px] text-slate-500 mt-1.5 leading-5">
+      باری که {jDate(l.date)} خریدی
+      {l.kgSold > 0 ? ` تا ${jDate(l.lastSoldAt || l.firstSoldAt || l.date)} فروختی` : ''}
+      {l.fulfillment === 'factory' ? ' · ارسال از کارخانه' : ''}
+      {l.unknownCost ? ' — سود این بار حساب نشده' : l.kgSold ? ` این‌قدر سود: ${formatToman(l.profit)}` : ''}
+    </p>
 
     <div className="flex items-center gap-2 mt-3 text-[11px]">
       <div className="flex-1 bg-amber-50 rounded-2xl px-2.5 py-2 text-center">

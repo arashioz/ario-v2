@@ -12,7 +12,10 @@ export const HomeWarehouseSettings: React.FC = () => {
   useEffect(() => {
     productsService.getProducts().then((goods) => {
       const names = new Set<string>();
-      for (const product of goods) names.add((product.supplierName || '').trim() || 'بدون شرکت');
+      for (const product of goods) {
+        const name = (product.supplierName || '').trim();
+        if (name) names.add(name);
+      }
       setCompanies([...names].sort((a, b) => a.localeCompare(b, 'fa')));
     }).catch(() => setCompanies([]));
   }, []);
@@ -32,7 +35,7 @@ export const HomeWarehouseSettings: React.FC = () => {
     <section className="rounded-2xl bg-white border border-slate-200 p-3 space-y-2">
       <div>
         <h2 className="text-sm font-bold text-slate-800">انبار صفحه اول</h2>
-        <p className="text-[11px] text-slate-500 mt-0.5">فقط شرکت‌های انتخاب‌شده روی کارت مینیمال خانه دیده می‌شوند. بقیه داخل خود انبار هستند.</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">هر شرکتی که بزنید روی کارت انبار خانه می‌آید. با زدن کارت، ماژول انبار همان شرکت باز می‌شود.</p>
       </div>
       {companies.length === 0 ? (
         <p className="text-[11px] text-slate-400">شرکتی روی کالاها ثبت نشده</p>

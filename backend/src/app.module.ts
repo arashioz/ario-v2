@@ -22,6 +22,7 @@ import { AuditModule } from './audit/audit.module';
 import { BackupModule } from './backup/backup.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { OrderRequestsModule } from './orders/order-requests.module';
+import { WatchModule } from './watch/watch.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { OrderRequestsModule } from './orders/order-requests.module';
     ProformasModule,
     SharesModule,
     BackupModule,
+    WatchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

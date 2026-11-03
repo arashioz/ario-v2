@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { productImageUrl, productsService } from '../../services/products.service';
 import { resizeImage } from '../../lib/image';
-import { weight, formatToman } from '../../lib/format';
+import { formatToman, num } from '../../lib/format';
 import type { Product, CreateProductInput } from '../../services/products.service';
 import { suppliersService } from '../../services/suppliers.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -90,7 +90,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
   const [pctSuper, setPctSuper] = useState('');
   const [pctWhole, setPctWhole] = useState('');
 
-  const [stock, setStock] = useState('0');
   const [minStockAlert, setMinStockAlert] = useState('5');
   const [description, setDescription] = useState('');
 
@@ -179,7 +178,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setPctSuper(marginOf(editProduct.buyPrice || 0, editProduct.priceSupermarket || editProduct.sellPrice || 0));
       setPctWhole(marginOf(editProduct.buyPrice || 0, editProduct.priceWholesale || editProduct.sellPrice || 0));
       setRoundStep(500);
-      setStock(editProduct.stock.toString());
       setMinStockAlert(editProduct.minStockAlert ? editProduct.minStockAlert.toString() : '5');
       setDescription(editProduct.description || '');
     } else if (isOpen) {
@@ -203,15 +201,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       setPctSuper('');
       setPctWhole('');
       setRoundStep(500);
-      setStock('0');
       setMinStockAlert('5');
       setDescription('');
     }
   }, [editProduct, isOpen, categories, productionOutput]);
 
   const generateBarcode = () => {
-    const randomCode = '626' + Math.floor(1000000000 + Math.random() * 9000000000).toString();
-    setBarcode(randomCode);
+    const body = `626${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
+    setBarcode(body + String((10 - (sum % 10)) % 10));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -260,7 +259,6 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
       priceRetail: Number(sellPrice),
       priceSupermarket: priceSupermarket ? Number(priceSupermarket) : Number(sellPrice),
       priceWholesale: priceWholesale ? Number(priceWholesale) : Number(sellPrice),
-      stock: productionOutput ? 0 : stock ? Number(stock) : 0,
       minStockAlert: minStockAlert ? Number(minStockAlert) : 5,
       description: description.trim() || undefined,
     };
@@ -789,20 +787,20 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({
               </div>
             ))}
 
-            <div className="space-y-1 text-right">
-              <label className="text-[11px] text-slate-500">موجودی انبار ({unit})</label>
-                <input
-                  type="number"
-                  value={stock}
-                  disabled={productionOutput}
-                  onChange={(e) => setStock(e.target.value)}
-                  placeholder="0"
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 border border-slate-200 outline-none font-mono text-slate-800"
-                />
-                {formKg > 0 && formKg !== 1 && Number(stock) > 0 && (
-                  <span className="text-[10px] text-slate-400 block">معادل {weight(Number(stock) * formKg)}</span>
-                )}
-                {productionOutput && <p className="text-[11px] text-sky-700 leading-5">موجودی اولیه صفر است؛ با ثبت تولید، مقدار محصول به انبار اضافه می‌شود.</p>}
+            <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2.5 text-right">
+              <p className="text-[11px] font-bold text-slate-600">موجودی انبار</p>
+              {editProduct ? (
+                <p className="text-[11px] text-slate-500 mt-1 leading-5">
+                  الان {num(editProduct.stock, 2)} {unit} است. کم و زیاد کردن دستی نیست؛ فقط فاکتور خرید/فروش یا انبارگردانی موجودی را عوض می‌کند.
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-500 mt-1 leading-5">
+                  کالای جدید با موجودی صفر ثبت می‌شود. بعد از فاکتور خرید به انبار می‌آید. اختلاف شمارش را با انبارگردانی بزنید.
+                </p>
+              )}
+              {productionOutput && (
+                <p className="text-[11px] text-sky-700 leading-5 mt-1">با ثبت تولید در کارگاه، مقدار محصول به انبار اضافه می‌شود.</p>
+              )}
             </div>
           </div>
 

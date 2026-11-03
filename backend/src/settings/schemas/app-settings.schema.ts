@@ -76,6 +76,9 @@ export class SmsTemplates {
 
   @Prop({ default: '' })
   debt: string;
+
+  @Prop({ default: '' })
+  suggest: string;
 }
 
 /** A shop bank account money can be deposited to. `id` is what payments reference. */
@@ -181,6 +184,10 @@ export class AppSettings {
   @Prop({ type: [String], default: [] })
   homeWarehouses: string[];
 
+  /** Company highlighted first in the sales module. Empty still lists every company. */
+  @Prop({ type: String, default: '' })
+  salesFocusCompany: string;
+
   /** Order of product IDs on the sales screen. */
   @Prop({ type: [String], default: [] })
   productOrder: string[];
@@ -201,6 +208,13 @@ export class AppSettings {
   /** This Jalali month's shop sales target. Amount is toman, kg is weight. */
   @Prop({ type: Object, default: () => ({ amount: 0, kg: 0 }) })
   salesTarget: { amount: number; kg: number };
+
+  /**
+   * Customer watch (پایش): RFM grade floors, quiet windows, drop-size and suggestion rules.
+   * Amounts are toman. Days are calendar days since last sale.
+   */
+  @Prop({ type: Object, default: () => ({}) })
+  customerWatch: Record<string, any>;
 
   /** Balances the old Ario app reported at export time (read-only reference). */
   @Prop({ type: Object, default: null })

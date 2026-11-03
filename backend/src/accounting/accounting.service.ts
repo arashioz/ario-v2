@@ -94,7 +94,7 @@ export class AccountingService {
         .find()
         .select('invoiceNumber type invoiceDate createdAt updatedAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost fulfillment saleType factoryPurchaseId factorySaleId items')
         .lean(),
-      this.productModel.find().select('name unit weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale stock supplierName category').lean(),
+      this.productModel.find().select('name unit weightPerUnitKg buyPrice stock supplierName category').lean(),
     ]);
     const result = runFifo(
       invoices.map((i: any) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as FifoInvoice[],
@@ -116,20 +116,27 @@ export class AccountingService {
 
   private summarize(lines: SaleLine[]) {
     const revenue = lines.reduce((s, l) => s + l.revenue, 0);
-    const cost = lines.reduce((s, l) => s + l.cost, 0);
     const kg = lines.reduce((s, l) => s + l.kg, 0);
-    const profit = revenue - cost;
+    const unknownRevenue = lines.filter((l) => l.unknownCost).reduce((s, l) => s + l.revenue, 0);
+    const unknownKg = lines.filter((l) => l.unknownCost).reduce((s, l) => s + l.kg, 0);
+    const known = lines.filter((l) => !l.unknownCost);
+    const knownRevenue = known.reduce((s, l) => s + l.revenue, 0);
+    const cost = known.reduce((s, l) => s + l.cost, 0);
+    const knownKg = known.reduce((s, l) => s + l.kg, 0);
+    const profit = knownRevenue - cost;
     return {
       revenue: r0(revenue),
       cost: r0(cost),
       profit: r0(profit),
       kg: r1(kg),
       tons: Math.round(kg) / 1000,
-      marginPercent: pct(profit, revenue), // سود / فروش
-      markupPercent: pct(profit, cost), // سود / بهای خرید
-      profitPerKg: kg ? r0(profit / kg) : 0,
+      marginPercent: pct(profit, knownRevenue || revenue),
+      markupPercent: pct(profit, cost),
+      profitPerKg: knownKg ? r0(profit / knownKg) : 0,
       avgSellPerKg: kg ? r0(revenue / kg) : 0,
-      avgCostPerKg: kg ? r0(cost / kg) : 0,
+      avgCostPerKg: knownKg ? r0(cost / knownKg) : 0,
+      unknownRevenue: r0(unknownRevenue),
+      unknownKg: r1(unknownKg),
     };
   }
 
@@ -240,6 +247,7 @@ export class AccountingService {
           soldKg: 0,
           soldRevenue: 0,
           soldCost: 0,
+          unknownSold: 0,
           fifoRemainingKg: 0,
           remainingValue: 0,
           openLots: [] as any[],
@@ -250,6 +258,7 @@ export class AccountingService {
 
     for (const p of f.products.values()) row(String(p._id), p.name);
     for (const lot of f.lots) {
+      if (lot.fulfillment === 'factory') continue;
       const r = row(lot.productId, lot.productName);
       if (!r.supplier && lot.supplier) r.supplier = lot.supplier;
       r.purchasedKg += lot.kgIn;
@@ -272,7 +281,8 @@ export class AccountingService {
       const r = row(l.productId, l.productName);
       r.soldKg += l.kg;
       r.soldRevenue += l.revenue;
-      r.soldCost += l.cost;
+      r.soldCost += l.unknownCost ? 0 : l.cost;
+      r.unknownSold = (r.unknownSold || 0) + (l.unknownCost ? l.revenue : 0);
     }
 
     // Registered quantity should follow invoice lines: received purchases minus shop sales.
@@ -291,6 +301,24 @@ export class AccountingService {
       }
     }
 
+    for (const r of byProduct.values()) {
+      const pack = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
+      if (!(pack > 1)) continue;
+      const boughtOnce = (r.purchasedUnits || 0) * pack;
+      if (boughtOnce > 0 && r.purchasedKg > boughtOnce * 1.45 && r.purchasedKg < boughtOnce * 2.2) {
+        const scale = boughtOnce / r.purchasedKg;
+        r.purchasedKg = boughtOnce;
+        r.purchasedAmount *= scale;
+        r.fifoRemainingKg *= scale;
+        r.remainingValue *= scale;
+        for (const lot of r.openLots) lot.kgLeft = r1((lot.kgLeft || 0) * scale);
+      }
+      const soldOnce = (r.soldUnits || 0) * pack;
+      if (soldOnce > 0 && r.soldKg > soldOnce * 1.45 && r.soldKg < soldOnce * 2.2) {
+        r.soldKg = soldOnce;
+      }
+    }
+
     const prices = new Map(
       (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale').lean()).map((p: any) => [String(p._id), p]),
     );
@@ -304,7 +332,7 @@ export class AccountingService {
       .map((r) => {
         // Current stock valued at the FIFO cost of the lots still on hand.
         const avgRemainingCost = r.fifoRemainingKg > 0 ? r.remainingValue / r.fifoRemainingKg : r.purchasedKg ? r.purchasedAmount / r.purchasedKg : 0;
-        const profit = r.soldRevenue - r.soldCost;
+        const profit = r.soldRevenue - (r.unknownSold || 0) - r.soldCost;
         const expectedUnits = (r.purchasedUnits || 0) - (r.soldUnits || 0);
         const p = prices.get(r.productId);
         // On-hand weight is what the purchase lots still hold, not quantity × a catalog weight.
@@ -316,6 +344,7 @@ export class AccountingService {
         return {
           ...r,
           expectedUnits: r1(expectedUnits),
+          stockUnits: r1(onHandUnits),
           stockKg: r1(onHandKg),
           stockValue: r0(r.remainingValue || onHandKg * avgRemainingCost),
           /** Same on-hand goods at today's sell price of each tier. */
@@ -383,7 +412,7 @@ export class AccountingService {
     const f = await this.fifo();
     const companyOf = (pid: string, fallback = '') => {
       const name = (f.products.get(pid)?.supplierName || '').trim() || fallback.trim();
-      return name || 'بدون شرکت';
+      return name;
     };
     const inRange = (date: Date) => !period.from && !period.to ? true : this.inPeriod(date, period);
     type Bucket = {
@@ -393,15 +422,17 @@ export class AccountingService {
       soldKg: number;
       soldAmount: number;
       soldCost: number;
+      unknownSold: number;
       stockKg: number;
       stockValue: number;
     };
     const companies = new Map<string, Bucket>();
     const bucket = (name: string) => {
-      const key = name || 'بدون شرکت';
+      const key = (name || '').trim();
+      if (!key) return null;
       let row = companies.get(key);
       if (!row) {
-        row = { name: key, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, stockKg: 0, stockValue: 0 };
+        row = { name: key, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, unknownSold: 0, stockKg: 0, stockValue: 0 };
         companies.set(key, row);
       }
       return row;
@@ -415,6 +446,7 @@ export class AccountingService {
       soldKg: number;
       soldAmount: number;
       soldCost: number;
+      unknownSold: number;
       stockKg: number;
       lastCost: number;
     };
@@ -422,27 +454,60 @@ export class AccountingService {
     const productRow = (pid: string, name: string, company: string) => {
       let row = products.get(pid);
       if (!row) {
-        row = { productId: pid, name, company, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, stockKg: 0, lastCost: 0 };
+        row = { productId: pid, name, company, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, unknownSold: 0, stockKg: 0, lastCost: 0 };
         products.set(pid, row);
       }
       return row;
     };
 
+    const packLot = (lot: (typeof f.lots)[number]) => {
+      const profit = lot.unknownCost ? 0 : lot.revenue - lot.cost;
+      return {
+        productId: lot.productId,
+        productName: lot.productName,
+        invoiceNumber: lot.invoiceNumber,
+        invoiceId: lot.invoiceId,
+        date: lot.date,
+        firstSoldAt: lot.firstSoldAt || null,
+        lastSoldAt: lot.lastSoldAt || null,
+        supplier: lot.supplier,
+        fulfillment: lot.fulfillment,
+        unknownCost: !!lot.unknownCost,
+        kgIn: r1(lot.kgIn),
+        costPerKg: r0(lot.costPerKg),
+        buyAmount: r0(lot.kgIn * lot.costPerKg),
+        kgSold: r1(lot.kgSold),
+        kgLeft: r1(lot.kgLeft),
+        soldPercent: pct(lot.kgSold, lot.kgIn),
+        revenue: r0(lot.revenue),
+        profit: r0(profit),
+        avgSellPerKg: lot.kgSold ? r0(lot.revenue / lot.kgSold) : 0,
+        profitPerKg: lot.kgSold && !lot.unknownCost ? r0(profit / lot.kgSold) : 0,
+        marginPercent: lot.unknownCost ? 0 : pct(profit, lot.revenue),
+      };
+    };
+
     for (const lot of f.lots) {
+      if (lot.fulfillment === 'factory') continue;
       const company = companyOf(lot.productId, lot.supplier);
       const product = productRow(lot.productId, lot.productName, company);
       if (lot.kgLeft > 1e-6) {
         const value = lot.kgLeft * lot.costPerKg;
-        bucket(company).stockKg += lot.kgLeft;
-        bucket(company).stockValue += value;
+        const stock = bucket(company);
+        if (stock) {
+          stock.stockKg += lot.kgLeft;
+          stock.stockValue += value;
+        }
         product.stockKg += lot.kgLeft;
       }
       product.lastCost = lot.costPerKg;
       if (!inRange(lot.date)) continue;
       const amount = lot.kgIn * lot.costPerKg;
       const co = bucket(company);
-      co.purchasedKg += lot.kgIn;
-      co.purchasedAmount += amount;
+      if (co) {
+        co.purchasedKg += lot.kgIn;
+        co.purchasedAmount += amount;
+      }
       product.purchasedKg += lot.kgIn;
       product.purchasedAmount += amount;
     }
@@ -453,11 +518,13 @@ export class AccountingService {
       for (const it of inv.items) {
         const pid = String(it.productId || '');
         const known = pid ? (f.products.get(pid)?.supplierName || '').trim() : '';
-        const co = bucket(known || inv.customerName || 'شرکت مادر');
+        const co = bucket(known || inv.customerName || '');
         const kg = lineKg(it, f.products.get(pid));
         const amount = it.totalPrice || (it.unitPrice || 0) * (it.quantity || 0);
-        co.purchasedKg += kg;
-        co.purchasedAmount += amount;
+        if (co) {
+          co.purchasedKg += kg;
+          co.purchasedAmount += amount;
+        }
         if (pid) {
           const product = productRow(pid, it.productName, known || inv.customerName || 'شرکت مادر');
           product.purchasedKg += kg;
@@ -470,17 +537,22 @@ export class AccountingService {
       if (!inRange(line.date)) continue;
       const company = companyOf(line.productId);
       const co = bucket(company);
-      co.soldKg += line.kg;
-      co.soldAmount += line.revenue;
-      co.soldCost += line.cost;
+      if (co) {
+        co.soldKg += line.kg;
+        co.soldAmount += line.revenue;
+        if (line.unknownCost) co.unknownSold += line.revenue;
+        else co.soldCost += line.cost;
+      }
       const product = productRow(line.productId, line.productName, company);
       product.soldKg += line.kg;
       product.soldAmount += line.revenue;
-      product.soldCost += line.cost;
+      if (line.unknownCost) product.unknownSold += line.revenue;
+      else product.soldCost += line.cost;
     }
 
     const pack = (row: Bucket) => {
-      const profit = row.soldAmount - row.soldCost;
+      const profit = row.soldAmount - row.unknownSold - row.soldCost;
+      const knownSold = row.soldAmount - row.unknownSold;
       return {
         name: row.name,
         purchasedKg: r1(row.purchasedKg),
@@ -488,20 +560,22 @@ export class AccountingService {
         soldKg: r1(row.soldKg),
         soldAmount: r0(row.soldAmount),
         profit: r0(profit),
-        marginPercent: pct(profit, row.soldAmount),
+        marginPercent: pct(profit, knownSold || row.soldAmount),
+        unknownSold: r0(row.unknownSold),
         stockKg: r1(row.stockKg),
         stockValue: r0(row.stockValue),
       };
     };
     const companyRows = [...companies.values()].map(pack).sort((a, b) => b.soldAmount - a.soldAmount || b.purchasedAmount - a.purchasedAmount);
-    const sum = (key: 'purchasedKg' | 'purchasedAmount' | 'soldKg' | 'soldAmount' | 'profit' | 'stockKg' | 'stockValue') =>
+    const sum = (key: 'purchasedKg' | 'purchasedAmount' | 'soldKg' | 'soldAmount' | 'profit' | 'unknownSold' | 'stockKg' | 'stockValue') =>
       companyRows.reduce((total, row) => total + (row[key] || 0), 0);
     const soldAmount = sum('soldAmount');
     const profit = sum('profit');
+    const unknownSold = sum('unknownSold');
     const productRows = [...products.values()]
       .filter((row) => row.purchasedKg > 0 || row.soldKg > 0 || row.stockKg > 0)
       .map((row) => {
-        const net = row.soldAmount - row.soldCost;
+        const net = row.soldAmount - row.unknownSold - row.soldCost;
         return {
           productId: row.productId,
           name: row.name,
@@ -512,7 +586,8 @@ export class AccountingService {
           soldAmount: r0(row.soldAmount),
           soldCost: r0(row.soldCost),
           profit: r0(net),
-          marginPercent: pct(net, row.soldAmount),
+          marginPercent: pct(net, row.soldAmount - row.unknownSold || row.soldAmount),
+          unknownSold: r0(row.unknownSold),
           stockKg: r1(row.stockKg),
           stockValue: r0(row.stockKg * (row.lastCost || 0)),
           avgBuyPerKg: row.purchasedKg ? r0(row.purchasedAmount / row.purchasedKg) : 0,
@@ -529,13 +604,75 @@ export class AccountingService {
         soldKg: r1(sum('soldKg')),
         soldAmount: r0(soldAmount),
         profit: r0(profit),
-        marginPercent: pct(profit, soldAmount),
+        marginPercent: pct(profit, soldAmount - unknownSold || soldAmount),
         profitPerKg: sum('soldKg') ? r0(profit / sum('soldKg')) : 0,
+        unknownSold: r0(unknownSold),
         stockKg: r1(sum('stockKg')),
         stockValue: r0(sum('stockValue')),
       },
       companies: companyRows,
       products: productRows,
+      invoices: (() => {
+        const rows = new Map<
+          string,
+          {
+            invoiceId: string;
+            invoiceNumber: string;
+            date: Date;
+            customerName: string;
+            fulfillment: 'shop' | 'factory';
+            revenue: number;
+            cost: number;
+            unknownSold: number;
+            kg: number;
+          }
+        >();
+        for (const line of f.saleLines) {
+          if (!inRange(line.date)) continue;
+          let row = rows.get(line.invoiceId);
+          if (!row) {
+            row = {
+              invoiceId: line.invoiceId,
+              invoiceNumber: line.invoiceNumber,
+              date: line.date,
+              customerName: line.customerName,
+              fulfillment: line.fulfillment,
+              revenue: 0,
+              cost: 0,
+              unknownSold: 0,
+              kg: 0,
+            };
+            rows.set(line.invoiceId, row);
+          }
+          row.revenue += line.revenue;
+          row.kg += line.kg;
+          if (line.fulfillment === 'factory') row.fulfillment = 'factory';
+          if (line.unknownCost) row.unknownSold += line.revenue;
+          else row.cost += line.cost;
+        }
+        return [...rows.values()]
+          .map((row) => {
+            const profit = row.revenue - row.unknownSold - row.cost;
+            return {
+              invoiceId: row.invoiceId,
+              invoiceNumber: row.invoiceNumber,
+              date: row.date,
+              customerName: row.customerName,
+              fulfillment: row.fulfillment,
+              kg: r1(row.kg),
+              revenue: r0(row.revenue),
+              profit: r0(profit),
+              unknownSold: r0(row.unknownSold),
+              marginPercent: pct(profit, row.revenue - row.unknownSold || row.revenue),
+            };
+          })
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 60);
+      })(),
+      lots: f.lots
+        .filter((lot) => (!period.from && !period.to) || this.inPeriod(lot.date, period) || (lot.firstSoldAt && this.inPeriod(lot.firstSoldAt, period)) || (lot.lastSoldAt && this.inPeriod(lot.lastSoldAt, period)))
+        .map(packLot)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     };
   }
 
@@ -569,33 +706,51 @@ export class AccountingService {
       .sort((a, b) => b.profit - a.profit)
       .slice(0, 30);
 
-    // سود از روی هر بار خرید (full lifetime of each lot)
+    const lotInRange = (lot: (typeof f.lots)[number]) => {
+      if (!period.from && !period.to) return true;
+      if (this.inPeriod(lot.date, period)) return true;
+      if (lot.firstSoldAt && this.inPeriod(lot.firstSoldAt, period)) return true;
+      if (lot.lastSoldAt && this.inPeriod(lot.lastSoldAt, period)) return true;
+      return false;
+    };
     const byLot = f.lots
-      .filter((lot) => (!period.from && !period.to) || this.inPeriod(lot.date, period))
-      .map((lot) => ({
-        invoiceNumber: lot.invoiceNumber,
-        invoiceId: lot.invoiceId,
-        date: lot.date,
-        supplier: lot.supplier,
-        productName: lot.productName,
-        kgIn: r1(lot.kgIn),
-        costPerKg: r0(lot.costPerKg),
-        buyAmount: r0(lot.kgIn * lot.costPerKg),
-        kgSold: r1(lot.kgSold),
-        kgLeft: r1(lot.kgLeft),
-        soldPercent: pct(lot.kgSold, lot.kgIn),
-        revenue: r0(lot.revenue),
-        profit: r0(lot.revenue - lot.cost),
-        avgSellPerKg: lot.kgSold ? r0(lot.revenue / lot.kgSold) : 0,
-        profitPerKg: lot.kgSold ? r0((lot.revenue - lot.cost) / lot.kgSold) : 0,
-        marginPercent: pct(lot.revenue - lot.cost, lot.revenue),
-      }))
+      .filter((lot) => {
+        if (channel === 'factory' && lot.fulfillment !== 'factory') return false;
+        if (channel === 'shop' && lot.fulfillment === 'factory') return false;
+        return lotInRange(lot);
+      })
+      .map((lot) => {
+        const profit = lot.unknownCost ? 0 : lot.revenue - lot.cost;
+        return {
+          productId: lot.productId,
+          productName: lot.productName,
+          invoiceNumber: lot.invoiceNumber,
+          invoiceId: lot.invoiceId,
+          date: lot.date,
+          firstSoldAt: lot.firstSoldAt || null,
+          lastSoldAt: lot.lastSoldAt || null,
+          supplier: lot.supplier,
+          fulfillment: lot.fulfillment,
+          unknownCost: !!lot.unknownCost,
+          kgIn: r1(lot.kgIn),
+          costPerKg: r0(lot.costPerKg),
+          buyAmount: r0(lot.kgIn * lot.costPerKg),
+          kgSold: r1(lot.kgSold),
+          kgLeft: r1(lot.kgLeft),
+          soldPercent: pct(lot.kgSold, lot.kgIn),
+          revenue: r0(lot.revenue),
+          profit: r0(profit),
+          avgSellPerKg: lot.kgSold ? r0(lot.revenue / lot.kgSold) : 0,
+          profitPerKg: lot.kgSold && !lot.unknownCost ? r0(profit / lot.kgSold) : 0,
+          marginPercent: lot.unknownCost ? 0 : pct(profit, lot.revenue),
+        };
+      })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const suspicious = lines
       .filter((l) => {
         const m = l.revenue ? (l.profit / l.revenue) * 100 : 0;
-        if (l.kg <= 0 || l.cost <= 0) return false;
+        if (l.kg <= 0 || l.cost <= 0 || l.unknownCost) return false;
         if (m < SUSPICIOUS.minMargin) return true;
         // A factory price typed on purpose can sit above the shop's usual margin.
         if (m > SUSPICIOUS.maxMargin && l.fulfillment !== 'factory') return true;
@@ -633,7 +788,7 @@ export class AccountingService {
       byProduct,
       byDay,
       byCustomer,
-      byLot: channel === 'factory' ? [] : byLot,
+      byLot,
       suspicious,
       warnings: {
         estimatedLines: estimated.length,
@@ -661,6 +816,7 @@ export class AccountingService {
         revenue: r0(l.revenue),
         cost: r0(l.cost),
         profit: r0(l.profit),
+        unknownCost: !!l.unknownCost,
         sellPerKg: l.kg ? r0(l.revenue / l.kg) : 0,
         costPerKg: l.kg ? r0(l.cost / l.kg) : 0,
         costPerUnit: l.quantity ? r0(l.cost / l.quantity) : 0,

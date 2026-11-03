@@ -14,11 +14,13 @@ export interface CartLine {
 const r1 = (n: number) => Math.round(n * 10) / 10;
 export const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
-export const kgPerUnit = (p: Product) =>
-  p.weightPerUnitKg ||
-  (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio || 0 : 0) ||
-  (p.unit === 'کیلوگرم' ? 1 : 0) ||
-  (p.sellBy === 'kg' ? 1 : 0);
+export const kgPerUnit = (p: Product) => {
+  const w = Number(p.weightPerUnitKg) || 0;
+  if (w > 0) return w;
+  if (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' && Number(p.unitRatio) > 0) return Number(p.unitRatio);
+  if (p.unit === 'کیلوگرم') return 1;
+  return 0;
+};
 
 export const tierPrice = (p: Product, type: SaleType) => {
   const tier = type === 'wholesale' || type === 'distributor' ? p.priceWholesale : type === 'supermarket' ? p.priceSupermarket : p.priceRetail;

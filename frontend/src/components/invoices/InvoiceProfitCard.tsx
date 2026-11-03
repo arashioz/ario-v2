@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { accountingService } from '../../services/accounting.service';
 import type { InvoiceProfit } from '../../services/accounting.service';
-import { formatToman, percent, profitColor, toman, weight } from '../../lib/format';
+import { formatToman, percent, profitCaption, profitColor, toman, weight } from '../../lib/format';
 
 /** Tiny toggle: the invoice profit stays hidden until the button is pressed. */
 export const InvoiceProfitCard: React.FC<{ invoiceId: string; version: string }> = ({ invoiceId, version }) => {
@@ -31,7 +31,9 @@ export const InvoiceProfitCard: React.FC<{ invoiceId: string; version: string }>
       >
         <TrendingUp className="w-3 h-3 text-emerald-600" />
         {open ? (
-          <span className={`font-mono font-bold ${profitColor(data.profit)}`}>{formatToman(data.profit)}</span>
+          <span className={`font-mono font-bold ${profitColor(data.profit)}`}>
+            {profitCaption(data.profit, { sold: data.revenue, unknown: data.unknownRevenue })}
+          </span>
         ) : (
           <span>سود فاکتور</span>
         )}
@@ -41,12 +43,14 @@ export const InvoiceProfitCard: React.FC<{ invoiceId: string; version: string }>
           <div className="font-mono">
             {percent(data.marginPercent)} · کیلویی {formatToman(data.profitPerKg)}
           </div>
-          {data.estimated && <p className="text-amber-700">بخشی از قیمت خرید این فروش تخمینی است.</p>}
+          {data.estimated && <p className="text-amber-700">بخشی از بهای این فروش روی فاکتور ثبت نشده؛ آن بخش سود حساب نشده.</p>}
           {data.lines.map((l, i) => (
             <div key={i} className="rounded-xl bg-slate-50 px-2 py-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-slate-700 font-bold">{l.productName}</span>
-                <span className={`shrink-0 font-mono ${profitColor(l.profit)}`}>{toman(l.profit)}</span>
+                <span className={`shrink-0 font-mono ${l.unknownCost ? 'text-amber-700' : profitColor(l.profit)}`}>
+                  {l.unknownCost ? 'سود نامشخص' : toman(l.profit)}
+                </span>
               </div>
               <div className="font-mono text-slate-500 mt-0.5">
                 {l.unit && l.unit !== 'کیلوگرم' ? `خرید هر ${l.unit} ${formatToman(l.costPerUnit)} · ` : ''}

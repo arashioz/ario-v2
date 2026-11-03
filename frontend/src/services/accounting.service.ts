@@ -18,6 +18,9 @@ export interface SalesSummary {
   profitPerKg: number;
   avgSellPerKg: number;
   avgCostPerKg: number;
+  /** Sales whose factory/shop cost was missing — not counted in profit. */
+  unknownRevenue?: number;
+  unknownKg?: number;
 }
 
 export interface OpenLot {
@@ -88,10 +91,15 @@ export interface InventoryReport {
 export type GroupRow = SalesSummary & { key: string; invoices: number };
 
 export interface LotRow {
+  productId?: string;
   invoiceNumber: string;
   invoiceId: string;
   date: string;
+  firstSoldAt?: string | null;
+  lastSoldAt?: string | null;
   supplier?: string;
+  fulfillment?: 'shop' | 'factory';
+  unknownCost?: boolean;
   productName: string;
   kgIn: number;
   costPerKg: number;
@@ -150,6 +158,7 @@ export interface InvoiceProfit extends SalesSummary {
     revenue: number;
     cost: number;
     profit: number;
+    unknownCost?: boolean;
     sellPerKg: number;
     costPerKg: number;
     costPerUnit: number;
@@ -401,6 +410,7 @@ export interface SalesBoardCompany {
   soldAmount: number;
   profit: number;
   marginPercent: number;
+  unknownSold?: number;
   stockKg: number;
   stockValue: number;
 }
@@ -421,6 +431,7 @@ export interface SalesBoardProduct {
   avgBuyPerKg: number;
   avgSellPerKg: number;
   lastCostPerKg: number;
+  unknownSold?: number;
 }
 
 export interface SalesBoard {
@@ -432,11 +443,27 @@ export interface SalesBoard {
     profit: number;
     marginPercent: number;
     profitPerKg: number;
+    unknownSold?: number;
     stockKg: number;
     stockValue: number;
   };
   companies: SalesBoardCompany[];
   products: SalesBoardProduct[];
+  invoices?: SalesBoardInvoice[];
+  lots?: LotRow[];
+}
+
+export interface SalesBoardInvoice {
+  invoiceId: string;
+  invoiceNumber: string;
+  date: string;
+  customerName: string;
+  fulfillment: 'shop' | 'factory';
+  kg: number;
+  revenue: number;
+  profit: number;
+  unknownSold?: number;
+  marginPercent: number;
 }
 
 export interface SalesProgressRow {

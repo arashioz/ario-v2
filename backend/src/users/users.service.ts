@@ -167,7 +167,7 @@ export class UsersService implements OnModuleInit {
   }
 
   async setHome(id: string, body: { homeLayout?: string[]; homeWarehouses?: string[] }) {
-    const widgets = new Set(['warehouse', 'shortcuts', 'chart', 'collections', 'debts', 'company', 'today', 'profit', 'followups', 'notes', 'target']);
+    const widgets = new Set(['warehouse', 'modules', 'shortcuts', 'chart', 'collections', 'debts', 'company', 'today', 'profit', 'followups', 'notes', 'target', 'watch']);
     const user = await this.findById(id);
     if (Array.isArray(body.homeLayout)) {
       user.homeLayout = [...new Set(body.homeLayout.map((item) => String(item)).filter((item) => widgets.has(item)))];

@@ -4,7 +4,64 @@ import { Model } from 'mongoose';
 import { randomBytes } from 'crypto';
 import { AppSettings, AppSettingsDocument, POS_LAYOUTS, POS_SECTIONS, POS_SIZES, SALES_LAYOUTS } from './schemas/app-settings.schema';
 
-const SMS_KEYS = ['invoice', 'proforma', 'debt'] as const;
+const SMS_KEYS = ['invoice', 'proforma', 'debt', 'suggest'] as const;
+
+export const DEFAULT_CUSTOMER_WATCH = {
+  gradeAMonthAmount: 30_000_000,
+  gradeBMonthAmount: 10_000_000,
+  gradeCMonthAmount: 2_000_000,
+  gradeAYearAmount: 250_000_000,
+  gradeBYearAmount: 80_000_000,
+  gradeCYearAmount: 20_000_000,
+  quietDaysA: 21,
+  quietDaysB: 30,
+  quietDaysC: 45,
+  quietDaysD: 75,
+  dropSizeInvoices: 6,
+  dropSizeDropPercent: 40,
+  suggestMode: 'mix' as 'mix' | 'last' | 'top',
+  suggestTopProducts: 4,
+  ruleQuiet: true,
+  ruleDebt: true,
+  ruleDropOff: true,
+  ruleChampion: true,
+  planFollowUp: true,
+  planDays: 2,
+};
+
+export type CustomerWatchSettings = typeof DEFAULT_CUSTOMER_WATCH;
+
+export const normalizeWatch = (raw?: Record<string, any> | null): CustomerWatchSettings => {
+  const d = DEFAULT_CUSTOMER_WATCH;
+  const n = (v: unknown, fallback: number, min: number, max: number) => {
+    const x = Number(v);
+    if (!Number.isFinite(x)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(x)));
+  };
+  const mode = raw?.suggestMode === 'last' || raw?.suggestMode === 'top' ? raw.suggestMode : 'mix';
+  return {
+    gradeAMonthAmount: n(raw?.gradeAMonthAmount, d.gradeAMonthAmount, 0, 1_000_000_000_000),
+    gradeBMonthAmount: n(raw?.gradeBMonthAmount, d.gradeBMonthAmount, 0, 1_000_000_000_000),
+    gradeCMonthAmount: n(raw?.gradeCMonthAmount, d.gradeCMonthAmount, 0, 1_000_000_000_000),
+    gradeAYearAmount: n(raw?.gradeAYearAmount, d.gradeAYearAmount, 0, 1_000_000_000_000),
+    gradeBYearAmount: n(raw?.gradeBYearAmount, d.gradeBYearAmount, 0, 1_000_000_000_000),
+    gradeCYearAmount: n(raw?.gradeCYearAmount, d.gradeCYearAmount, 0, 1_000_000_000_000),
+    quietDaysA: n(raw?.quietDaysA, d.quietDaysA, 1, 365),
+    quietDaysB: n(raw?.quietDaysB, d.quietDaysB, 1, 365),
+    quietDaysC: n(raw?.quietDaysC, d.quietDaysC, 1, 365),
+    quietDaysD: n(raw?.quietDaysD, d.quietDaysD, 1, 365),
+    dropSizeInvoices: n(raw?.dropSizeInvoices, d.dropSizeInvoices, 1, 30),
+    dropSizeDropPercent: n(raw?.dropSizeDropPercent, d.dropSizeDropPercent, 5, 90),
+    suggestMode: mode,
+    suggestTopProducts: n(raw?.suggestTopProducts, d.suggestTopProducts, 1, 12),
+    ruleQuiet: raw?.ruleQuiet !== false,
+    ruleDebt: raw?.ruleDebt !== false,
+    ruleDropOff: raw?.ruleDropOff !== false,
+    ruleChampion: raw?.ruleChampion !== false,
+    planFollowUp: raw?.planFollowUp !== false,
+    planDays: n(raw?.planDays, d.planDays, 0, 30),
+  };
+};
 
 const toLatin = (s: string) =>
   s.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
@@ -93,6 +150,10 @@ export class SettingsService {
       set.homeWarehouses = [...new Set(body.homeWarehouses.map((s: unknown) => String(s || '').trim()).filter(Boolean))];
     }
 
+    if (body.salesFocusCompany !== undefined) {
+      set.salesFocusCompany = String(body.salesFocusCompany || '').trim();
+    }
+
     if (Array.isArray(body.categoryOrder)) {
       set.categoryOrder = [...new Set(body.categoryOrder.map((s: unknown) => String(s || '').trim()).filter(Boolean))];
     }
@@ -155,6 +216,10 @@ export class SettingsService {
       for (const k of SMS_KEYS) {
         if (body.smsTemplates[k] !== undefined) set[`smsTemplates.${k}`] = String(body.smsTemplates[k] ?? '').slice(0, 2000);
       }
+    }
+
+    if (body.customerWatch && typeof body.customerWatch === 'object') {
+      set.customerWatch = normalizeWatch({ ...doc.customerWatch, ...body.customerWatch });
     }
 
     if (body.loyalty && typeof body.loyalty === 'object') {

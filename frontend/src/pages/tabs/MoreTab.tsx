@@ -23,7 +23,6 @@ import {
   Download,
   Info,
   ClipboardList,
-  Boxes,
   Settings,
   DatabaseBackup,
   Users,
@@ -32,6 +31,7 @@ import {
   Factory,
   LayoutGrid,
   Target,
+  Binoculars,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
@@ -84,6 +84,13 @@ const REPORTS: Item[] = [
     tone: 'bg-emerald-100 text-emerald-700',
   },
   {
+    path: '/watch',
+    title: 'ماژول پایش مشتری',
+    desc: 'گرید خودکار، قوانین تماس، دراپ‌سایز و فاکتور پیشنهادی',
+    icon: Binoculars,
+    tone: 'bg-sky-100 text-sky-800',
+  },
+  {
     path: '/credit-report',
     title: 'نسیه و وصول',
     desc: 'بار نسیه، و پولی که از نسیه روزهای قبل برگشته',
@@ -120,17 +127,10 @@ const REPORTS: Item[] = [
   },
   {
     path: '/inventory',
-    title: 'موجودی انبار',
-    desc: 'وزن موجود و ارزش خرید کالاها',
+    title: 'ماژول انبار',
+    desc: 'موجودی هر کالا، وزن، ارزش خرید و فروش',
     icon: Scale,
     tone: 'bg-sky-100 text-sky-600',
-  },
-  {
-    path: '/warehouses',
-    title: 'انبار شرکت‌ها',
-    desc: 'کالا، خرید و فروش هر شرکت و اصلاح موجودی',
-    icon: Boxes,
-    tone: 'bg-indigo-100 text-indigo-700',
   },
 ];
 

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { IonContent, IonPage, IonRefresher, IonRefresherContent } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { accountingService } from '../services/accounting.service';
-import type { SalesBoardProduct } from '../services/accounting.service';
+import type { LotRow, SalesBoardProduct } from '../services/accounting.service';
 import { watchService } from '../services/watch.service';
 import type { PriceChartProduct } from '../services/watch.service';
 import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/PeriodPicker';
@@ -13,10 +13,10 @@ import { buildPriceSeries } from '../components/reports/priceSeries';
 import type { ChartUnit, ChartView } from '../components/reports/priceSeries';
 import { ListSkeleton } from '../components/ui/Skeleton';
 import { formatJalaliIso } from '../lib/jalali';
-import { formatToman, percent, weight } from '../lib/format';
+import { formatToman, percent, profitCaption, profitColor, weight } from '../lib/format';
 
 type Range = '30' | '90' | '180' | 'all';
-type Block = 'numbers' | 'chart' | 'buys' | 'sells';
+type Block = 'numbers' | 'lots' | 'chart' | 'buys' | 'sells';
 
 const DAY = 86400000;
 
@@ -32,6 +32,7 @@ export const SalesProductPage: React.FC = () => {
   const { productId = '' } = useParams<{ productId: string }>();
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
   const [row, setRow] = useState<SalesBoardProduct | null>(null);
+  const [lots, setLots] = useState<LotRow[]>([]);
   const [chart, setChart] = useState<PriceChartProduct | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,7 @@ export const SalesProductPage: React.FC = () => {
         watchService.priceChart(),
       ]);
       setRow(board.products.find((item) => item.productId === productId) || null);
+      setLots((board.lots || []).filter((lot) => lot.productId === productId));
       setChart(charts.find((item) => item.productId === productId) || null);
     } catch {
       setError('گزارش این کالا بارگذاری نشد.');
@@ -98,6 +100,7 @@ export const SalesProductPage: React.FC = () => {
             onChange={setBlock}
             items={[
               ['numbers', 'اعداد'],
+              ['lots', 'سود بارها'],
               ['chart', 'نمودار'],
               ['buys', 'خریدها'],
               ['sells', 'فروش‌ها'],
@@ -113,7 +116,12 @@ export const SalesProductPage: React.FC = () => {
                 <Stat label="خرید در بازه" value={formatToman(row.purchasedAmount)} sub={weight(row.purchasedKg)} />
                 <Stat label="فروش در بازه" value={formatToman(row.soldAmount)} sub={weight(row.soldKg)} />
                 <Stat label="موجودی الان" value={formatToman(row.stockValue)} sub={weight(row.stockKg)} />
-                <Stat label="سود فروش" value={formatToman(row.profit)} sub={percent(row.marginPercent)} tone={row.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'} />
+                <Stat
+                  label="سود فروش"
+                  value={profitCaption(row.profit, { sold: row.soldAmount, unknown: row.unknownSold })}
+                  sub={(row.unknownSold || 0) > 0 ? 'بهای بعضی فروش‌ها ثبت نشده' : percent(row.marginPercent)}
+                  tone={profitColor(row.profit)}
+                />
               </div>
               <section className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
                 <div className="px-3.5 py-3 flex items-center justify-between">
@@ -138,8 +146,46 @@ export const SalesProductPage: React.FC = () => {
                 )}
               </section>
               <p className="text-[11px] text-slate-400 leading-5 px-1">
-                موجودی، بارِ همین لحظه است. خرید، فروش و سود مال بازه‌ای است که بالا انتخاب کرده‌اید. برای نمودار و ریز خرید و فروش، تب‌های کناری را بزنید.
+                موجودی، بارِ همین لحظه است. خرید، فروش و سود مال بازه‌ای است که بالا انتخاب کرده‌اید. سود هر بار خرید را در تب «سود بارها» ببینید.
               </p>
+            </div>
+          )}
+
+          {block === 'lots' && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-500 leading-5 px-1">
+                هر بار جدا: تاریخ خرید تا آخرین فروش از همان فاکتور، و سود واقعی همان بار.
+              </p>
+              {lots.length === 0 ? (
+                <Empty>باری برای این کالا در این بازه نیست.</Empty>
+              ) : (
+                lots.map((l, i) => (
+                  <div key={`${l.invoiceId}-${i}`} className="bg-white rounded-2xl border border-slate-100 px-3.5 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-bold text-slate-800">
+                          باری که {formatJalaliIso(l.date)} خریدی
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 leading-5">
+                          {l.kgSold > 0
+                            ? `تا ${formatJalaliIso(l.lastSoldAt || l.firstSoldAt || l.date)} فروختی`
+                            : 'هنوز از این بار فروش نرفته'}
+                          {l.fulfillment === 'factory' ? ' · ارسال از کارخانه' : ''}
+                          {l.supplier ? ` · ${l.supplier}` : ''}
+                        </div>
+                      </div>
+                      <div className={`text-[13px] font-bold font-mono shrink-0 ${l.unknownCost ? 'text-amber-700' : profitColor(l.profit)}`}>
+                        {l.unknownCost ? 'سود نامشخص' : l.kgSold ? profitCaption(l.profit, { sold: l.revenue }) : '—'}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-2 text-[11px] text-slate-500 font-mono">
+                      <span>خرید {weight(l.kgIn)}</span>
+                      <span>فروش {weight(l.kgSold)}</span>
+                      <span>{l.unknownCost ? 'بها ثبت نشده' : formatToman(l.profit)}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
 

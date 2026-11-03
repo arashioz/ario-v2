@@ -16,7 +16,6 @@ const ChequesPage = lazy(() => import('./ChequesPage').then((m) => ({ default: m
 const ExpensesPage = lazy(() => import('./ExpensesPage').then((m) => ({ default: m.ExpensesPage })));
 const FollowUpsPage = lazy(() => import('./FollowUpsPage').then((m) => ({ default: m.FollowUpsPage })));
 const InventoryPage = lazy(() => import('./InventoryPage').then((m) => ({ default: m.InventoryPage })));
-const WarehousesPage = lazy(() => import('./WarehousesPage').then((m) => ({ default: m.WarehousesPage })));
 const StocktakePage = lazy(() => import('./StocktakePage').then((m) => ({ default: m.StocktakePage })));
 const ProfitPage = lazy(() => import('./ProfitPage').then((m) => ({ default: m.ProfitPage })));
 const SalesModulePage = lazy(() => import('./SalesModulePage').then((m) => ({ default: m.SalesModulePage })));
@@ -34,6 +33,7 @@ const CashboxPage = lazy(() => import('./CashboxPage').then((m) => ({ default: m
 const HomeLayoutPage = lazy(() => import('./HomeLayoutPage').then((m) => ({ default: m.HomeLayoutPage })));
 const SalesTargetPage = lazy(() => import('./SalesTargetPage').then((m) => ({ default: m.SalesTargetPage })));
 const MarketingPage = lazy(() => import('./MarketingPage').then((m) => ({ default: m.MarketingPage })));
+const WatchPage = lazy(() => import('./WatchPage').then((m) => ({ default: m.WatchPage })));
 
 const TABS = [
   { tab: 'home', href: '/tabs/home', label: 'خانه', icon: homeOutline },
@@ -104,7 +104,6 @@ export const TabsLayout: React.FC = () => {
       void import('./tabs/PosTab');
       void import('./tabs/InvoicesTab');
       void import('./tabs/MoreTab');
-      void import('./WarehousesPage');
       void import('./ProductsPage');
       void import('./SettingsPage');
       void import('./InventoryPage');
@@ -130,7 +129,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/cashbox" element={loadPage(<CashboxPage />)} />
           <Route path="/follow-ups" element={loadPage(<FollowUpsPage />)} />
           <Route path="/inventory" element={loadPage(<InventoryPage />)} />
-          <Route path="/warehouses" element={loadPage(<WarehousesPage />)} />
+          <Route path="/warehouses" element={<Navigate to="/inventory" replace />} />
           <Route path="/stocktake" element={loadPage(<StocktakePage />)} />
           <Route path="/profit" element={loadPage(<ProfitPage />)} />
           <Route path="/sales" element={loadPage(<SalesModulePage />)} />
@@ -138,6 +137,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/home-layout" element={loadPage(<HomeLayoutPage />)} />
           <Route path="/sales-target" element={loadPage(<SalesTargetPage />)} />
           <Route path="/marketing" element={loadPage(<MarketingPage />)} />
+          <Route path="/watch" element={loadPage(<WatchPage />)} />
           <Route path="/credit-report" element={loadPage(<CreditReportPage />)} />
           <Route path="/inflation" element={loadPage(<InflationPage />)} />
           <Route path="/supplier-account" element={loadPage(<SupplierAccountPage />)} />

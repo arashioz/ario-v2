@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { RefresherEventDetail } from '@ionic/react';
 import { AlertTriangle, Boxes, ChevronDown, RefreshCw, Search, TrendingUp, Truck, Weight } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
@@ -13,12 +13,12 @@ import type { InventoryItem, InventoryReport, PriceTierKey } from '../services/a
 import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatJalali, dateToYmd } from '../lib/jalali';
-import { formatToman, num, percent, profitColor, tons, weight } from '../lib/format';
+import { formatStock, formatToman, num, percent, profitColor, tons, weight } from '../lib/format';
 import { PARENT_COMPANY } from '../services/suppliers.service';
 import { ListSkeleton } from '../components/ui/Skeleton';
 
 type SortKey = 'stock' | 'sold' | 'profit' | 'value';
-const FILTER_KEY = 'ario.inventoryFilter.v1';
+const FILTER_KEY = 'ario.inventoryFilter.v2';
 
 const loadInvFilter = (): { companies: string[]; category: string } => {
   try {
@@ -30,7 +30,7 @@ const loadInvFilter = (): { companies: string[]; category: string } => {
   } catch {
     /* keep default */
   }
-  return { companies: [PARENT_COMPANY], category: 'all' };
+  return { companies: [], category: 'all' };
 };
 
 const SORTS: [SortKey, string][] = [
@@ -42,6 +42,7 @@ const SORTS: [SortKey, string][] = [
 
 export const InventoryPage: React.FC = () => {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const isAdmin = user?.role === 'admin';
@@ -52,8 +53,16 @@ export const InventoryPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('stock');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [companyFilter, setCompanyFilter] = useState<string[]>(() => loadInvFilter().companies);
+  const [companyFilter, setCompanyFilter] = useState<string[]>(() => {
+    const fromUrl = params.get('company');
+    return fromUrl ? [fromUrl] : loadInvFilter().companies;
+  });
   const [categoryFilter, setCategoryFilter] = useState<string>(() => loadInvFilter().category);
+
+  useEffect(() => {
+    const fromUrl = params.get('company');
+    if (fromUrl) setCompanyFilter([fromUrl]);
+  }, [params]);
 
   useEffect(() => {
     localStorage.setItem(FILTER_KEY, JSON.stringify({ companies: companyFilter, category: categoryFilter }));
@@ -96,10 +105,21 @@ export const InventoryPage: React.FC = () => {
       .finally(() => setRebuilding(false));
   };
 
-  const companies = useMemo(() => {
-    const names = new Set<string>([PARENT_COMPANY]);
-    for (const i of data?.items ?? []) if (i.supplier) names.add(i.supplier);
-    return [...names].sort((a, b) => (a === PARENT_COMPANY ? -1 : b === PARENT_COMPANY ? 1 : a.localeCompare(b, 'fa')));
+  const houses = useMemo(() => {
+    const rows = new Map<string, { kg: number; cost: number; current: number; count: number; empty: number }>();
+    for (const item of data?.items ?? []) {
+      const name = (item.supplier || PARENT_COMPANY).trim() || PARENT_COMPANY;
+      const row = rows.get(name) || { kg: 0, cost: 0, current: 0, count: 0, empty: 0 };
+      row.kg += item.stockKg || 0;
+      row.cost += item.stockValue || 0;
+      row.current += item.currentValue?.wholesale || item.stockValue || 0;
+      row.count += 1;
+      if ((item.stockKg || 0) <= 0) row.empty += 1;
+      rows.set(name, row);
+    }
+    return [...rows.entries()]
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((a, b) => (a.name === PARENT_COMPANY ? -1 : b.name === PARENT_COMPANY ? 1 : b.kg - a.kg));
   }, [data]);
 
   const categories = useMemo(() => {
@@ -177,11 +197,52 @@ export const InventoryPage: React.FC = () => {
           {error && <div className="text-xs text-rose-700 bg-rose-50 rounded-2xl p-3">{error}</div>}
           {!data && !error && <ListSkeleton rows={5} />}
 
+          {data && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold text-slate-500 px-0.5">انبارها</p>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                <button
+                  type="button"
+                  onClick={() => setCompanyFilter([])}
+                  className={`shrink-0 min-w-[132px] rounded-2xl px-3 py-2.5 text-right ${
+                    companyFilter.length === 0 ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20' : 'bg-white text-slate-800 border border-slate-200'
+                  }`}
+                >
+                  <span className="block text-[12px] font-bold">همه انبارها</span>
+                  <span className={`block text-[10px] mt-0.5 ${companyFilter.length === 0 ? 'text-sky-100' : 'text-slate-400'}`}>
+                    {weight(houses.reduce((s, h) => s + h.kg, 0))} · {num(houses.length)} شرکت
+                  </span>
+                </button>
+                {houses.map((house) => {
+                  const on = companyFilter.length === 1 && companyFilter[0] === house.name;
+                  return (
+                    <button
+                      key={house.name}
+                      type="button"
+                      onClick={() => setCompanyFilter([house.name])}
+                      className={`shrink-0 min-w-[148px] rounded-2xl px-3 py-2.5 text-right ${
+                        on ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20' : 'bg-white text-slate-800 border border-slate-200'
+                      }`}
+                    >
+                      <span className="block text-[12px] font-bold truncate max-w-[160px]">{house.name}</span>
+                      <span className={`block text-[10px] mt-0.5 ${on ? 'text-sky-100' : 'text-slate-400'}`}>
+                        {weight(house.kg)} · {num(house.count)} کالا
+                      </span>
+                      <span className={`block text-[10px] font-mono mt-0.5 ${on ? 'text-white' : 'text-slate-600'}`}>
+                        {formatToman(house.current || house.cost)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Stock on hand */}
           <div className="rounded-2xl p-4 text-white bg-gradient-to-br from-sky-600 to-indigo-700 shadow-xl shadow-sky-700/20">
             <div className="flex items-center gap-2 text-sky-100 text-xs">
               <Weight className="w-4 h-4" />
-              تناژ موجود انبار (همین الان)
+              تناژ موجود {companyFilter.length === 1 ? companyFilter[0] : 'انبار'} (همین الان)
             </div>
             <div className="mt-2 flex items-end gap-2">
               <span className="text-4xl font-bold font-mono">{tons(t?.stockKg)}</span>
@@ -262,7 +323,7 @@ export const InventoryPage: React.FC = () => {
             />
           </div>
 
-          {allTime && t && t.differenceKg !== null && Math.abs(t.differenceKg) >= 0.05 && (
+          {allTime && companyFilter.length === 0 && t && t.differenceKg !== null && Math.abs(t.differenceKg) >= 0.05 && (
             <div className="flex gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-800 leading-6">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-1" />
               <div className="min-w-0 flex-1">
@@ -297,34 +358,6 @@ export const InventoryPage: React.FC = () => {
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
               <button
                 type="button"
-                onClick={() => setCompanyFilter([])}
-                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
-                  companyFilter.length === 0 ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
-                }`}
-              >
-                همه شرکت‌ها
-              </button>
-              {companies.map((name) => {
-                const on = companyFilter.includes(name);
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() =>
-                      setCompanyFilter((prev) => (prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]))
-                    }
-                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
-                      on ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'
-                    }`}
-                  >
-                    {name === PARENT_COMPANY ? 'انبار قند' : name}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
-              <button
-                type="button"
                 onClick={() => setCategoryFilter('all')}
                 className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap ${
                   categoryFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'
@@ -345,9 +378,6 @@ export const InventoryPage: React.FC = () => {
                 </button>
               ))}
             </div>
-            <p className="text-[10px] text-slate-400 leading-5">
-              فیلتر ورود ذخیره می‌شود. پیش‌فرض انبار قند بلالی است؛ نبات و شرکت‌های دیگر را از همین‌جا اضافه کنید.
-            </p>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
               {SORTS.map(([k, label]) => (
                 <button
@@ -404,10 +434,10 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
             </p>
           </div>
           <div className="text-left shrink-0">
-            <div className={`text-sm font-bold font-mono ${i.stockKg < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{weight(i.stockKg)}</div>
-            <div className="text-[10px] text-slate-400 font-mono">
-              {num(i.stockUnits, 2)} {i.unit} · {formatToman(i.stockValue)}
+            <div className={`text-sm font-bold font-mono ${i.stockKg < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
+              {formatStock(i.stockUnits, { unit: i.unit, weightPerUnitKg: i.weightPerUnitKg })}
             </div>
+            <div className="text-[10px] text-slate-400 font-mono">{formatToman(i.stockValue)}</div>
           </div>
         </div>
 

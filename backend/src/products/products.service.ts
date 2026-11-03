@@ -188,6 +188,7 @@ export class ProductsService implements OnModuleInit {
   async onModuleInit() {
     await this.seedInitialProducts();
     await this.ensureSkus().catch(() => undefined);
+    await this.ensureBarcodes().catch(() => undefined);
   }
 
   private async nextSku(): Promise<string> {
@@ -200,6 +201,38 @@ export class ProductsService implements OnModuleInit {
     const missing = await this.productModel.find({ $or: [{ sku: { $exists: false } }, { sku: '' }, { sku: null }] }).select('_id').exec();
     for (const product of missing) {
       await this.productModel.updateOne({ _id: product._id }, { $set: { sku: await this.nextSku() } }).exec();
+    }
+  }
+
+  /** EAN-13 with Iran prefix 626. Existing codes are left alone. */
+  private ean13Check(d12: string) {
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += Number(d12[i]) * (i % 2 === 0 ? 1 : 3);
+    return String((10 - (sum % 10)) % 10);
+  }
+
+  private async nextBarcode(used: Set<string>): Promise<string> {
+    let n = used.size + 1;
+    for (;;) {
+      const body = `626${String(n).padStart(9, '0')}`;
+      const code = body + this.ean13Check(body);
+      if (!used.has(code)) {
+        used.add(code);
+        return code;
+      }
+      n += 1;
+    }
+  }
+
+  private async ensureBarcodes() {
+    const products = await this.productModel.find().select('_id barcode').exec();
+    const used = new Set(
+      products.map((p) => String(p.barcode || '').trim()).filter((code) => /^\d{8,14}$/.test(code)),
+    );
+    for (const product of products) {
+      const current = String(product.barcode || '').trim();
+      if (/^\d{8,14}$/.test(current)) continue;
+      await this.productModel.updateOne({ _id: product._id }, { $set: { barcode: await this.nextBarcode(used) } }).exec();
     }
   }
 
@@ -383,8 +416,8 @@ export class ProductsService implements OnModuleInit {
       category: createProductDto.category || 'عمومی',
       unit: createProductDto.unit || 'عدد',
       buyPrice: createProductDto.buyPrice || 0,
-      stock: createProductDto.stock || 0,
-      openingStock: createProductDto.stock || 0,
+      stock: 0,
+      openingStock: 0,
       minStockAlert: createProductDto.minStockAlert ?? 5,
       isActive: true,
       priceHistory: [
@@ -399,6 +432,14 @@ export class ProductsService implements OnModuleInit {
     });
 
     if (!product.sku) product.sku = await this.nextSku();
+    if (!String(product.barcode || '').trim()) {
+      const used = new Set(
+        (await this.productModel.find({ barcode: { $exists: true, $nin: [null, ''] } }).select('barcode').lean().exec())
+          .map((p) => String(p.barcode).trim())
+          .filter(Boolean),
+      );
+      product.barcode = await this.nextBarcode(used);
+    }
     if (product.autoPricing) {
       const settings = await this.settings.get();
       const tiers = channelPrices(product, settings.categoryBasePrices?.find((r) => r.category === product.category));
@@ -490,6 +531,9 @@ export class ProductsService implements OnModuleInit {
 
   async update(id: string, updateDto: UpdateProductDto): Promise<ProductDocument> {
     const set: any = { ...updateDto };
+    delete set.stock;
+    delete set.stockAdjust;
+    delete set.openingStock;
     const existing = await this.findOne(id);
     if (updateDto.autoPricing ?? existing.autoPricing) {
       const merged = { ...existing.toObject(), ...updateDto };
@@ -684,17 +728,10 @@ export class ProductsService implements OnModuleInit {
     return { id: String(saved._id), changed: lines.length, lines };
   }
 
-  async updateStock(id: string, dto: UpdateStockDto): Promise<ProductDocument> {
-    const product = await this.findOne(id);
-
-    const newStock = product.stock + dto.quantityChange;
-    if (newStock < 0) {
-      throw new BadRequestException('موجودی انبار نمی‌تواند کمتر از صفر باشد');
-    }
-
-    product.stock = newStock;
-    product.stockAdjust = (product.stockAdjust || 0) + dto.quantityChange;
-    return product.save();
+  async updateStock(_id: string, _dto: UpdateStockDto): Promise<ProductDocument> {
+    throw new BadRequestException(
+      'موجودی فقط با فاکتور خرید یا فروش، یا با انبارگردانی عوض می‌شود. اصلاح دستی مجاز نیست.',
+    );
   }
 
   async bulkUpdatePrices(

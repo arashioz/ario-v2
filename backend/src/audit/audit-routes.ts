@@ -44,6 +44,7 @@ const RESOURCES: Record<string, { def: EntityDef; subs?: Record<string, EntityDe
   shares: { def: E('share', 'لینک اشتراک', 'ShareLink', { key: 'token' }) },
   auth: { def: E('user', 'کاربر', 'User'), subs: { users: E('user', 'کاربر', 'User') } },
   accounting: { def: E('profitWatch', 'نگهبان سود') },
+  watch: { def: E('customerWatch', 'پایش مشتری') },
   backup: { def: E('backup', 'پشتیبان'), subs: { files: E('backupFile', 'فایل پشتیبان') } },
 };
 

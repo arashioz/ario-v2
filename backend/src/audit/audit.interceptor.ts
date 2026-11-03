@@ -105,7 +105,11 @@ export class AuditInterceptor implements NestInterceptor {
       });
       throw new ForbiddenException({ statusCode: 403, code, message });
     };
-    if (!password) reject('PASSWORD_REQUIRED', 'برای حذف، رمز عبور خود را وارد کنید');
+    const missing =
+      req.method === 'PUT' && route.def.entity === 'invoice'
+        ? 'برای ویرایش فاکتور و تغییر موجودی، رمز عبور خود را وارد کنید'
+        : 'برای حذف، رمز عبور خود را وارد کنید';
+    if (!password) reject('PASSWORD_REQUIRED', missing);
     const account = req.user?.username ? await this.users.findByUsername(req.user.username) : null;
     if (!account || !(await bcrypt.compare(password, account.password))) reject('PASSWORD_INVALID', 'رمز عبور اشتباه است');
   }
@@ -113,8 +117,19 @@ export class AuditInterceptor implements NestInterceptor {
   private async prepare(req: any, route: ResolvedRoute): Promise<unknown> {
     const needsBefore = route.action === 'update' || route.action === 'delete' || route.action === 'action';
     const before = needsBefore ? await this.snapshot(route) : undefined;
-    if (route.action === 'delete') await this.verifyDeletePassword(req, route, before);
+    const invoiceEdit = req.method === 'PUT' && route.def.entity === 'invoice';
+    if (route.action === 'delete' || invoiceEdit) await this.verifyDeletePassword(req, route, before);
     return before;
+  }
+
+  /** Passwords must never land in the event log. */
+  private scrubBody(body: unknown) {
+    if (!body || typeof body !== 'object') return undefined;
+    const copy = { ...(body as Record<string, unknown>) };
+    delete copy.password;
+    delete copy.currentPassword;
+    delete copy.newPassword;
+    return Object.keys(copy).length ? copy : undefined;
   }
 
   private title(route: ResolvedRoute, doc: unknown, fallback = '') {
@@ -131,7 +146,7 @@ export class AuditInterceptor implements NestInterceptor {
       entityId: route.id || (before as any)?._id?.toString?.() || '',
       ...this.actor(req),
       ...this.meta(req),
-      body: req.body && Object.keys(req.body).length ? req.body : undefined,
+      body: this.scrubBody(req.body),
       before,
     };
   }

@@ -287,7 +287,11 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
       open
       onClose={onClose}
       title={`ویرایش فاکتور ${isSale ? 'فروش' : 'خرید'}`}
-      subtitle={`${invoice.invoiceNumber} — ${invoice.customerName}`}
+      subtitle={
+        isSale
+          ? `${invoice.invoiceNumber} — ${invoice.customerName}`
+          : `${invoice.invoiceNumber} — ${invoice.customerName} · ذخیره با همان رمز حذف است و در لاگ می‌ماند`
+      }
       footer={
         <div className="flex items-center gap-3">
           <div className="flex-1">

@@ -113,8 +113,21 @@ export class InvoicesController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: CreateInvoiceDto, @Request() req: any) {
-    return this.invoicesService.update(id, dto, actorName(req));
+  update(
+    @Param('id') id: string,
+    @Body() dto: CreateInvoiceDto,
+    @Request() req: any,
+    @Headers('x-confirm-password') confirmPassword?: string,
+  ) {
+    let password = typeof (dto as any)?.password === 'string' ? (dto as any).password : '';
+    if (!password && confirmPassword) {
+      try {
+        password = decodeURIComponent(confirmPassword);
+      } catch {
+        password = confirmPassword;
+      }
+    }
+    return this.invoicesService.update(id, dto, actorName(req), req.user || {}, password);
   }
 
   /** Order day, ship day, and payment day. The order day is what period lists use. */

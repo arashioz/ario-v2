@@ -16,12 +16,12 @@ export const HomeLayoutPage: React.FC = () => {
   const { showNotification } = useNotification();
   const [layout, setLayout] = useState<HomeWidgetId[]>(() => homeOrder(user?.homeLayout));
   const [houses, setHouses] = useState<string[]>([]);
-  const [picked, setPicked] = useState<string[]>(() => user?.homeWarehouses?.length ? user.homeWarehouses : settings.homeWarehouses || []);
+  const [picked, setPicked] = useState<string[]>(() => (user?.homeWarehouses?.length ? user.homeWarehouses : settings.homeWarehouses || []).filter((name) => name && name !== 'بدون شرکت'));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     productsService.getForSale().then((goods) => {
-      const names = [...new Set(goods.map((p) => (p.supplierName || '').trim() || 'بدون شرکت'))];
+      const names = [...new Set(goods.map((p) => (p.supplierName || '').trim()).filter(Boolean))];
       setHouses(names.sort((a, b) => a.localeCompare(b, 'fa')));
     }).catch(() => setHouses([]));
   }, []);
@@ -109,7 +109,7 @@ export const HomeLayoutPage: React.FC = () => {
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 space-y-2">
             <h2 className="text-[13px] font-bold text-slate-800">انبار روی صفحه اول</h2>
-            <p className="text-[11px] text-slate-400 leading-5">اولین موردِ تیک‌خورده، انبار پیش‌فرض کارت است. بقیه را هم می‌توانید روی همان کارت بگذارید.</p>
+            <p className="text-[11px] text-slate-400 leading-5">هر شرکت که تیک بزنید روی کارت انبار خانه دیده می‌شود. با زدن روی کارت، ماژول انبار همان شرکت باز می‌شود.</p>
             {houses.length === 0 ? (
               <p className="text-[12px] text-slate-400">شرکتی در کالاها نیست.</p>
             ) : houses.map((name) => {

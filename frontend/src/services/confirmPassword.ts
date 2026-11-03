@@ -35,6 +35,7 @@ export function askPassword(title: string, error?: string): Promise<string> {
 }
 
 const RESOURCE_LABELS: [RegExp, string][] = [
+  [/invoices\/[^/?]+$/, 'تأیید ویرایش فاکتور'],
   [/^\/?customers\/transactions/, 'حذف تراکنش مشتری'],
   [/^\/?customers/, 'حذف مشتری'],
   [/^\/?products\/[^/]+\/image/, 'حذف عکس کالا'],

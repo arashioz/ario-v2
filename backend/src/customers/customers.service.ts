@@ -356,6 +356,8 @@ export class CustomersService implements OnModuleInit {
     invoice.remainingDebt = Math.max(0, credit - paidLater);
     invoice.paidAmount = Math.min(invoice.finalAmount || 0, upfront + paidLater);
     invoice.isPaid = invoice.remainingDebt <= 0;
+    if (invoice.paidAmount > 0 && !invoice.paidAt) invoice.paidAt = new Date();
+    if (invoice.type === 'sale' && !invoice.shippedAt) invoice.shippedAt = invoice.invoiceDate || new Date();
     return invoice.save();
   }
 

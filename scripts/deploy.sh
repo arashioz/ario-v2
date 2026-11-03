@@ -71,5 +71,9 @@ for _ in $(seq 1 60); do
 done
 curl -fsS "http://127.0.0.1:$port/api" >/dev/null 2>&1 || { echo; docker compose logs --tail 50 app; exit 1; }
 
+echo "Assigning missing SKUs and barcodes..."
+docker compose exec -T app node scripts/assign-skus.js
+docker compose exec -T app node scripts/assign-barcodes.js
+
 if [ "${1:-}" = "--seed" ]; then ./scripts/seed.sh "${2:-backend/src/static/fullBackup.json}"; fi
 echo "App is running at http://<server-ip> (port $port)"

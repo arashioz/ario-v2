@@ -178,10 +178,14 @@ export class InvoicesService implements OnApplicationBootstrap {
         );
       }
 
+      const per = Number(product.weightPerUnitKg) || (product.unit === 'کیلوگرم' ? 1 : 0);
+      const fromQty = per > 0 ? (item.quantity || 0) * per : 0;
       let weight = item.weightKg || 0;
-      if (!weight) {
+      if (fromQty > 0 && weight > 0 && per > 1 && Math.abs(weight - fromQty * 2) <= Math.max(1, fromQty * 0.05)) {
+        weight = fromQty;
+      } else if (!weight) {
         if (item.secondaryUnit === 'کیلوگرم' && item.secondaryQuantity) weight = item.secondaryQuantity;
-        else if (product.weightPerUnitKg) weight = item.quantity * product.weightPerUnitKg;
+        else if (fromQty) weight = fromQty;
         else if (product.unit === 'کیلوگرم') weight = item.quantity;
       }
       totalWeightKg += weight;
@@ -496,8 +500,8 @@ export class InvoicesService implements OnApplicationBootstrap {
   }
 
   /** 403, not 401: the client treats 401 as an expired session and logs the user out. */
-  private async verifyPassword(user: ActingUser, password?: string) {
-    if (!password) throw new ForbiddenException('برای حذف، رمز عبور خود را وارد کنید');
+  private async verifyPassword(user: ActingUser, password?: string, purpose = 'حذف') {
+    if (!password) throw new ForbiddenException(`برای ${purpose}، رمز عبور خود را وارد کنید`);
     const account = user.username ? await this.usersService.findByUsername(user.username) : null;
     if (!account || !(await bcrypt.compare(password, account.password))) {
       throw new ForbiddenException('رمز عبور اشتباه است');
@@ -723,8 +727,10 @@ export class InvoicesService implements OnApplicationBootstrap {
       notes: dto.notes || '',
       ...this.shippingFields(dto, isSale),
       proformaNumber: extra.proformaNumber || '',
-      proformaDate: extra.proformaDate,
-      shippedAt: extra.shippedAt,
+      proformaDate: extra.proformaDate || (isSale ? invoiceDate : undefined),
+      shippedAt: extra.shippedAt || (isSale ? invoiceDate : undefined),
+      paidAt: isSale && dto.finalAmount - credit > 0 ? invoiceDate : undefined,
+      registeredAt: new Date(),
       createdByName: recordedByName || 'مدیر سیستم',
     });
     await invoice.save();
@@ -748,7 +754,8 @@ export class InvoicesService implements OnApplicationBootstrap {
     return invoice;
   }
 
-  async update(id: string, dto: CreateInvoiceDto, recordedByName: string): Promise<InvoiceDocument> {
+  async update(id: string, dto: CreateInvoiceDto, recordedByName: string, user?: ActingUser, password?: string): Promise<InvoiceDocument> {
+    await this.verifyPassword(user || {}, password, 'ویرایش فاکتور و تغییر موجودی');
     const invoice = await this.findById(id);
     const isSale = invoice.type === 'sale';
     const wasFactory = invoice.fulfillment === 'factory';
@@ -829,6 +836,8 @@ export class InvoicesService implements OnApplicationBootstrap {
       creditAmount: credit,
       notes: dto.notes ?? invoice.notes,
       ...(dto.shippingPayer !== undefined ? this.shippingFields(dto, isSale) : {}),
+      ...(isSale && !invoice.shippedAt ? { shippedAt: invoiceDate } : {}),
+      ...(isSale && (dto.finalAmount || 0) - credit > 0 && !invoice.paidAt ? { paidAt: invoiceDate } : {}),
     });
     await invoice.save();
     await this.syncShippingExpense(invoice, recordedByName);
@@ -930,6 +939,8 @@ export class InvoicesService implements OnApplicationBootstrap {
       invoice.paidAmount = Math.min(invoice.finalAmount, (invoice.paidAmount || 0) + body.amount);
       invoice.remainingDebt = Math.max(0, invoice.finalAmount - invoice.paidAmount);
       invoice.isPaid = invoice.remainingDebt === 0;
+      invoice.paidAt = body.date ? new Date(body.date) : new Date();
+      if (!invoice.shippedAt) invoice.shippedAt = invoice.paidAt;
       invoice.markModified('legacyPayments');
       await invoice.save();
       return invoice;
@@ -947,7 +958,11 @@ export class InvoicesService implements OnApplicationBootstrap {
       },
       recordedByName,
     );
-    return this.findById(id);
+    const updated = await this.findById(id);
+    updated.paidAt = body.date ? new Date(body.date) : new Date();
+    if (!updated.shippedAt) updated.shippedAt = updated.paidAt;
+    await updated.save();
+    return updated;
   }
 
   /** A backdated purchase must not overwrite the buy price set by a newer invoice. */

@@ -18,5 +18,6 @@ import { ProformasController } from './proformas.controller';
   ],
   controllers: [ProformasController],
   providers: [ProformasService],
+  exports: [ProformasService],
 })
 export class ProformasModule {}

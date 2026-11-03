@@ -35,8 +35,12 @@ export const DeletePasswordPrompt: React.FC = () => {
     <Sheet
       open={!!req}
       onClose={() => close()}
-      title={req?.title ?? 'تأیید حذف'}
-      subtitle="هیچ حذفی بدون رمز انجام نمی‌شود و در گزارش رویدادها ثبت می‌شود"
+      title={req?.title ?? 'تأیید'}
+      subtitle={
+        (req?.title || '').includes('ویرایش')
+          ? 'ویرایش فاکتور موجودی را عوض می‌کند. بدون رمز ذخیره نمی‌شود و در گزارش رویدادها ثبت می‌شود'
+          : 'هیچ حذفی بدون رمز انجام نمی‌شود و در گزارش رویدادها ثبت می‌شود'
+      }
       footer={
         <div className="flex gap-2">
           <button onClick={() => close()} className="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold">
@@ -47,7 +51,7 @@ export const DeletePasswordPrompt: React.FC = () => {
             disabled={!password}
             className="flex-[2] py-3 rounded-2xl bg-rose-600 text-white text-sm font-bold disabled:opacity-40 active:scale-[0.98] transition"
           >
-            تأیید و حذف
+            {(req?.title || '').includes('ویرایش') ? 'تأیید و ذخیره' : 'تأیید و حذف'}
           </button>
         </div>
       }

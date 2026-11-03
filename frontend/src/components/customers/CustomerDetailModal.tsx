@@ -42,6 +42,8 @@ import { accountTitle } from '../ui/AccountPicker';
 import { debtSms, invoiceSms, openSms } from '../../lib/sms';
 import { formatToman, formatTomanSigned } from '../../lib/format';
 import { dateToYmd, ymdToJalali, JALALI_MONTHS } from '../../lib/jalali';
+import { CustomerResumeCard } from '../watch/CustomerResumeCard';
+import { GradeBadge } from '../watch/GradeBadge';
 
 interface CustomerDetailModalProps {
   isOpen: boolean;
@@ -329,6 +331,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div>
                     <h3 className="text-base font-black text-slate-800">{customer.name}</h3>
                     <span className="text-[10px] font-bold text-sky-700">{customer.kind === 'walkin' ? 'حضوری' : customer.customerType === 'wholesale' || customer.customerType === 'distributor' ? 'عمده' : 'سوپرمارکت'}</span>
+                    {customer.kind !== 'walkin' && <span className="mr-1"><GradeBadge grade={customer.watchGrade} /></span>}
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-mono" dir="ltr">
                       <span>{customer.phoneNumber || 'بدون شماره'}</span>
                     </div>
@@ -560,6 +563,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </a>
               </div>
             </div>
+
+            {customer.kind !== 'walkin' && <CustomerResumeCard customerId={customer._id} refreshKey={refreshTrigger} />}
 
             <div className="flex bg-slate-200/70 p-1 rounded-2xl gap-1">
               {([

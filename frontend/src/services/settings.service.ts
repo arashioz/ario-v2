@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { cachedGet } from './offlineCache';
+import { DEFAULT_WATCH, type CustomerWatchSettings } from './customerWatch.service';
 
 export type SalesLayout = 'cards' | 'compact' | 'table';
 export type SaleType = 'retail' | 'supermarket' | 'wholesale' | 'distributor';
@@ -76,7 +77,7 @@ export const bankCardTitle = (c: Pick<BankCard, 'label' | 'bankName' | 'cardNumb
   return tail ? `${name} (${tail}…)` : name;
 };
 
-export type SmsTemplateKey = 'invoice' | 'proforma' | 'debt';
+export type SmsTemplateKey = 'invoice' | 'proforma' | 'debt' | 'suggest';
 export type SmsTemplates = Record<SmsTemplateKey, string>;
 
 const RULE = '────────────';
@@ -140,12 +141,23 @@ export const DEFAULT_SMS_TEMPLATES: SmsTemplates = {
     'شبا: {sheba}',
     'با سپاس - {shop} {phone}',
   ].join('\n'),
+  suggest: [
+    '{shop}',
+    'پیشنهاد سفارش برای {customer}',
+    RULE,
+    '{items}',
+    RULE,
+    'وزن تقریبی: {weight}',
+    'مبلغ پیشنهادی: {total}',
+    'در صورت تأیید همین پیام را پاسخ دهید.',
+  ].join('\n'),
 };
 
 export const SMS_TEMPLATE_LABELS: Record<SmsTemplateKey, string> = {
   invoice: 'پیامک فاکتور فروش',
   proforma: 'پیامک پیش‌فاکتور',
   debt: 'گزارش حساب مشتری (یادآوری بدهی)',
+  suggest: 'پیامک فاکتور پیشنهادی پایش',
 };
 
 /** Placeholders each template understands. */
@@ -205,6 +217,15 @@ export const SMS_PLACEHOLDERS: Record<SmsTemplateKey, [string, string][]> = {
     ['holder', 'صاحب حساب'],
     ['bank', 'نام بانک'],
   ],
+  suggest: [
+    ['shop', 'نام فروشگاه'],
+    ['phone', 'تلفن فروشگاه'],
+    ['customer', 'نام مشتری'],
+    ['items', 'ریز اقلام پیشنهادی'],
+    ['weight', 'وزن کل'],
+    ['total', 'مبلغ پیشنهادی'],
+    ['date', 'تاریخ'],
+  ],
 };
 
 export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }
@@ -230,6 +251,8 @@ export interface AppSettings {
   subcategoryOrder: Record<string, string[]>;
   /** Company warehouses pinned on the home card. */
   homeWarehouses: string[];
+  /** Company shown first in the sales module. */
+  salesFocusCompany: string;
   /** Order of product IDs on the sales screen. */
   productOrder: string[];
   /** Order and visibility of the blocks on the sales screen. */
@@ -238,6 +261,7 @@ export interface AppSettings {
   smsTemplates: SmsTemplates;
   backup: BackupSettings;
   salesTarget: { amount: number; kg: number };
+  customerWatch: CustomerWatchSettings;
   legacy?: { cashBalance?: number; cardBalance?: number; openingDate?: string; exportedAt?: string } | null;
 }
 
@@ -265,12 +289,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   categoryOrder: [],
   subcategoryOrder: {},
   homeWarehouses: [],
+  salesFocusCompany: '',
   productOrder: [],
   posSections: DEFAULT_POS_SECTIONS,
   bankCards: [],
   smsTemplates: DEFAULT_SMS_TEMPLATES,
   backup: { enabled: true, hour: 2, keepDays: 14 },
   salesTarget: { amount: 0, kg: 0 },
+  customerWatch: DEFAULT_WATCH,
   legacy: null,
 };
 
@@ -325,7 +351,9 @@ const publish = (s: AppSettings) => {
     posView: { ...DEFAULT_SETTINGS.posView, ...(s.posView || {}) },
     backup: { ...DEFAULT_SETTINGS.backup, ...(s.backup || {}) },
     salesTarget: { amount: s.salesTarget?.amount || 0, kg: s.salesTarget?.kg || 0 },
+    customerWatch: { ...DEFAULT_WATCH, ...(s.customerWatch || {}) },
     homeWarehouses: Array.isArray(s.homeWarehouses) ? s.homeWarehouses : [],
+    salesFocusCompany: typeof s.salesFocusCompany === 'string' ? s.salesFocusCompany.trim() : '',
     categoryOrder: Array.isArray(s.categoryOrder) ? s.categoryOrder : [],
     subcategoryOrder: typeof s.subcategoryOrder === 'object' && s.subcategoryOrder ? s.subcategoryOrder : {},
     productOrder: Array.isArray(s.productOrder) ? s.productOrder : [],

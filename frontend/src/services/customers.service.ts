@@ -25,6 +25,13 @@ export interface Customer {
   isActive: boolean;
   lastTransactionDate: string;
   lastSaleAt?: string | null;
+  watchGrade?: string;
+  watchScore?: number;
+  watchMonthAmount?: number;
+  watchDropKg?: number;
+  watchTopProductName?: string;
+  watchReason?: string;
+  watchAction?: string;
   createdAt: string;
   updatedAt: string;
 }
