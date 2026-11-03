@@ -132,7 +132,7 @@ export class AccountingService {
       tons: Math.round(kg) / 1000,
       marginPercent: pct(profit, knownRevenue || revenue),
       markupPercent: pct(profit, cost),
-      profitPerKg: knownKg ? r0(profit / knownKg) : 0,
+      profitPerKg: knownKg >= 0.5 ? r0(profit / knownKg) : 0,
       avgSellPerKg: kg ? r0(revenue / kg) : 0,
       avgCostPerKg: knownKg ? r0(cost / knownKg) : 0,
       unknownRevenue: r0(unknownRevenue),
@@ -302,6 +302,7 @@ export class AccountingService {
     }
 
     for (const r of byProduct.values()) {
+      if (period.from || period.to) continue;
       const pack = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
       if (!(pack > 1)) continue;
       const boughtOnce = (r.purchasedUnits || 0) * pack;

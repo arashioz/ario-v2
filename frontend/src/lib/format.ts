@@ -3,7 +3,12 @@ const formatters = new Map<number, Intl.NumberFormat>();
 const fa = (n: number, digits = 0) => {
   let formatter = formatters.get(digits);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+    formatter = new Intl.NumberFormat('fa-IR', {
+      notation: 'standard',
+      useGrouping: true,
+      maximumFractionDigits: digits,
+      minimumFractionDigits: 0,
+    });
     formatters.set(digits, formatter);
   }
   return formatter.format(n);
@@ -117,4 +122,10 @@ export const profitCaption = (profit: number, opts: { sold?: number; unknown?: n
   if ((opts.unknown || 0) > 0.5 && Math.abs(profit) < 0.5) return 'سود نامشخص';
   if ((opts.sold || 0) > 0 && Math.abs(profit) < 0.5) return 'سود ندارد';
   return formatToman(profit);
+};
+
+/** سود هر تن از روی سود کل و کیلو — نه سود هر کیلو × ۱۰۰۰ وقتی وزن اشتباه است. */
+export const profitPerTon = (profit: number, kg: number) => {
+  if (!(kg >= 100)) return 0;
+  return Math.round(profit / (kg / 1000));
 };

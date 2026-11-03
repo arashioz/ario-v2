@@ -11,21 +11,16 @@ import {
   TrendingUp,
   Hourglass,
   Flame,
-  ChevronLeft,
   Building2,
   Eye,
   EyeOff,
   Package,
   Wallet,
-  Target,
-  Binoculars,
-  Boxes,
-  Briefcase,
 } from 'lucide-react';
 import type { CustomerStats } from '../../services/customers.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import type { AccountingDashboard } from '../../services/accounting.service';
-import type { SupplierAccount } from '../../services/suppliers.service';
+import { PARENT_COMPANY, type SupplierAccount } from '../../services/suppliers.service';
 import { formatJalali, todayYmd } from '../../lib/jalali';
 import { formatToman, num, percent, profitCaption, weight } from '../../lib/format';
 import Toman from '../../components/ui/Toman';
@@ -35,9 +30,8 @@ import { HomeTargetCard } from '../../components/target/HomeTargetCard';
 import { WatchBoardCard } from '../../components/watch/WatchBoardCard';
 
 export const HOME_WIDGETS = [
-  { id: 'warehouse', title: 'انبار', hint: 'موجودی و مبلغ فعلی هر شرکت' },
-  { id: 'modules', title: 'ماژول‌ها', hint: 'فروش، سود، تارگت، پایش و بقیه' },
-  { id: 'shortcuts', title: 'میانبرها', hint: 'فاکتور، بدهی، کالا و هزینه' },
+  { id: 'warehouse', title: 'انبار', hint: 'ارزش موجودی شرکت مادر' },
+  { id: 'shortcuts', title: 'دسترسی سریع', hint: 'فاکتور، بدهی، کالا و هزینه' },
   { id: 'chart', title: 'نمودار فروش', hint: 'هفت روز، تومان یا وزن' },
   { id: 'collections', title: 'پرداختی‌ها', hint: 'نقد فروش و وصول نسیه' },
   { id: 'debts', title: 'طلب از مشتری', hint: 'بدهکاران و تعداد مشتری' },
@@ -51,15 +45,19 @@ export const HOME_WIDGETS = [
 ] as const;
 
 export type HomeWidgetId = (typeof HOME_WIDGETS)[number]['id'];
-export const DEFAULT_HOME: HomeWidgetId[] = ['warehouse', 'modules', 'today', 'profit', 'debts', 'collections', 'company', 'chart', 'followups', 'notes'];
+export const DEFAULT_HOME: HomeWidgetId[] = ['warehouse', 'shortcuts', 'today', 'profit', 'debts', 'collections', 'company', 'chart', 'followups', 'notes'];
 
 export const homeOrder = (layout?: string[]): HomeWidgetId[] => {
   const known = new Set<string>(HOME_WIDGETS.map((item) => item.id));
-  const picked = (layout || []).filter((id): id is HomeWidgetId => known.has(id));
-  const order = picked.length ? [...picked] : [...DEFAULT_HOME];
-  if (!order.includes('modules')) {
+  const picked = (layout || [])
+    .map((id) => (id === 'modules' ? 'shortcuts' : id))
+    .filter((id): id is HomeWidgetId => known.has(id));
+  const order: HomeWidgetId[] = [];
+  for (const id of picked) if (!order.includes(id)) order.push(id);
+  if (!order.length) return [...DEFAULT_HOME];
+  if (!order.includes('shortcuts')) {
     const at = order.indexOf('warehouse');
-    order.splice(at >= 0 ? at + 1 : 0, 0, 'modules');
+    order.splice(at >= 0 ? at + 1 : 0, 0, 'shortcuts');
   }
   return order;
 };
@@ -102,10 +100,12 @@ export const HomeBoard: React.FC<{
     const rest = named.filter((house) => !pin.includes(house.name));
     return [...first, ...rest];
   }, [houses, warehouseNames]);
-  const totals = shown.reduce(
-    (sum, house) => ({ kg: sum.kg + house.kg, cost: sum.cost + house.cost, current: sum.current + (house.current || house.cost) }),
-    { kg: 0, cost: 0, current: 0 },
-  );
+  const defaultHouse = useMemo(() => {
+    const pin = warehouseNames.find((name) => name && name !== 'بدون شرکت');
+    if (pin) return shown.find((house) => house.name === pin) || shown.find((house) => house.name === PARENT_COMPANY) || shown[0];
+    return shown.find((house) => house.name === PARENT_COMPANY) || shown[0];
+  }, [shown, warehouseNames]);
+  const stockValue = defaultHouse ? defaultHouse.current || defaultHouse.cost : 0;
   const money = (n: number) => (showStockValue ? formatToman(n) : '••••••••');
   const toggleStockValue = () => {
     setShowStockValue((v) => {
@@ -120,82 +120,37 @@ export const HomeBoard: React.FC<{
 
   const widgets: Record<HomeWidgetId, React.ReactNode> = {
     warehouse: (
-      <section className="rounded-[28px] bg-[#007AFF] text-white shadow-[0_12px_40px_rgba(0,122,255,0.28)] overflow-hidden">
-        <div className="px-5 pt-5 pb-4">
-          <div className="flex items-start justify-between gap-3">
-            <button type="button" onClick={() => navigate('/inventory')} className="text-right">
-              <p className="text-[13px] font-semibold text-white/80">انبار</p>
-              <p className="text-[34px] font-bold tracking-tight leading-none mt-2">{ready ? weight(totals.kg) : '—'}</p>
-              <p className="text-[13px] text-white/75 mt-1.5">وزن کل موجودی · ماژول انبار</p>
-            </button>
-            <button
-              type="button"
-              onClick={toggleStockValue}
-              className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center"
-              aria-label={showStockValue ? 'مخفی کردن مبلغ' : 'نمایش مبلغ'}
-            >
-              {showStockValue ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-          <p className="text-[26px] font-bold font-mono tracking-tight mt-4">{ready ? money(totals.current) : '—'}</p>
-          <p className="text-[13px] text-white/75 mt-0.5">مبلغ فعلی</p>
-        </div>
-        <div className="bg-white/12 mx-3 mb-3 rounded-2xl overflow-hidden">
-          {shown.length === 0 ? (
-            <p className="px-4 py-4 text-[12px] text-white/80">شرکتی روی کالاها ثبت نشده.</p>
-          ) : shown.map((house, i) => (
-            <button
-              key={house.name}
-              type="button"
-              onClick={() => navigate(`/inventory?company=${encodeURIComponent(house.name)}`)}
-              className={`w-full px-4 py-3 flex items-center justify-between gap-3 text-right active:bg-white/10 ${i ? 'border-t border-white/10' : ''}`}
-            >
-              <span className="min-w-0">
-                <span className="block text-[14px] font-semibold truncate">{house.name}</span>
-                <span className="block text-[11px] text-white/70 mt-0.5">وزن {weight(house.kg)}</span>
-              </span>
-              <span className="flex items-center gap-1 shrink-0">
-                <span className="text-[13px] font-bold font-mono">{money(house.current || house.cost)}</span>
-                <ChevronLeft className="w-4 h-4 text-white/70" />
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-    ),
-    modules: (
-      <section>
-        <div className="flex items-center justify-between px-1 mb-2">
-          <h2 className="text-[13px] font-bold text-slate-500">ماژول‌ها</h2>
-          <button type="button" onClick={() => navigate('/tabs/more')} className="text-[12px] font-bold text-[#007AFF]">همه</button>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          {([
-            ['فروش', 'خرید، سود و کالا', '/sales', TrendingUp, 'from-[#34C759] to-[#248A3D]', ready && acc?.month ? formatToman(acc.month.revenue) : 'ماژول فروش'],
-            ['سود فروش', 'FIFO و هر بار خرید', '/profit', PieChart, 'from-[#30D158] to-[#1F8A44]', showProfit && acc?.month ? profitCaption(acc.month.profit, { sold: acc.month.revenue, unknown: acc.month.unknownRevenue }) : 'ورود به ماژول'],
-            ['تارگت', 'هدف ماه فروشنده‌ها', '/sales-target', Target, 'from-[#0A84FF] to-[#0060DF]', 'پیشرفت ماه'],
-            ['پایش مشتری', 'گرید و پیشنهاد سفارش', '/watch', Binoculars, 'from-[#5E5CE6] to-[#3634A3]', 'صف تماس'],
-            ['بازاریابی', 'لوکیشن و پیگیری', '/marketing', Briefcase, 'from-[#FF9F0A] to-[#C93400]', 'نقشه و تارگت'],
-            ['انبار', 'موجودی و ارزش کالا', '/inventory', Boxes, 'from-[#64D2FF] to-[#0A84FF]', ready ? weight(totals.kg) : 'ماژول انبار'],
-            ['نسیه', 'بار نسیه و وصول', '/credit-report', Hourglass, 'from-[#FFD60A] to-[#FF9F0A]', acc?.work ? formatToman(acc.work.credit) : 'گزارش نسیه'],
-            ['صندوق', 'نقد، کارت و پوز', '/cashbox', Wallet, 'from-[#FF375F] to-[#D30F45]', 'موجودی صندوق'],
-          ] as const).map(([title, hint, path, Icon, tone, preview]) => (
-            <button
-              key={path}
-              type="button"
-              onClick={() => navigate(path)}
-              className="rounded-[24px] bg-white p-3.5 text-right shadow-[0_1px_0_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)] active:scale-[0.98] transition"
-            >
-              <span className={`w-11 h-11 rounded-[16px] bg-gradient-to-br ${tone} text-white flex items-center justify-center shadow-sm`}>
-                <Icon className="w-5 h-5" />
-              </span>
-              <span className="block text-[15px] font-bold text-slate-900 mt-3 leading-5">{title}</span>
-              <span className="block text-[11px] text-slate-500 mt-1 leading-4">{hint}</span>
-              <span className="block text-[12px] font-bold text-slate-800 mt-2 font-mono truncate">{preview}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      <button
+        type="button"
+        onClick={() => navigate(defaultHouse ? `/inventory?company=${encodeURIComponent(defaultHouse.name)}` : '/inventory')}
+        className="w-full rounded-2xl bg-[#007AFF] text-white px-3.5 py-2.5 flex items-center justify-between gap-3 shadow-[0_8px_20px_rgba(0,122,255,0.22)] active:scale-[0.99]"
+      >
+        <span className="min-w-0 text-right">
+          <span className="block text-[11px] font-semibold text-white/80">موجودی انبار</span>
+          <span className="block text-[17px] font-bold font-mono tracking-tight mt-0.5 leading-6">
+            {ready ? money(stockValue) : '—'}
+          </span>
+        </span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleStockValue();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleStockValue();
+            }
+          }}
+          className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0"
+          aria-label={showStockValue ? 'مخفی کردن مبلغ' : 'نمایش مبلغ'}
+        >
+          {showStockValue ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </span>
+      </button>
     ),
     shortcuts: (
       <div className="bg-white rounded-3xl p-2.5 border border-sky-100 shadow-sm">

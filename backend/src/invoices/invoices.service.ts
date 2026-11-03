@@ -17,6 +17,7 @@ import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
+import { lineKg } from '../accounting/fifo';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 import { PricePeriodService } from '../pricing/price-period.service';
@@ -178,16 +179,19 @@ export class InvoicesService implements OnApplicationBootstrap {
         );
       }
 
-      const per = Number(product.weightPerUnitKg) || (product.unit === 'کیلوگرم' ? 1 : 0);
-      const fromQty = per > 0 ? (item.quantity || 0) * per : 0;
-      let weight = item.weightKg || 0;
-      if (fromQty > 0 && weight > 0 && per > 1 && Math.abs(weight - fromQty * 2) <= Math.max(1, fromQty * 0.05)) {
-        weight = fromQty;
-      } else if (!weight) {
-        if (item.secondaryUnit === 'کیلوگرم' && item.secondaryQuantity) weight = item.secondaryQuantity;
-        else if (fromQty) weight = fromQty;
-        else if (product.unit === 'کیلوگرم') weight = item.quantity;
-      }
+      const weight = lineKg(
+        {
+          productId: String(item.productId || ''),
+          productName: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice || 0,
+          weightKg: item.weightKg,
+          secondaryQuantity: item.secondaryQuantity,
+        },
+        product,
+      );
       totalWeightKg += weight;
       prepared.push({
         ...item,

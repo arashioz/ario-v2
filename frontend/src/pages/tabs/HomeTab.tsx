@@ -17,7 +17,7 @@ import type { AccountingDashboard, InventoryReport } from '../../services/accoun
 import { formatJalali, jalaliMonthRange, todayYmd, ymdToJalali } from '../../lib/jalali';
 import { JalaliDateSheet } from '../../components/ui/JalaliDatePicker';
 import { useSettings } from '../../services/settings.service';
-import { suppliersService } from '../../services/suppliers.service';
+import { PARENT_COMPANY, suppliersService } from '../../services/suppliers.service';
 import type { SupplierAccount } from '../../services/suppliers.service';
 import { NewCustomerModal } from '../../components/customers/NewCustomerModal';
 import { PendingProformasBanner } from '../../components/proformas/PendingProformasBanner';
@@ -87,8 +87,7 @@ export const HomeTab: React.FC = () => {
   const houses = useMemo(() => {
     const rows = new Map<string, { count: number; kg: number; cost: number; current: number; empty: number }>();
     for (const item of stock?.items || []) {
-      const name = (item.supplier || '').trim();
-      if (!name) continue;
+      const name = (item.supplier || PARENT_COMPANY).trim() || PARENT_COMPANY;
       const row = rows.get(name) || { count: 0, kg: 0, cost: 0, current: 0, empty: 0 };
       row.count += 1;
       row.kg += item.stockKg || 0;

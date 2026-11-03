@@ -11,7 +11,7 @@ import type { Period } from '../components/ui/PeriodPicker';
 import { Empty, KV, Mini, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
 import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
 import { dateToYmd, formatJalali } from '../lib/jalali';
-import { formatToman, num, percent, profitCaption, profitColor, toman, tons, weight } from '../lib/format';
+import { formatToman, num, percent, profitCaption, profitColor, profitPerTon, toman, tons, weight } from '../lib/format';
 
 type View = 'watch' | 'lot' | 'product' | 'day' | 'customer' | 'check';
 
@@ -98,7 +98,9 @@ export const ProfitPage: React.FC = () => {
               </div>
               <div>
                 <div className="text-[10px] text-emerald-100">سود هر تن</div>
-                <div className="text-base font-bold font-mono">{formatToman((s?.profitPerKg ?? 0) * 1000)}</div>
+                <div className="text-base font-bold font-mono">
+                  {(s?.kg ?? 0) >= 100 ? formatToman(profitPerTon(s?.profit ?? 0, s?.kg ?? 0)) : '—'}
+                </div>
               </div>
             </div>
           </div>

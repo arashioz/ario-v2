@@ -3,7 +3,7 @@ import { productsService } from '../../services/products.service';
 import { settingsService, useSettings } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
 
-/** Which company warehouses appear on the home card. */
+/** Which company is the default inventory value on the home card (first selected). */
 export const HomeWarehouseSettings: React.FC = () => {
   const settings = useSettings();
   const { showNotification } = useNotification();
@@ -35,7 +35,7 @@ export const HomeWarehouseSettings: React.FC = () => {
     <section className="rounded-2xl bg-white border border-slate-200 p-3 space-y-2">
       <div>
         <h2 className="text-sm font-bold text-slate-800">انبار صفحه اول</h2>
-        <p className="text-[11px] text-slate-500 mt-0.5">هر شرکتی که بزنید روی کارت انبار خانه می‌آید. با زدن کارت، ماژول انبار همان شرکت باز می‌شود.</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">کارت خانه فقط ارزش موجودی شرکت اول این لیست را نشان می‌دهد.</p>
       </div>
       {companies.length === 0 ? (
         <p className="text-[11px] text-slate-400">شرکتی روی کالاها ثبت نشده</p>

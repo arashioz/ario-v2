@@ -32,7 +32,55 @@ describe('packaged line weight', () => {
   it('counts 44 bags as 440kg, not 880kg when weight was stored twice', () => {
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 880 }, rice)).toBe(440);
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 440 }, rice)).toBe(440);
+    expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 44 }, rice)).toBe(440);
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44 }, rice)).toBe(440);
+  });
+
+  it('does not treat bag quantity as kilograms when costing a sale', () => {
+    const buy: FifoInvoice = {
+      _id: 'buy',
+      invoiceNumber: 'buy',
+      type: 'purchase',
+      invoiceDate: new Date('2026-10-01'),
+      customerName: 'شرکت قند بلالی',
+      totalAmount: 44 * 3_600_000,
+      finalAmount: 44 * 3_600_000,
+      items: [
+        {
+          productId: 'rice',
+          productName: 'برنج',
+          quantity: 44,
+          unit: 'کیسه',
+          unitPrice: 3_600_000,
+          totalPrice: 44 * 3_600_000,
+          weightKg: 44,
+        },
+      ],
+    };
+    const sale: FifoInvoice = {
+      _id: 'sale',
+      invoiceNumber: 'sale',
+      type: 'sale',
+      invoiceDate: new Date('2026-10-02'),
+      customerName: 'مشتری',
+      totalAmount: 2 * 4_000_000,
+      finalAmount: 2 * 4_000_000,
+      items: [
+        {
+          productId: 'rice',
+          productName: 'برنج',
+          quantity: 2,
+          unit: 'کیسه',
+          unitPrice: 4_000_000,
+          totalPrice: 2 * 4_000_000,
+          weightKg: 2,
+        },
+      ],
+    };
+    const result = runFifo([buy, sale], [rice]);
+    expect(result.invoiceProfit.get('sale')!.kg).toBe(20);
+    expect(result.invoiceProfit.get('sale')!.cost).toBe(7_200_000);
+    expect(result.invoiceProfit.get('sale')!.profit).toBe(800_000);
   });
 });
 

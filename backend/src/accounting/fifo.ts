@@ -208,7 +208,8 @@ export const lineKg = (it: FifoInvoice['items'][number], product?: FifoProduct):
   const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.6, b * 0.02);
   if (fromQty > 0 && w > 0 && per > 1 && close(w, fromQty * 2)) return fromQty;
   if (fromQty > 0 && w > 0 && close(w, fromQty)) return fromQty;
-  if (w > 0 && per > 1 && close(w, qty)) return w;
+  // 44 bags stored as weightKg=44 (same as quantity) is packs, not kilograms.
+  if (fromQty > 0 && per > 1 && (w <= 0 || close(w, qty))) return fromQty;
   if (w > 0) return w;
   if (fromQty > 0) return fromQty;
   if (sec > 0) return sec;

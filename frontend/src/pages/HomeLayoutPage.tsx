@@ -109,7 +109,7 @@ export const HomeLayoutPage: React.FC = () => {
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 space-y-2">
             <h2 className="text-[13px] font-bold text-slate-800">انبار روی صفحه اول</h2>
-            <p className="text-[11px] text-slate-400 leading-5">هر شرکت که تیک بزنید روی کارت انبار خانه دیده می‌شود. با زدن روی کارت، ماژول انبار همان شرکت باز می‌شود.</p>
+            <p className="text-[11px] text-slate-400 leading-5">کارت خانه فقط ارزش موجودی شرکت پیش‌فرض (اول لیست) را نشان می‌دهد.</p>
             {houses.length === 0 ? (
               <p className="text-[12px] text-slate-400">شرکتی در کالاها نیست.</p>
             ) : houses.map((name) => {
