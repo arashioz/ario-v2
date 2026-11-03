@@ -56,6 +56,15 @@ export const watchService = {
   async rescan(): Promise<WatchReport> {
     return (await api.post('/accounting/watch/scan', null, { timeout: 60000 })).data;
   },
+  async recalculate(): Promise<{
+    invoicesChanged: number;
+    linesFixed: number;
+    unresolved: { invoiceId: string; invoiceNumber: string; productName: string; detail: string }[];
+    open: number;
+    findings: WatchFinding[];
+  }> {
+    return (await api.post('/accounting/recalculate', null, { timeout: 120000 })).data;
+  },
   async dismiss(id: string, note = '') {
     return (await api.post('/accounting/watch/dismiss', { id, note })).data;
   },

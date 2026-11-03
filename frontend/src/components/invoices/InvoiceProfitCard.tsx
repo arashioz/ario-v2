@@ -43,7 +43,18 @@ export const InvoiceProfitCard: React.FC<{ invoiceId: string; version: string }>
           <div className="font-mono">
             {percent(data.marginPercent)} · کیلویی {formatToman(data.profitPerKg)}
           </div>
-          {data.estimated && <p className="text-amber-700">بخشی از بهای این فروش روی فاکتور ثبت نشده؛ آن بخش سود حساب نشده.</p>}
+          {data.kg > 0 && (
+            <div className="font-mono">
+              تناژ محاسبه‌شده {weight(data.kg)}
+              {data.storedKg && Math.abs(data.storedKg - data.kg) > Math.max(0.6, data.kg * 0.02)
+                ? ` · ثبت فاکتور ${weight(data.storedKg)}`
+                : ''}
+            </div>
+          )}
+          {(data.issues || []).map((issue, i) => (
+            <p key={i} className="text-amber-800">{issue.detail}</p>
+          ))}
+          {data.estimated && !(data.issues || []).length && <p className="text-amber-700">بخشی از بهای این فروش روی فاکتور ثبت نشده؛ آن بخش سود حساب نشده.</p>}
           {data.lines.map((l, i) => (
             <div key={i} className="rounded-xl bg-slate-50 px-2 py-1.5">
               <div className="flex items-center justify-between gap-2">

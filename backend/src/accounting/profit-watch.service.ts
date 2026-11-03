@@ -7,7 +7,7 @@ import { WatchDismissal, WatchDismissalDocument } from './schemas/watch-dismissa
 import { AccountingService } from './accounting.service';
 import { AuditService } from '../audit/audit.service';
 import { InvoicesService } from '../invoices/invoices.service';
-import { dayKey, isDoubleDiscount } from './fifo';
+import { dayKey, isDoubleDiscount, kgPerStock, lineKg } from './fifo';
 import { purchaseEntersShop } from '../suppliers/supplier-names';
 import type { FifoResult, SaleLine } from './fifo';
 
@@ -58,6 +58,8 @@ export const RULES: Record<string, { label: string; severity: Severity; help: st
   zero_qty: { label: 'تعداد صفر', severity: 'error', help: 'ردیفی با تعداد صفر یا منفی' },
   unknown_product: { label: 'کالای ناشناخته', severity: 'warning', help: 'کالای ردیف در فهرست کالاها نیست' },
   missing_weight: { label: 'وزن نامشخص', severity: 'warning', help: 'وزن ردیف معلوم نیست؛ تعداد به‌جای کیلو حساب شد' },
+  weight_conflict: { label: 'تناژ غلط', severity: 'error', help: 'وزن ثبت‌شده با تعداد × وزن بسته یکی نیست؛ سود هر کیلو و جمع تناژ خراب می‌شود' },
+  unknown_profit: { label: 'سود نامشخص', severity: 'warning', help: 'بهای خرید این ردیف مشخص نیست و در سود نیامده' },
   sale_loss_big: { label: 'زیان سنگین', severity: 'error', help: 'فروش بیش از ۲۰٪ زیر قیمت خرید — احتمالاً اشتباه تایپی' },
   sale_loss: { label: 'فروش زیر قیمت خرید', severity: 'warning', help: 'این ردیف با زیان فروخته شده' },
   sale_high_margin: { label: 'سود غیرعادی', severity: 'error', help: 'سود بیش از ۲۵٪ — احتمالاً قیمت یا مقدار اشتباه است' },
@@ -113,6 +115,7 @@ interface RawInvoice {
   remainingDebt?: number;
   shippingPayer?: string;
   shippingCost?: number;
+  totalWeightKg?: number;
 }
 
 interface ScanResult {
@@ -165,7 +168,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
         const [invoices, products] = await Promise.all([
           this.invoiceModel
             .find()
-            .select('invoiceNumber type invoiceDate createdAt customerId customerName items totalAmount discount finalAmount paymentMethod splitDetails paidAmount creditAmount remainingDebt shippingPayer shippingCost')
+            .select('invoiceNumber type invoiceDate createdAt customerId customerName items totalAmount discount finalAmount paymentMethod splitDetails paidAmount creditAmount remainingDebt shippingPayer shippingCost totalWeightKg')
             .lean<RawInvoice[]>(),
           this.productModel.find().select('name unit weightPerUnitKg stock isActive sellPrice priceRetail priceSupermarket priceWholesale').lean(),
         ]);
@@ -298,6 +301,16 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
             id: `missing_weight:${id}:${idx}`,
             detail: `وزن هر ${product.unit} «${product.name}» در کالا ثبت نشده؛ ${fa(it.quantity, 3)} ${it.unit} به‌عنوان ${fa(it.quantity, 3)} کیلو حساب شد`,
           });
+        } else if (kgPerStock(product) > 1) {
+          const computed = lineKg(it, product);
+          const stored = Number(it.weightKg) || 0;
+          if (stored > 0 && Math.abs(stored - computed) > Math.max(0.6, computed * 0.02)) {
+            push('weight_conflict', {
+              ...lineRef,
+              id: `weight_conflict:${id}:${idx}`,
+              detail: `وزن ثبت‌شده ${fa(stored, 1)} کیلو است ولی ${fa(it.quantity, 2)} ${product.unit || it.unit} × ${fa(kgPerStock(product), 2)} کیلو = ${fa(computed, 1)} کیلو. جمع تناژ و سود هر کیلو با این وزن غلط می‌شود.`,
+            });
+          }
         }
       });
 
@@ -392,7 +405,7 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
         SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
         new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime(),
     );
-    return { findings: out, health: this.health(f, invoices) };
+    return { findings: out, health: this.health(f, invoices, products) };
   }
 
   private saleLineRules(f: FifoResult, push: (rule: string, x: any) => void) {
@@ -408,6 +421,17 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     for (const l of f.saleLines) {
       const id = lineId(l);
       const ref = { invoiceId: l.invoiceId, invoiceNumber: l.invoiceNumber, invoiceType: 'sale', productId: l.productId, productName: l.productName, customerName: l.customerName, date: l.date };
+      if (l.unknownCost) {
+        push('unknown_profit', {
+          ...ref,
+          id: `unknown_profit:${id}`,
+          impact: l.revenue,
+          detail:
+            l.fulfillment === 'factory'
+              ? `سود «${l.productName}» مشخص نیست؛ بهای کارخانه ثبت نشده. فروش ${toman(l.revenue)} داخل سود نیامده.`
+              : `سود «${l.productName}» مشخص نیست؛ بار خرید برای ${fa(l.kg, 1)} کیلو پیدا نشد. فروش ${toman(l.revenue)} داخل سود نیامده.`,
+        });
+      }
       if (l.estimatedKg > 0.01) {
         push('estimated_cost', {
           ...ref,
@@ -573,7 +597,26 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Self-checks of the FIFO engine itself, so the profit figures can be trusted. */
-  private health(f: FifoResult, invoices: RawInvoice[]): HealthCheck[] {
+  /** Rewrite stored weights, rebuild stock, then list invoices whose profit or tonnage is still unknown. */
+  async recalculate() {
+    const weights = await this.invoices.recalculateWeights();
+    const stock = await this.invoices.rebuildStock();
+    await this.scan(true);
+    const report = await this.report();
+    const open = (report.findings || []).filter((f) =>
+      ['weight_conflict', 'missing_weight', 'unknown_profit', 'estimated_cost', 'unknown_product'].includes(f.rule),
+    );
+    return {
+      invoicesChanged: weights.invoicesChanged,
+      linesFixed: weights.linesFixed,
+      unresolved: weights.unresolved,
+      stock,
+      open: open.length,
+      findings: open,
+    };
+  }
+
+  private health(f: FifoResult, invoices: RawInvoice[], products: any[] = []): HealthCheck[] {
     const badLots = f.lots.filter((l) => Math.abs(l.kgIn - l.kgSold - l.kgLeft) > 0.01);
     const badLines = f.saleLines.filter((l) => Math.abs(l.kg - l.consumptions.reduce((s, c) => s + c.kg, 0)) > 0.01);
 
@@ -592,6 +635,24 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
     const profitInvoices = [...f.invoiceProfit.values()].reduce((s, p) => s + p.profit, 0);
     const estimatedKg = f.saleLines.reduce((s, l) => s + l.estimatedKg, 0);
     const soldKg = f.saleLines.reduce((s, l) => s + l.kg, 0);
+    const byId = new Map(products.map((p) => [String(p._id), p]));
+    let computedKg = 0;
+    let badTonnage = 0;
+    for (const inv of invoices) {
+      let sum = 0;
+      let bad = false;
+      for (const it of inv.items || []) {
+        const product = byId.get(String(it.productId));
+        const kg = product && kgPerStock(product) > 0 ? lineKg(it, product) : Number(it.weightKg) || 0;
+        sum += kg;
+        const stored = Number(it.weightKg) || 0;
+        if (product && kgPerStock(product) > 1 && stored > 0 && Math.abs(stored - kg) > Math.max(0.6, kg * 0.02)) bad = true;
+      }
+      const header = Number(inv.totalWeightKg) || 0;
+      if (header > 0 && Math.abs(header - sum) > Math.max(1, sum * 0.02)) bad = true;
+      if (bad) badTonnage += 1;
+      computedKg += sum;
+    }
 
     return [
       {
@@ -625,6 +686,14 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
         label: 'قیمت خرید همه فروش‌ها از بار واقعی آمده',
         ok: estimatedKg < 0.01,
         detail: estimatedKg < 0.01 ? 'هیچ فروشی تخمینی نیست' : `${fa(estimatedKg, 1)} کیلو از ${fa(soldKg, 1)} کیلو فروش قیمت خرید تخمینی دارد`,
+      },
+      {
+        id: 'tonnage',
+        label: 'جمع تناژ فاکتورها با وزن واقعی کالا یکی است',
+        ok: badTonnage === 0,
+        detail: badTonnage
+          ? `${fa(badTonnage)} فاکتور وزن غلط دارد. تناژ محاسبه‌شده ${fa(computedKg / 1000, 2)} تن است`
+          : `جمع تناژ ${fa(computedKg / 1000, 2)} تن`,
       },
     ];
   }

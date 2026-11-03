@@ -1,5 +1,8 @@
 import { BadRequestException, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 import { AccountingService, COST_BASES, SUGGEST_MODES } from './accounting.service';
 import { ProfitWatchService } from './profit-watch.service';
 import type { CostBasis, SuggestMode } from './accounting.service';
@@ -88,6 +91,15 @@ export class AccountingController {
   async rescan() {
     await this.watcher.scan(true);
     return this.watcher.report();
+  }
+
+  /** Rewrite invoice weights from catalog pack size, rebuild stock, then list what is still unknown. */
+  @Post('recalculate')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  recalculate() {
+    return this.watcher.recalculate();
   }
 
   @Post('watch/dismiss')

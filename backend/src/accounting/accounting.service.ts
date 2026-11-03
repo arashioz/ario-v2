@@ -8,7 +8,7 @@ import {
   CustomerTransactionDocument,
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
-import { runFifo, dayKey, purchaseFreight, lineKg } from './fifo';
+import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg } from './fifo';
 import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
@@ -806,9 +806,45 @@ export class AccountingService {
     const ip = f.invoiceProfit.get(invoiceId);
     if (!ip) throw new NotFoundException('فاکتور فروش یافت نشد');
     const lines = f.saleLines.filter((l) => l.invoiceId === invoiceId);
+    const inv = f.invoices.find((row) => String(row._id) === invoiceId);
+    const issues: { rule: string; detail: string }[] = [];
+    for (const it of inv?.items || []) {
+      const product = f.products.get(String(it.productId || ''));
+      const computed = lineKg(it, product);
+      const stored = Number(it.weightKg) || 0;
+      if (product && kgPerStock(product) > 1 && stored > 0 && Math.abs(stored - computed) > Math.max(0.6, computed * 0.02)) {
+        issues.push({
+          rule: 'weight_conflict',
+          detail: `${it.productName}: وزن ثبت‌شده ${Math.round(stored)} کیلو است، محاسبه ${Math.round(computed)} کیلو (${it.quantity} × ${kgPerStock(product)}).`,
+        });
+      } else if ((it.quantity || 0) > 0 && (!product || (kgPerStock(product) <= 0 && stored <= 0 && product.unit !== 'کیلوگرم'))) {
+        issues.push({
+          rule: product ? 'missing_weight' : 'unknown_product',
+          detail: product
+            ? `${it.productName}: وزن هر ${product.unit} ثبت نشده؛ تناژ این ردیف قطعی نیست.`
+            : `${it.productName}: کالا در فهرست نیست؛ سود و تناژ قطعی نیست.`,
+        });
+      }
+    }
+    for (const l of lines) {
+      if (l.unknownCost) {
+        issues.push({
+          rule: 'unknown_profit',
+          detail: `${l.productName}: بهای خرید مشخص نیست. فروش ${Math.round(l.revenue).toLocaleString('fa-IR')} تومان در سود این فاکتور نیامده.`,
+        });
+      } else if (l.estimatedKg > 0.05) {
+        issues.push({
+          rule: 'estimated_cost',
+          detail: `${l.productName}: ${Math.round(l.estimatedKg)} کیلو بار خرید ندارد و بهایش تخمینی است.`,
+        });
+      }
+    }
+    const storedKg = inv ? inv.items.reduce((s, it) => s + (Number(it.weightKg) || 0), 0) : 0;
     return {
       ...this.summarize(lines),
       estimated: ip.estimated,
+      storedKg: Math.round(storedKg * 10) / 10,
+      issues,
       lines: lines.map((l) => ({
         productName: l.productName,
         quantity: l.quantity,

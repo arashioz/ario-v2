@@ -10,6 +10,9 @@ import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/Perio
 import type { Period } from '../components/ui/PeriodPicker';
 import { Empty, KV, Mini, ReportHeader, Segments, StatCard } from '../components/reports/ReportUI';
 import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
+import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
+import { watchService } from '../services/watch.service';
 import { dateToYmd, formatJalali } from '../lib/jalali';
 import { formatToman, num, percent, profitCaption, profitColor, profitPerTon, toman, tons, weight } from '../lib/format';
 
@@ -26,8 +29,11 @@ export const ProfitPage: React.FC = () => {
   const [error, setError] = useState('');
   const [view, setView] = useState<View>('lot');
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { showNotification } = useNotification();
   const watch = useProfitWatch();
   const reloadWatch = watch.reload;
+  const [recalculating, setRecalculating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +52,26 @@ export const ProfitPage: React.FC = () => {
     load();
     reloadWatch();
   }, [load, reloadWatch]);
+
+  const recalculate = useCallback(async () => {
+    try {
+      setRecalculating(true);
+      const res = await watchService.recalculate();
+      await reloadAll();
+      setView('watch');
+      showNotification({
+        title: 'محاسبه دوباره تمام شد',
+        message: res.open
+          ? `${num(res.linesFixed)} ردیف وزن اصلاح شد. ${num(res.open)} مورد هنوز سود یا تناژ نامشخص دارد و در نگهبان سود است.`
+          : `${num(res.linesFixed)} ردیف وزن اصلاح شد. مورد نامشخصی نماند.`,
+        type: res.open ? 'warning' : 'success',
+      });
+    } catch {
+      showNotification({ title: 'محاسبه نشد', message: 'محاسبه دوباره سود و تناژ انجام نشد.', type: 'error' });
+    } finally {
+      setRecalculating(false);
+    }
+  }, [reloadAll, showNotification]);
 
   const { open: openInvoice, modal } = useInvoiceOpener(reloadAll);
 
@@ -111,6 +137,8 @@ export const ProfitPage: React.FC = () => {
             scanning={watch.scanning}
             onRescan={watch.rescan}
             onOpen={() => setView('watch')}
+            onRecalculate={user?.role === 'admin' ? recalculate : undefined}
+            recalculating={recalculating}
           />
 
           <button

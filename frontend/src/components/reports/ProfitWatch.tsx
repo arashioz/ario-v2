@@ -73,7 +73,9 @@ export const ProfitWatchCard: React.FC<{
   scanning: boolean;
   onRescan: () => void;
   onOpen: () => void;
-}> = ({ report, error, scanning, onRescan, onOpen }) => {
+  onRecalculate?: () => void;
+  recalculating?: boolean;
+}> = ({ report, error, scanning, onRescan, onOpen, onRecalculate, recalculating }) => {
   const now = useNow();
   const [showHealth, setShowHealth] = useState(false);
   const healthy = report?.health.every((h) => h.ok);
@@ -131,6 +133,16 @@ export const ProfitWatchCard: React.FC<{
             {open > 0 && (
               <button onClick={onOpen} className="w-full mt-3 py-2.5 rounded-2xl bg-slate-900 text-white text-xs font-bold active:scale-[0.98]">
                 دیدن و رسیدگی به {num(open)} مورد
+              </button>
+            )}
+            {onRecalculate && (
+              <button
+                type="button"
+                onClick={onRecalculate}
+                disabled={recalculating || scanning}
+                className="w-full mt-2 py-2.5 rounded-2xl bg-emerald-700 text-white text-xs font-bold active:scale-[0.98] disabled:opacity-50"
+              >
+                {recalculating ? 'در حال محاسبه دوباره…' : 'محاسبه دوباره سود، تناژ و انبار'}
               </button>
             )}
           </>

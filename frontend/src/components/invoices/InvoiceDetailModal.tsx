@@ -475,7 +475,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             <div className="p-3 rounded-2xl bg-sky-50/70 border border-sky-100 flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 text-sky-800 font-medium">
                 <Scale className="w-4 h-4 text-sky-600" />
-                <span>مجموع تناژ / وزن بار:</span>
+                <span>جمع تناژ ثبت‌شده:</span>
               </div>
               <span className="font-semibold text-sky-900 font-mono">
                 {invoice.totalWeightKg.toLocaleString('fa-IR')} کیلوگرم ({tons(invoice.totalWeightKg)} تن)

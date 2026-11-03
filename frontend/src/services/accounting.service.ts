@@ -150,6 +150,8 @@ export interface ProfitReport {
 
 export interface InvoiceProfit extends SalesSummary {
   estimated: boolean;
+  storedKg?: number;
+  issues?: { rule: string; detail: string }[];
   lines: {
     productName: string;
     quantity: number;

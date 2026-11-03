@@ -17,7 +17,7 @@ import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
-import { lineKg } from '../accounting/fifo';
+import { kgPerStock, lineKg } from '../accounting/fifo';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 import { PricePeriodService } from '../pricing/price-period.service';
@@ -190,7 +190,7 @@ export class InvoicesService implements OnApplicationBootstrap {
           weightKg: item.weightKg,
           secondaryQuantity: item.secondaryQuantity,
         },
-        product,
+        product ? { _id: String(product._id), name: product.name, unit: product.unit, weightPerUnitKg: product.weightPerUnitKg } : undefined,
       );
       totalWeightKg += weight;
       prepared.push({
@@ -1186,6 +1186,75 @@ export class InvoicesService implements OnApplicationBootstrap {
           .exec()
       : [];
     return { linked, related };
+  }
+
+  /**
+   * Rewrite stored line weights from quantity × pack weight, then the invoice tonnage.
+   * Only when the catalog weight is known. Ambiguous lines are returned, not guessed.
+   */
+  async recalculateWeights() {
+    const products = await this.productModel.find().select('name unit weightPerUnitKg').lean().exec();
+    const byId = new Map(products.map((p) => [String(p._id), p]));
+    const invoices = await this.invoiceModel.find({ type: { $in: ['sale', 'purchase'] } }).exec();
+    let invoicesChanged = 0;
+    let linesFixed = 0;
+    const unresolved: { invoiceId: string; invoiceNumber: string; productName: string; detail: string }[] = [];
+
+    for (const inv of invoices) {
+      let total = 0;
+      let dirty = false;
+      for (const item of inv.items || []) {
+        const product = byId.get(String(item.productId || ''));
+        const per = kgPerStock(product as any);
+        const confident = per > 0;
+        if (!confident) {
+          const stored = Number(item.weightKg) || Number(item.secondaryQuantity) || 0;
+          total += stored;
+          if ((item.quantity || 0) > 0 && stored <= 0) {
+            unresolved.push({
+              invoiceId: String(inv._id),
+              invoiceNumber: inv.invoiceNumber,
+              productName: item.productName,
+              detail: product
+                ? `وزن هر ${product.unit || 'واحد'} «${product.name}» در کالا ثبت نشده`
+                : `کالای «${item.productName}» در فهرست نیست`,
+            });
+          }
+          continue;
+        }
+        const kg = lineKg(
+          {
+            productId: String(item.productId || ''),
+            productName: item.productName,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice || 0,
+            weightKg: item.weightKg,
+            secondaryQuantity: item.secondaryQuantity,
+          },
+          product as any,
+        );
+        const rounded = Math.round(kg * 10) / 10;
+        total += rounded;
+        if (Math.abs((Number(item.weightKg) || 0) - rounded) > 0.2) {
+          item.weightKg = rounded;
+          dirty = true;
+          linesFixed += 1;
+        }
+      }
+      const tw = Math.round(total * 10) / 10;
+      if (Math.abs((inv.totalWeightKg || 0) - tw) > 0.2) {
+        inv.totalWeightKg = tw;
+        dirty = true;
+      }
+      if (dirty) {
+        inv.markModified('items');
+        await inv.save();
+        invoicesChanged += 1;
+      }
+    }
+    return { invoicesChanged, linesFixed, unresolved };
   }
 
   /**
