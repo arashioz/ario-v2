@@ -19,6 +19,8 @@ const InventoryPage = lazy(() => import('./InventoryPage').then((m) => ({ defaul
 const WarehousesPage = lazy(() => import('./WarehousesPage').then((m) => ({ default: m.WarehousesPage })));
 const StocktakePage = lazy(() => import('./StocktakePage').then((m) => ({ default: m.StocktakePage })));
 const ProfitPage = lazy(() => import('./ProfitPage').then((m) => ({ default: m.ProfitPage })));
+const SalesModulePage = lazy(() => import('./SalesModulePage').then((m) => ({ default: m.SalesModulePage })));
+const SalesProductPage = lazy(() => import('./SalesProductPage').then((m) => ({ default: m.SalesProductPage })));
 const CreditReportPage = lazy(() => import('./CreditReportPage').then((m) => ({ default: m.CreditReportPage })));
 const InflationPage = lazy(() => import('./InflationPage').then((m) => ({ default: m.InflationPage })));
 const SupplierAccountPage = lazy(() => import('./SupplierAccountPage').then((m) => ({ default: m.SupplierAccountPage })));
@@ -29,6 +31,9 @@ const PriceChartPage = lazy(() => import('./PriceChartPage').then((m) => ({ defa
 const LogsPage = lazy(() => import('./LogsPage').then((m) => ({ default: m.LogsPage })));
 const UsersPage = lazy(() => import('./UsersPage').then((m) => ({ default: m.UsersPage })));
 const CashboxPage = lazy(() => import('./CashboxPage').then((m) => ({ default: m.CashboxPage })));
+const HomeLayoutPage = lazy(() => import('./HomeLayoutPage').then((m) => ({ default: m.HomeLayoutPage })));
+const SalesTargetPage = lazy(() => import('./SalesTargetPage').then((m) => ({ default: m.SalesTargetPage })));
+const MarketingPage = lazy(() => import('./MarketingPage').then((m) => ({ default: m.MarketingPage })));
 
 const TABS = [
   { tab: 'home', href: '/tabs/home', label: 'خانه', icon: homeOutline },
@@ -128,6 +133,11 @@ export const TabsLayout: React.FC = () => {
           <Route path="/warehouses" element={loadPage(<WarehousesPage />)} />
           <Route path="/stocktake" element={loadPage(<StocktakePage />)} />
           <Route path="/profit" element={loadPage(<ProfitPage />)} />
+          <Route path="/sales" element={loadPage(<SalesModulePage />)} />
+          <Route path="/sales/product/:productId" element={loadPage(<SalesProductPage />)} />
+          <Route path="/home-layout" element={loadPage(<HomeLayoutPage />)} />
+          <Route path="/sales-target" element={loadPage(<SalesTargetPage />)} />
+          <Route path="/marketing" element={loadPage(<MarketingPage />)} />
           <Route path="/credit-report" element={loadPage(<CreditReportPage />)} />
           <Route path="/inflation" element={loadPage(<InflationPage />)} />
           <Route path="/supplier-account" element={loadPage(<SupplierAccountPage />)} />

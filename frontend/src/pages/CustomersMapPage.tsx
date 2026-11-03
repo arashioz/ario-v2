@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
-import { customersService } from '../services/customers.service';
+import { customersService, isQuietMonth } from '../services/customers.service';
 import type { Customer } from '../services/customers.service';
 import { useNotification } from '../context/NotificationContext';
 import { CustomerDetailModal } from '../components/customers/CustomerDetailModal';
@@ -23,7 +23,8 @@ import { createMap, setMapStyle, customerPin, getCurrentPosition, geoErrorMessag
 import type { MapStyle } from '../lib/map';
 import { formatToman } from '../lib/format';
 
-const pinColor = (c: Customer) => (c.balance > 0 ? '#e11d48' : c.balance < 0 ? '#0284c7' : '#10b981');
+const pinColor = (c: Customer) =>
+  isQuietMonth(c) ? '#d97706' : c.balance > 0 ? '#e11d48' : c.balance < 0 ? '#0284c7' : '#10b981';
 const shortName = (name: string) => (name.length > 16 ? name.slice(0, 15) + '…' : name);
 
 export const CustomersMapPage: React.FC = () => {
@@ -40,7 +41,7 @@ export const CustomersMapPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'supermarket' | 'wholesale' | 'debtors'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'supermarket' | 'wholesale' | 'debtors' | 'quiet'>('all');
 
   const loadCustomers = async () => {
     try {
@@ -93,6 +94,7 @@ export const CustomersMapPage: React.FC = () => {
     const filtered = customers.filter((c) => {
       if (!c.latitude || !c.longitude) return false;
       if (filterType === 'debtors') return c.balance > 0;
+      if (filterType === 'quiet') return isQuietMonth(c);
       if (filterType === 'supermarket') return c.customerType === 'supermarket';
       if (filterType === 'wholesale') return c.customerType === 'wholesale';
       return true;
@@ -141,6 +143,7 @@ export const CustomersMapPage: React.FC = () => {
   const totalFilteredDebt = customers
     .filter((c) => {
       if (filterType === 'debtors') return c.balance > 0;
+      if (filterType === 'quiet') return isQuietMonth(c);
       if (filterType === 'supermarket') return c.customerType === 'supermarket';
       if (filterType === 'wholesale') return c.customerType === 'wholesale';
       return true;
@@ -209,6 +212,16 @@ export const CustomersMapPage: React.FC = () => {
               عمده و بنکداری
             </button>
             <button
+              onClick={() => setFilterType('quiet')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition whitespace-nowrap ${
+                filterType === 'quiet'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-amber-800 hover:bg-amber-50'
+              }`}
+            >
+              بدون سفارش ماه اخیر
+            </button>
+            <button
               onClick={() => setFilterType('debtors')}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1 whitespace-nowrap ${
                 filterType === 'debtors'
@@ -244,6 +257,10 @@ export const CustomersMapPage: React.FC = () => {
             </button>
           </div>
 
+          <div className="absolute bottom-[4.5rem] right-3 left-3 z-[1000] flex flex-wrap gap-1.5 text-[10px] font-bold">
+            <span className="px-2 py-1 rounded-lg bg-white/95 border border-slate-200 text-amber-800">نارنجی: ماه اخیر سفارش نداده</span>
+            <span className="px-2 py-1 rounded-lg bg-white/95 border border-slate-200 text-rose-700">قرمز: بدهکار</span>
+          </div>
           <div className="absolute bottom-3 right-3 left-3 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl px-3 py-2.5 border border-sky-100 shadow-xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 text-slate-600 font-normal">
               <ShoppingBag className="w-4 h-4 text-sky-600" />

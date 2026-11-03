@@ -83,7 +83,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editBranches, setEditBranches] = useState<string[]>([]);
-  const [editType, setEditType] = useState<'walkin' | 'retail' | 'supermarket' | 'wholesale' | 'distributor'>('supermarket');
+  const [editType, setEditType] = useState<'walkin' | 'supermarket' | 'wholesale'>('supermarket');
   const [branchDraft, setBranchDraft] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -148,7 +148,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     setEditName(customer.name);
     setEditPhone(customer.phoneNumber || '');
     setEditBranches(customer.branches || []);
-    setEditType(customer.kind === 'walkin' ? 'walkin' : (customer.customerType || 'supermarket'));
+    setEditType(customer.kind === 'walkin' ? 'walkin' : customer.customerType === 'wholesale' || customer.customerType === 'distributor' ? 'wholesale' : 'supermarket');
     setBranchDraft('');
     setEditingProfile(true);
   };
@@ -328,7 +328,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-800">{customer.name}</h3>
-                    <span className="text-[10px] font-bold text-sky-700">{customer.kind === 'walkin' ? 'حضوری' : customer.customerType === 'distributor' ? 'عمده‌فروش' : customer.customerType === 'wholesale' ? 'عمده' : customer.customerType === 'retail' ? 'فروشنده' : 'سوپرمارکت'}</span>
+                    <span className="text-[10px] font-bold text-sky-700">{customer.kind === 'walkin' ? 'حضوری' : customer.customerType === 'wholesale' || customer.customerType === 'distributor' ? 'عمده' : 'سوپرمارکت'}</span>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 font-mono" dir="ltr">
                       <span>{customer.phoneNumber || 'بدون شماره'}</span>
                     </div>
@@ -367,10 +367,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div className="grid grid-cols-2 gap-1">
                     {([
                       ['walkin', 'حضوری'],
-                      ['retail', 'فروشنده'],
                       ['supermarket', 'سوپرمارکت'],
                       ['wholesale', 'عمده'],
-                      ['distributor', 'عمده‌فروش'],
                     ] as const).map(([id, label]) => (
                       <button key={id} type="button" onClick={() => setEditType(id)} className={`py-2 rounded-xl text-[11px] font-bold ${editType === id ? 'bg-sky-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>{label}</button>
                     ))}

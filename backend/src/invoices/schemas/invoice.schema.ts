@@ -243,6 +243,10 @@ export class Invoice {
   @Prop({ type: Date })
   paidAt?: Date;
 
+  /** When the document was written. Independent of the proforma day and the ship day. */
+  @Prop({ type: Date })
+  registeredAt?: Date;
+
   @Prop({ default: 0 })
   customerPrevBalance: number;
 

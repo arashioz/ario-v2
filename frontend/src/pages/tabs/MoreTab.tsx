@@ -26,11 +26,12 @@ import {
   Boxes,
   Settings,
   DatabaseBackup,
-  LineChart,
   Users,
   History,
   KeyRound,
   Factory,
+  LayoutGrid,
+  Target,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
@@ -62,18 +63,25 @@ const ACCOUNTS: Item[] = [
 
 const REPORTS: Item[] = [
   {
-    path: '/profit',
-    title: 'سود فروش',
-    desc: 'جمع سود، و جدا برای دفتر و کارخانه',
+    path: '/sales',
+    title: 'ماژول فروش',
+    desc: 'خرید، فروش، موجودی انبار، سود هر شرکت و نمودار قیمت',
     icon: TrendingUp,
     tone: 'bg-emerald-100 text-emerald-600',
   },
   {
-    path: '/price-chart',
-    title: 'چارت قیمت',
-    desc: 'نمودار قیمت خرید، فروش و قیمت لیست هر کالا',
-    icon: LineChart,
-    tone: 'bg-sky-100 text-sky-600',
+    path: '/sales-target',
+    title: 'ماژول تارگت فروش',
+    desc: 'هدف ماه آریو، تارگت هر فروشنده و درصد پیشرفت',
+    icon: Target,
+    tone: 'bg-sky-100 text-sky-700',
+  },
+  {
+    path: '/marketing',
+    title: 'ماژول بازاریابی',
+    desc: 'تارگت بازاریاب، پیگیری مشتری و ثبت لوکیشن روی نقشه',
+    icon: Briefcase,
+    tone: 'bg-emerald-100 text-emerald-700',
   },
   {
     path: '/credit-report',
@@ -127,6 +135,13 @@ const REPORTS: Item[] = [
 ];
 
 const SHOP: Item[] = [
+  {
+    path: '/home-layout',
+    title: 'چیدمان صفحه اول',
+    desc: 'قالب پیش‌فرض، یا کارت‌ها را خودتان بچینید. برای هر کاربر جدا ذخیره می‌شود',
+    icon: LayoutGrid,
+    tone: 'bg-sky-100 text-sky-700',
+  },
   {
     path: '/products',
     title: 'مدیریت کالاها',
@@ -337,7 +352,7 @@ export const MoreTab: React.FC = () => {
 
           <Group
             title="گزارشات"
-            hint="سود دفتر و کارخانه، نسیه، صندوق و انبار"
+            hint="فروش، نسیه، صندوق و انبار"
             tone="text-emerald-800"
             open={open.reports}
             onToggle={() => setOpen((s) => ({ ...s, reports: !s.reports }))}

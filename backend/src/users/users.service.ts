@@ -135,7 +135,7 @@ export class UsersService implements OnModuleInit {
   async updateUser(
     id: string,
     actorId: string,
-    body: { fullName?: string; phoneNumber?: string; role?: Role; isActive?: boolean; password?: string; username?: string },
+    body: { fullName?: string; phoneNumber?: string; role?: Role; isActive?: boolean; password?: string; username?: string; salesTargetAmount?: number; salesTargetKg?: number },
   ): Promise<UserDocument> {
     const user = await this.findById(id);
     if (body.fullName !== undefined) {
@@ -160,7 +160,45 @@ export class UsersService implements OnModuleInit {
       if (body.password.length < 6) throw new BadRequestException('رمز عبور باید حداقل ۶ کاراکتر باشد');
       user.password = await bcrypt.hash(body.password, 10);
     }
+    if (body.salesTargetAmount !== undefined) user.salesTargetAmount = Math.max(0, Math.round(Number(body.salesTargetAmount) || 0));
+    if (body.salesTargetKg !== undefined) user.salesTargetKg = Math.max(0, Math.round((Number(body.salesTargetKg) || 0) * 10) / 10);
     await user.save();
     return this.userModel.findById(id).select('-password').exec() as Promise<UserDocument>;
+  }
+
+  async setHome(id: string, body: { homeLayout?: string[]; homeWarehouses?: string[] }) {
+    const widgets = new Set(['warehouse', 'shortcuts', 'chart', 'collections', 'debts', 'company', 'today', 'profit', 'followups', 'notes', 'target']);
+    const user = await this.findById(id);
+    if (Array.isArray(body.homeLayout)) {
+      user.homeLayout = [...new Set(body.homeLayout.map((item) => String(item)).filter((item) => widgets.has(item)))];
+    }
+    if (Array.isArray(body.homeWarehouses)) {
+      user.homeWarehouses = [...new Set(body.homeWarehouses.map((item) => String(item).trim()).filter(Boolean))].slice(0, 30);
+    }
+    await user.save();
+    return this.publicUser(user);
+  }
+
+  async setTarget(id: string, body: { salesTargetAmount?: number; salesTargetKg?: number }) {
+    const user = await this.findById(id);
+    if (body.salesTargetAmount !== undefined) user.salesTargetAmount = Math.max(0, Math.round(Number(body.salesTargetAmount) || 0));
+    if (body.salesTargetKg !== undefined) user.salesTargetKg = Math.max(0, Math.round((Number(body.salesTargetKg) || 0) * 10) / 10);
+    await user.save();
+    return this.publicUser(user);
+  }
+
+  private publicUser(user: UserDocument) {
+    return {
+      id: user._id.toString(),
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      isActive: user.isActive,
+      homeLayout: user.homeLayout || [],
+      homeWarehouses: user.homeWarehouses || [],
+      salesTargetAmount: user.salesTargetAmount || 0,
+      salesTargetKg: user.salesTargetKg || 0,
+    };
   }
 }

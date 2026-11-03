@@ -59,7 +59,66 @@ export class CustomersService implements OnModuleInit {
 
   async touchSale(customerId: string, date?: Date) {
     if (!Types.ObjectId.isValid(customerId)) return;
-    await this.customerModel.updateOne({ _id: customerId }, { $set: { lastTransactionDate: date || new Date() } }).exec();
+    const when = date || new Date();
+    await this.customerModel
+      .updateOne(
+        { _id: customerId },
+        {
+          $set: { lastTransactionDate: when },
+          $max: { lastSaleAt: when },
+        },
+      )
+      .exec();
+  }
+
+  async geocode(query: string) {
+    const text = String(query || '').trim();
+    if (text.length < 4) throw new BadRequestException('آدرس کوتاه است');
+    const q = /ایران|تهران|کرج|اصفهان|مشهد|شیراز|تبریز|اهواز|قم|رشت|کرمان/.test(text) ? text : `${text} ایران`;
+    const key =
+      process.env.MAPIR_API_KEY ||
+      'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjQyYTQ2YzM4MTYxOTFmYjE5YWVjZjljY2Q5NGRhNDZiODZkZTYyZDliYzRhMjBjYjk5MGE5YzU3OTBkYTRmM2M4MDJiNzYzYmNmYjczOTJhIn0.eyJhdWQiOiIxNzA3MyIsImp0aSI6IjQyYTQ2YzM4MTYxOTFmYjE5YWVjZjljY2Q5NGRhNDZiODZkZTYyZDliYzRhMjBjYjk5MGE5YzU3OTBkYTRmM2M4MDJiNzYzYmNmYjczOTJhIiwiaWF0IjoxNjQ0OTUyNDI1LCJuYmYiOjE2NDQ5NTI0MjUsImV4cCI6MTY0NzQ1ODAyNSwic3ViIjoiIiwic2NvcGVzIjpbImJhc2ljIl19.aRCNeCRHfddrMVsflEgc1QPxmBxruFNruGqtZEqkiXc5tcyX4UQpUqbx1U3FLexH756OYmEB84B8iV4eUUPr693VSaZCH9IFqDg7BABqVC-cDJsJQS8JGhz9qeZZ9kmincaMekmzcy0rHbu66KeWLjKkrmfx_nI-c3LdFxsY39JQZN1HQuN_2N9q477iJ-pwM_feHXQ-cKrn2yUurOOftyNdNvoJXU_wxZZtaUkarGDWkr7uGeNC9AFoM97rOz_ztSnrpSRXtfB1akRSzVZlGgSlpwqShZzXI1Sc0mCOSnRUJG526xHySASD9CUi90rHyOE9AAcXuIbGbl2yU264Yw';
+    const point = await this.geocodeMapIr(q, key);
+    if (point) return point;
+    const fallback = await this.geocodeNominatim(q);
+    if (fallback) return fallback;
+    throw new NotFoundException('این آدرس روی نقشه پیدا نشد');
+  }
+
+  private async geocodeMapIr(text: string, key: string): Promise<{ lat: number; lng: number; label: string } | null> {
+    try {
+      const url = `https://map.ir/search/v2?text=${encodeURIComponent(text)}`;
+      const res = await fetch(url, { headers: { 'x-api-key': key } });
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const rows = Array.isArray(data) ? data : data?.value || data?.data || [];
+      const first = rows[0];
+      if (!first) return null;
+      const coords = first.geom?.coordinates || first.geometry?.coordinates || first.coordinate;
+      const lng = Number(Array.isArray(coords) ? coords[0] : first.longitude ?? first.lng);
+      const lat = Number(Array.isArray(coords) ? coords[1] : first.latitude ?? first.lat);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { lat, lng, label: String(first.title || first.address || text) };
+    } catch {
+      return null;
+    }
+  }
+
+  private async geocodeNominatim(text: string): Promise<{ lat: number; lng: number; label: string } | null> {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ir&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'ario-application/1.0' } });
+      if (!res.ok) return null;
+      const rows: any[] = await res.json();
+      const first = rows[0];
+      if (!first) return null;
+      const lat = Number(first.lat);
+      const lng = Number(first.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { lat, lng, label: String(first.display_name || text) };
+    } catch {
+      return null;
+    }
   }
 
   /** Attach a real customer to every sale, including factory shipments, so they appear in the list. */
@@ -178,6 +237,13 @@ export class CustomersService implements OnModuleInit {
 
     const customers = await this.customerModel.find(filterObj).sort({ balance: -1, updatedAt: -1 }).exec();
     const now = Date.now();
+    const lastSales = customers.length
+      ? await this.invoiceModel.aggregate([
+          { $match: { type: 'sale', customerId: { $in: customers.map((c) => c._id) } } },
+          { $group: { _id: '$customerId', lastSaleAt: { $max: '$invoiceDate' } } },
+        ])
+      : [];
+    const lastSaleById = new Map(lastSales.map((row: any) => [String(row._id), row.lastSaleAt as Date]));
     const open = await this.invoiceModel
       .find({ type: 'sale', remainingDebt: { $gt: 0 }, customerId: { $in: customers.map((c) => c._id) } })
       .select('customerId remainingDebt invoiceDate dueDate dueDays')
@@ -198,7 +264,12 @@ export class CustomersService implements OnModuleInit {
     }
     return customers.map((c) => {
       const row = late.get(String(c._id));
-      return { ...c.toObject(), overdueAmount: row?.amount || 0, overdueCount: row?.count || 0 };
+      return {
+        ...c.toObject(),
+        overdueAmount: row?.amount || 0,
+        overdueCount: row?.count || 0,
+        lastSaleAt: lastSaleById.get(String(c._id)) || c.lastSaleAt || null,
+      };
     });
   }
 

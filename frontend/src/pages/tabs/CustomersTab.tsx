@@ -11,7 +11,7 @@ import {
 import type { RefresherEventDetail } from '@ionic/react';
 import { useSearchParams } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
-import { customersService } from '../../services/customers.service';
+import { customersService, daysSinceSale, isQuietMonth, lastSaleTime } from '../../services/customers.service';
 import type {
   Customer,
   CustomerStats,
@@ -41,7 +41,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { formatToman } from '../../lib/format';
+import { formatToman, num } from '../../lib/format';
 import { ListSkeleton } from '../../components/ui/Skeleton';
 
 const WalkInSheet: React.FC<{ open: boolean; onClose: () => void; onCreated: (c: Customer) => void }> = ({ open, onClose, onCreated }) => {
@@ -116,12 +116,17 @@ export const CustomersTab: React.FC = () => {
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'book' | 'debtors' | 'payments'>(initialFilter === 'debtors' ? 'debtors' : 'book');
+  const [view, setView] = useState<'book' | 'debtors' | 'quiet' | 'payments'>(
+    initialFilter === 'debtors' ? 'debtors' : initialFilter === 'quiet' ? 'quiet' : 'book',
+  );
+  const [pageSize, setPageSize] = useState<0 | 20 | 50>(0);
+  const [page, setPage] = useState(0);
   const [walkInOpen, setWalkInOpen] = useState(false);
 
   useEffect(() => {
     const f = searchParams.get('filter');
     if (f === 'debtors') setView('debtors');
+    if (f === 'quiet') setView('quiet');
   }, [searchParams]);
 
   // Modals state
@@ -242,6 +247,10 @@ export const CustomersTab: React.FC = () => {
     setIsDetailOpen(true);
   };
 
+  useEffect(() => {
+    setPage(0);
+  }, [search, view, pageSize]);
+
   const directory = [...customers].sort((a, b) => a.name.localeCompare(b.name, 'fa'));
   const groups = directory.reduce<{ letter: string; rows: Customer[] }[]>((acc, customer) => {
     const letter = customer.name.trim().charAt(0) || '#';
@@ -250,7 +259,14 @@ export const CustomersTab: React.FC = () => {
     else last.rows.push(customer);
     return acc;
   }, []);
-  const shown = view === 'book' ? groups.flatMap((g) => g.rows) : directory;
+  const listed =
+    view === 'quiet'
+      ? directory.filter((c) => isQuietMonth(c)).sort((a, b) => lastSaleTime(a) - lastSaleTime(b) || a.name.localeCompare(b.name, 'fa'))
+      : view === 'book'
+        ? groups.flatMap((g) => g.rows)
+        : directory;
+  const pageCount = pageSize === 0 ? 1 : Math.max(1, Math.ceil(listed.length / pageSize));
+  const shown = pageSize === 0 ? listed : listed.slice(page * pageSize, page * pageSize + pageSize);
 
   return (
     <IonPage>
@@ -297,10 +313,11 @@ export const CustomersTab: React.FC = () => {
         </IonRefresher>
 
         <div className="p-3.5 space-y-4 max-w-md mx-auto pb-8">
-          <div className="grid grid-cols-3 p-1 bg-slate-200/70 rounded-2xl">
+          <div className="grid grid-cols-4 p-1 bg-slate-200/70 rounded-2xl">
             {([
               ['book', 'دفترچه'],
               ['debtors', 'بدهکاران'],
+              ['quiet', 'پیگیری'],
               ['payments', 'دریافت‌ها'],
             ] as const).map(([k, label]) => (
               <button
@@ -314,6 +331,14 @@ export const CustomersTab: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {view === 'quiet' && (
+            <div className="rounded-3xl bg-amber-600 text-white p-4 shadow-lg shadow-amber-500/20">
+              <div className="text-xs text-amber-100">این ماه سفارش نداده‌اند</div>
+              <div className="text-2xl font-black mt-1">{listed.length.toLocaleString('fa-IR')} نفر</div>
+              <div className="text-[11px] text-amber-100 mt-1">برای بازاریاب و تماس تلفنی. قدیمی‌ترین‌ها اول هستند.</div>
+            </div>
+          )}
 
           {view === 'debtors' && (
             <div className="rounded-3xl bg-rose-600 text-white p-4 shadow-lg shadow-rose-500/20">
@@ -340,6 +365,31 @@ export const CustomersTab: React.FC = () => {
               className="w-full pl-4 pr-10 py-2.5 text-xs rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 shadow-sm"
             />
           </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {([
+                [0, 'همه'],
+                [20, '۲۰'],
+                [50, '۵۰'],
+              ] as const).map(([size, label]) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setPageSize(size)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold ${pageSize === size ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {pageSize > 0 && (
+              <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                <button type="button" disabled={page <= 0} onClick={() => setPage((n) => Math.max(0, n - 1))} className="px-2 py-1 rounded-lg bg-white border border-slate-200 disabled:opacity-40">قبلی</button>
+                <span className="font-mono">{(page + 1).toLocaleString('fa-IR')} / {pageCount.toLocaleString('fa-IR')}</span>
+                <button type="button" disabled={page + 1 >= pageCount} onClick={() => setPage((n) => n + 1)} className="px-2 py-1 rounded-lg bg-white border border-slate-200 disabled:opacity-40">بعدی</button>
+              </div>
+            )}
+          </div>
 
           {loading && customers.length === 0 ? (
             <ListSkeleton />
@@ -363,12 +413,13 @@ export const CustomersTab: React.FC = () => {
               {shown.map((customer, index) => {
                 const letter = customer.name.trim().charAt(0) || '#';
                 const showLetter = view === 'book' && (index === 0 || shown[index - 1].name.trim().charAt(0) !== letter);
+                const quietDays = daysSinceSale(customer);
                 return (
                 <React.Fragment key={customer._id}>
                 {showLetter && <div className="sticky top-0 z-10 px-2 py-1 text-[11px] font-black text-sky-700 bg-slate-50">{letter}</div>}
                 <div
                   onClick={() => openDetailModal(customer._id)}
-                  className={`rounded-3xl p-3.5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col gap-2.5 active:scale-[0.99] ${view === 'debtors' ? 'bg-rose-50 border border-rose-200' : 'bg-white border border-sky-100'}`}
+                  className={`rounded-3xl p-3.5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col gap-2.5 active:scale-[0.99] ${view === 'debtors' ? 'bg-rose-50 border border-rose-200' : view === 'quiet' ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-sky-100'}`}
                 >
                   {/* Card Header */}
                   <div className="flex items-start justify-between">
@@ -379,6 +430,11 @@ export const CustomersTab: React.FC = () => {
                           <span className="mr-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">حضوری</span>
                         )}
                       </h3>
+                      {view === 'quiet' && (
+                        <span className="mt-1 inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-600 text-white">
+                          {quietDays === null ? 'هنوز سفارشی ثبت نشده' : `${num(quietDays)} روز بدون سفارش`}
+                        </span>
+                      )}
                       {(customer.overdueCount || 0) > 0 && (
                         <span className="mt-1 inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600 text-white">
                           تاخیر در پرداخت · {formatToman(customer.overdueAmount || 0)}

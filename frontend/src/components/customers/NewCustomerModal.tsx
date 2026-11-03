@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonContent } from '@ionic/react';
 import { X, UserPlus, Phone, MapPin, FileText, CheckCircle2, Loader2, AlertCircle, RefreshCw, Navigation } from 'lucide-react';
 import { getCurrentPosition, geoErrorMessage } from '../../lib/map';
@@ -27,7 +27,7 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneSecondary, setPhoneSecondary] = useState('');
-  const [customerType, setCustomerType] = useState<'supermarket' | 'wholesale' | 'retail' | 'distributor'>('supermarket');
+  const [customerType, setCustomerType] = useState<'supermarket' | 'wholesale'>('supermarket');
   const [address, setAddress] = useState('');
   const [initialDebt, setInitialDebt] = useState<string>('');
   const [creditLimit, setCreditLimit] = useState<string>('');
@@ -39,6 +39,10 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
   const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [geoHint, setGeoHint] = useState('');
+  const [pinFromAddress, setPinFromAddress] = useState(false);
+  const geoTimer = useRef<number | null>(null);
+  const skipGeo = useRef(false);
 
   const requestLocation = async () => {
     setGeoError(null);
@@ -47,6 +51,8 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
       const { lat, lng } = await getCurrentPosition();
       setLatitude(lat);
       setLongitude(lng);
+      setPinFromAddress(false);
+      skipGeo.current = true;
     } catch (err) {
       setGeoError(geoErrorMessage(err));
     } finally {
@@ -76,7 +82,39 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
     setLatitude(undefined);
     setLongitude(undefined);
     setGeoError(null);
+    setGeoHint('');
+    setPinFromAddress(false);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const text = address.trim();
+    const hasCity = /تهران|کرج|اصفهان|مشهد|شیراز|تبریز|اهواز|قم|رشت|کرمان|ایران|شهر|محله/.test(text);
+    if (skipGeo.current) {
+      skipGeo.current = false;
+      return;
+    }
+    if (text.length < 8 || !hasCity) return;
+    if (geoTimer.current) window.clearTimeout(geoTimer.current);
+    geoTimer.current = window.setTimeout(() => {
+      setGeoHint('در حال پیدا کردن آدرس روی نقشه…');
+      customersService
+        .geocode(text)
+        .then((point) => {
+          setLatitude(point.lat);
+          setLongitude(point.lng);
+          setPinFromAddress(true);
+          setGeoHint(`موقعیت از روی آدرس مشخص شد`);
+          setGeoError(null);
+        })
+        .catch(() => {
+          setGeoHint('آدرس روی نقشه پیدا نشد. شهر را کامل بنویسید یا پین را دستی بگذارید.');
+        });
+    }, 700);
+    return () => {
+      if (geoTimer.current) window.clearTimeout(geoTimer.current);
+    };
+  }, [address, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,28 +227,6 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                 >
                   عمده
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomerType('distributor')}
-                  className={`py-2 text-xs font-medium rounded-xl transition ${
-                    customerType === 'distributor'
-                      ? 'bg-sky-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  عمده‌فروش
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomerType('retail')}
-                  className={`py-2 text-xs font-medium rounded-xl transition ${
-                    customerType === 'retail'
-                      ? 'bg-sky-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  فروشنده
-                </button>
               </div>
             </div>
 
@@ -288,6 +304,9 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                     <span>{latitude != null ? 'تنظیم نقشه' : 'نقشه'}</span>
                   </button>
                 </div>
+                {!window.isSecureContext && (
+                  <p className="text-[10px] text-amber-700 leading-5">مرورگر روی http معمولاً GPS نمی‌دهد. اگر پنجره اجازه نیامد، سایت را با https باز کنید یا پین را دستی روی نقشه بگذارید.</p>
+                )}
               </div>
 
               {locating ? (
@@ -300,7 +319,7 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                   <div className="px-2.5 py-1.5 bg-emerald-50 flex items-center justify-between text-[11px] text-emerald-800">
                     <span className="flex items-center gap-1 font-medium">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      موقعیت فعلی گرفته شد
+                      {pinFromAddress ? 'پین از روی آدرس گذاشته شد' : 'موقعیت فعلی گرفته شد'}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500" dir="ltr">
                       {latitude.toFixed(5)}, {longitude.toFixed(5)}
@@ -329,9 +348,10 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                 rows={2}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="آدرس دقیق فروشگاه، خیابان، پلاک..."
+                placeholder="شهر، محله، خیابان، پلاک. مثلاً تهران، یافت‌آباد، خیابان قند"
                 className="w-full px-3.5 py-2 text-xs rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 resize-none"
               />
+              {geoHint && <p className="text-[11px] text-slate-500">{geoHint}</p>}
             </div>
 
             {/* Financial Details */}
@@ -402,8 +422,10 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
         autoLocate={latitude == null}
         onClose={() => setIsMapPickerOpen(false)}
         onSelectLocation={(lat, lng) => {
+          skipGeo.current = true;
           setLatitude(lat);
           setLongitude(lng);
+          setPinFromAddress(false);
         }}
       />
     </>

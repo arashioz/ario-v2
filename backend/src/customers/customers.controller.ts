@@ -56,6 +56,11 @@ export class CustomersController {
     return this.customersService.create(createCustomerDto, recordedByName);
   }
 
+  @Get('geocode')
+  geocode(@Query('q') q?: string) {
+    return this.customersService.geocode(q || '');
+  }
+
   @Get()
   async findAll(
     @Query('search') search?: string,

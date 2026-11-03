@@ -393,12 +393,80 @@ export interface SuggestQuery {
   holdDays?: number;
 }
 
+export interface SalesBoardCompany {
+  name: string;
+  purchasedKg: number;
+  purchasedAmount: number;
+  soldKg: number;
+  soldAmount: number;
+  profit: number;
+  marginPercent: number;
+  stockKg: number;
+  stockValue: number;
+}
+
+export interface SalesBoardProduct {
+  productId: string;
+  name: string;
+  company: string;
+  purchasedKg: number;
+  purchasedAmount: number;
+  soldKg: number;
+  soldAmount: number;
+  soldCost: number;
+  profit: number;
+  marginPercent: number;
+  stockKg: number;
+  stockValue: number;
+  avgBuyPerKg: number;
+  avgSellPerKg: number;
+  lastCostPerKg: number;
+}
+
+export interface SalesBoard {
+  totals: {
+    purchasedKg: number;
+    purchasedAmount: number;
+    soldKg: number;
+    soldAmount: number;
+    profit: number;
+    marginPercent: number;
+    profitPerKg: number;
+    stockKg: number;
+    stockValue: number;
+  };
+  companies: SalesBoardCompany[];
+  products: SalesBoardProduct[];
+}
+
+export interface SalesProgressRow {
+  userId: string;
+  name: string;
+  role: string;
+  targetAmount: number;
+  targetKg: number;
+  amount: number;
+  kg: number;
+  invoices: number;
+}
+
+export interface SalesProgress {
+  shop: Omit<SalesProgressRow, 'userId' | 'name' | 'role'>;
+  sellers: SalesProgressRow[];
+}
+
 export const accountingService = {
   async dashboard(today: string, monthFrom: string): Promise<AccountingDashboard> {
     return (await api.get('/accounting/dashboard', { params: { today, monthFrom } })).data;
   },
   async inventory(p: PeriodQuery = {}): Promise<InventoryReport> {
     return (await api.get('/accounting/inventory', { params: p })).data;
+  },
+  async salesBoard(p: PeriodQuery = {}): Promise<SalesBoard> {
+    return (await api.get('/accounting/sales-board', { params: p })).data;
+  },
+  async salesProgress(p: PeriodQuery = {}): Promise<SalesProgress> {
+    return (await api.get('/accounting/sales-progress', { params: p })).data;
   },
   async profit(p: PeriodQuery & { channel?: 'all' | 'shop' | 'factory' } = {}): Promise<ProfitReport> {
     return (await api.get('/accounting/profit', { params: p })).data;

@@ -63,6 +63,10 @@ export class Customer {
   @Prop({ type: Date, default: Date.now })
   lastTransactionDate: Date;
 
+  /** Last sale invoice. Payments do not move this; CRM uses it for quiet customers. */
+  @Prop({ type: Date, index: true })
+  lastSaleAt?: Date;
+
   // CRM follow-up
   @Prop({ type: Date, index: true })
   nextFollowUpAt?: Date;

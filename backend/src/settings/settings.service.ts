@@ -83,6 +83,12 @@ export class SettingsService {
       for (const f of POS_FLAGS) if (v[f] !== undefined) set[`posView.${f}`] = !!v[f];
     }
 
+    if (body.salesTarget && typeof body.salesTarget === 'object') {
+      const amount = Math.max(0, Math.round(Number(body.salesTarget.amount) || 0));
+      const kg = Math.max(0, Math.round((Number(body.salesTarget.kg) || 0) * 10) / 10);
+      set.salesTarget = { amount, kg };
+    }
+
     if (Array.isArray(body.homeWarehouses)) {
       set.homeWarehouses = [...new Set(body.homeWarehouses.map((s: unknown) => String(s || '').trim()).filter(Boolean))];
     }

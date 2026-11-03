@@ -4,7 +4,7 @@ import { cachedGet } from './offlineCache';
 /** shop: a store that buys to resell; walkin: a walk-in buyer (name and phone only). */
 export type CustomerKind = 'shop' | 'walkin';
 
-export const CUSTOMER_KIND_LABELS: Record<CustomerKind, string> = { shop: 'فروشنده', walkin: 'حضوری' };
+export const CUSTOMER_KIND_LABELS: Record<CustomerKind, string> = { shop: 'مشتری', walkin: 'حضوری' };
 
 export interface Customer {
   _id: string;
@@ -24,9 +24,31 @@ export interface Customer {
   creditLimit: number;
   isActive: boolean;
   lastTransactionDate: string;
+  lastSaleAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+const DAY = 86400000;
+export const QUIET_MONTH_DAYS = 30;
+
+export const lastSaleTime = (c: Pick<Customer, 'lastSaleAt' | 'lastTransactionDate'>) => {
+  const raw = c.lastSaleAt || '';
+  const t = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(t) && t > 0 ? t : 0;
+};
+
+export const isQuietMonth = (c: Customer, now = Date.now()) => {
+  if (c.kind === 'walkin') return false;
+  const last = lastSaleTime(c);
+  return !last || now - last >= QUIET_MONTH_DAYS * DAY;
+};
+
+export const daysSinceSale = (c: Customer, now = Date.now()) => {
+  const last = lastSaleTime(c);
+  if (!last) return null;
+  return Math.max(0, Math.floor((now - last) / DAY));
+};
 
 export type TransactionType = 'debt' | 'payment' | 'adjustment';
 export type PaymentMethod = 'cash' | 'pos' | 'transfer' | 'cheque';
@@ -117,6 +139,10 @@ export const customersService = {
   async deleteTransaction(txId: string): Promise<{ message: string }> {
     const res = await api.delete(`/customers/transactions/${txId}`);
     return res.data;
+  },
+
+  async geocode(q: string): Promise<{ lat: number; lng: number; label: string }> {
+    return (await api.get('/customers/geocode', { params: { q } })).data;
   },
 
   async getCustomers(params?: {

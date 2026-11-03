@@ -70,7 +70,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const [sheet, setSheet] = useState<'edit' | 'delete' | 'pay' | 'price' | null>(null);
   const [payments, setPayments] = useState<{ id: string; amount: number; date: string; method?: string }[]>([]);
   const [showFactoryCost, setShowFactoryCost] = useState(false);
-  const [dateKind, setDateKind] = useState<'proforma' | 'ship' | 'paid' | null>(null);
+  const [dateKind, setDateKind] = useState<'proforma' | 'registered' | 'ship' | 'paid' | null>(null);
 
   useEffect(() => {
     setInvoice(invoiceProp);
@@ -102,7 +102,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   const saveDate = async (ymd: string) => {
     if (!invoice || !dateKind) return;
-    const patch = dateKind === 'proforma' ? { proformaDate: ymd } : dateKind === 'ship' ? { shippedAt: ymd } : { paidAt: ymd };
+    const patch =
+      dateKind === 'proforma' ? { proformaDate: ymd }
+      : dateKind === 'registered' ? { registeredAt: ymd }
+      : dateKind === 'ship' ? { shippedAt: ymd }
+      : { paidAt: ymd };
     try {
       const updated = await invoicesService.setDates(invoice._id, patch);
       setInvoice(updated);
@@ -370,18 +374,22 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 {isSale && invoice.customerId && <span className="block text-[10px] text-sky-600">مشاهده حساب مشتری ←</span>}
               </button>
 
-              <div className="space-y-1 text-left">
-                <button type="button" onClick={() => setDateKind('proforma')} className="w-full text-left">
-                  <span className="flex items-center justify-end gap-1 text-slate-400 text-[11px]"><Calendar className="w-3.5 h-3.5" />تاریخ پیش‌فاکتور</span>
-                  <span className="font-medium text-slate-700 block">{invoice.proformaDate ? formatJalali(dateToYmd(new Date(invoice.proformaDate))) : invoiceDateString}</span>
+              <div className="grid grid-cols-2 gap-2 text-left">
+                <button type="button" onClick={() => setDateKind('proforma')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                  <span className="flex items-center justify-end gap-1 text-slate-400 text-[10px]"><Calendar className="w-3 h-3" />پیش‌فاکتور</span>
+                  <span className="font-medium text-slate-700 block text-[12px]">{invoice.proformaDate ? formatJalali(dateToYmd(new Date(invoice.proformaDate))) : invoiceDateString}</span>
                 </button>
-                <button type="button" onClick={() => setDateKind('ship')} className="w-full text-left">
-                  <span className="text-[11px] text-slate-400">تاریخ ارسال</span>
-                  <span className="font-medium text-slate-700 block">{invoice.shippedAt ? formatJalali(dateToYmd(new Date(invoice.shippedAt))) : '—'}</span>
+                <button type="button" onClick={() => setDateKind('registered')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                  <span className="text-[10px] text-slate-400">ثبت</span>
+                  <span className="font-medium text-slate-700 block text-[12px]">{formatJalali(dateToYmd(new Date(invoice.registeredAt || invoice.createdAt)))}</span>
                 </button>
-                <button type="button" onClick={() => setDateKind('paid')} className="w-full text-left">
-                  <span className="text-[11px] text-slate-400">تاریخ پرداخت</span>
-                  <span className="font-medium text-slate-700 block">{invoice.paidAt ? formatJalali(dateToYmd(new Date(invoice.paidAt))) : payments[0] ? formatJalali(dateToYmd(new Date(payments[0].date))) : '—'}</span>
+                <button type="button" onClick={() => setDateKind('ship')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                  <span className="text-[10px] text-slate-400">ارسال</span>
+                  <span className="font-medium text-slate-700 block text-[12px]">{invoice.shippedAt ? formatJalali(dateToYmd(new Date(invoice.shippedAt))) : '—'}</span>
+                </button>
+                <button type="button" onClick={() => setDateKind('paid')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                  <span className="text-[10px] text-slate-400">پرداخت</span>
+                  <span className="font-medium text-slate-700 block text-[12px]">{invoice.paidAt ? formatJalali(dateToYmd(new Date(invoice.paidAt))) : payments[0] ? formatJalali(dateToYmd(new Date(payments[0].date))) : '—'}</span>
                 </button>
               </div>
             </div>
@@ -591,9 +599,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
         value={dateToYmd(new Date(
           dateKind === 'ship' ? invoice.shippedAt || invoice.invoiceDate
           : dateKind === 'paid' ? invoice.paidAt || payments[0]?.date || invoice.invoiceDate
+          : dateKind === 'registered' ? invoice.registeredAt || invoice.createdAt
           : invoice.proformaDate || invoice.invoiceDate,
         ))}
-        title={dateKind === 'ship' ? 'تاریخ ارسال' : dateKind === 'paid' ? 'تاریخ پرداخت' : 'تاریخ پیش‌فاکتور'}
+        title={dateKind === 'ship' ? 'تاریخ ارسال' : dateKind === 'paid' ? 'تاریخ پرداخت' : dateKind === 'registered' ? 'تاریخ ثبت' : 'تاریخ پیش‌فاکتور'}
         onClose={() => setDateKind(null)}
         onSelect={(ymd) => void saveDate(ymd)}
       />

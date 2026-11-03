@@ -198,6 +198,10 @@ export class AppSettings {
   @Prop({ type: SchemaFactory.createForClass(BackupSettings), default: () => ({}) })
   backup: BackupSettings;
 
+  /** This Jalali month's shop sales target. Amount is toman, kg is weight. */
+  @Prop({ type: Object, default: () => ({ amount: 0, kg: 0 }) })
+  salesTarget: { amount: number; kg: number };
+
   /** Balances the old Ario app reported at export time (read-only reference). */
   @Prop({ type: Object, default: null })
   legacy?: { cashBalance?: number; cardBalance?: number; openingDate?: string; exportedAt?: string } | null;

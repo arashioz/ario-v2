@@ -25,6 +25,7 @@ import {
   PieChart,
   Lock,
   Unlock,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { expensesService } from '../services/expenses.service';
@@ -34,6 +35,20 @@ import { NewExpenseModal } from '../components/expenses/NewExpenseModal';
 import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatToman, percent, tons } from '../lib/format';
+import { cashbookService, type Cashbook } from '../services/cashbook.service';
+
+const Fold: React.FC<{ title: string; hint: string; open: boolean; onToggle: () => void; children: React.ReactNode }> = ({ title, hint, open, onToggle, children }) => (
+  <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <button type="button" onClick={onToggle} className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-right">
+      <span className="min-w-0">
+        <span className="block text-[13px] font-bold text-slate-800">{title}</span>
+        <span className="block text-[11px] text-slate-400 mt-0.5 truncate">{hint}</span>
+      </span>
+      <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition ${open ? 'rotate-180' : ''}`} />
+    </button>
+    {open && <div className="border-t border-slate-100 p-3 space-y-3">{children}</div>}
+  </section>
+);
 
 export const ExpensesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -79,6 +94,8 @@ export const ExpensesPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'withdrawals' | 'shipping' | 'salary' | 'store'>('all');
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [entryKind, setEntryKind] = useState<'store' | 'withdrawal' | 'deposit'>('store');
+  const [openFold, setOpenFold] = useState<'flow' | 'tx' | 'cash' | null>(null);
+  const [cash, setCash] = useState<Cashbook | null>(null);
 
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
 
@@ -201,8 +218,33 @@ export const ExpensesPage: React.FC = () => {
             >
               <ArrowRight className="w-5 h-5" />
             </button>
-            <h1 className="text-sm font-black text-slate-800">خرج و برداشت</h1>
+            <h1 className="text-sm font-black text-slate-800 flex-1">خرج و برداشت</h1>
+            <button
+              type="button"
+              onClick={() => (isUnlocked ? handleLock() : setAsking((v) => !v))}
+              className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center active:scale-95"
+              title={isUnlocked ? 'قفل' : 'باز کردن'}
+            >
+              {isUnlocked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            </button>
           </div>
+          {asking && !isUnlocked && (
+            <form onSubmit={handleUnlock} className="mt-2">
+              <input
+                type="password"
+                autoFocus
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError('');
+                }}
+                placeholder="رمز"
+                className={`w-full px-3 py-2 rounded-xl bg-slate-50 border text-center font-mono text-sm focus:outline-none ${passwordError ? 'border-rose-400' : 'border-slate-200'}`}
+                dir="ltr"
+                autoComplete="current-password"
+              />
+            </form>
+          )}
         </IonToolbar>
       </IonHeader>
 
@@ -241,33 +283,13 @@ export const ExpensesPage: React.FC = () => {
             <span className="text-[11px] text-slate-500">بازه گزارش</span>
             <PeriodPicker value={period} onChange={setPeriod} />
           </div>
-          <div className="bg-white rounded-3xl border border-slate-100 p-4 flex flex-col items-center gap-3">
-            <button
-              type="button"
-              onClick={() => (isUnlocked ? handleLock() : setAsking(true))}
-              className="w-14 h-14 rounded-2xl bg-slate-50 text-slate-500 border border-slate-200 flex items-center justify-center active:scale-95"
-            >
-              {isUnlocked ? <Unlock className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
-            </button>
-            {asking && !isUnlocked && (
-              <form onSubmit={handleUnlock} className="w-full max-w-[220px]">
-                <input
-                  type="password"
-                  autoFocus
-                  value={passwordInput}
-                  onChange={(e) => {
-                    setPasswordInput(e.target.value);
-                    setPasswordError('');
-                  }}
-                  className={`w-full px-3 py-2.5 rounded-2xl bg-slate-50 border text-center font-mono text-sm focus:outline-none ${passwordError ? 'border-rose-400' : 'border-slate-200 focus:border-slate-400'}`}
-                  dir="ltr"
-                  autoComplete="current-password"
-                />
-              </form>
-            )}
-          </div>
-              {/* Detailed Financial Overview Accordion / Summary */}
-              <div className="bg-white rounded-2xl p-3 border border-sky-100 shadow-sm space-y-3">
+          <Fold
+            title="گردش مالی"
+            hint={report ? `${formatToman(report.salesSummary?.totalSales)} فروش · سود ${formatToman(report.salesSummary?.grossProfit)}` : 'فروش، سود و هزینه‌ها'}
+            open={openFold === 'flow'}
+            onToggle={() => setOpenFold((v) => (v === 'flow' ? null : 'flow'))}
+          >
+              <div className="space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                   <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
                     <PieChart className="w-4 h-4 text-sky-600" />
@@ -378,6 +400,25 @@ export const ExpensesPage: React.FC = () => {
                   <span className="text-sky-700 font-bold">ریز سود ←</span>
                 </button>
               </div>
+          </Fold>
+          <Fold
+            title="صندوق"
+            hint={cash ? `ورود ${formatToman(cash.summary.in)} · خروج ${formatToman(cash.summary.out)}` : 'نقد، کارت و چک'}
+            open={openFold === 'cash'}
+            onToggle={() => {
+              setOpenFold((v) => (v === 'cash' ? null : 'cash'));
+              if (!cash) {
+                cashbookService.cashbook(period.from, period.to).then(setCash).catch(() => setCash(null));
+              }
+            }}
+          >
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-emerald-50 p-2"><div className="text-[10px] text-emerald-700">ورود</div><div className="font-mono text-xs font-bold">{formatToman(cash?.summary.in)}</div></div>
+              <div className="rounded-xl bg-rose-50 p-2"><div className="text-[10px] text-rose-700">خروج</div><div className="font-mono text-xs font-bold">{formatToman(cash?.summary.out)}</div></div>
+              <div className="rounded-xl bg-slate-50 p-2"><div className="text-[10px] text-slate-500">خالص</div><div className="font-mono text-xs font-bold">{formatToman(cash?.summary.net)}</div></div>
+            </div>
+            <button type="button" onClick={() => navigate('/cashbox')} className="w-full text-[11px] font-bold text-sky-700 text-right">ریز صندوق</button>
+          </Fold>
           {/* Tab Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {[
@@ -415,7 +456,12 @@ export const ExpensesPage: React.FC = () => {
             />
           </div>
 
-          {/* Expenses List */}
+          <Fold
+            title="ریز تراکنش"
+            hint={`${filteredExpenses.length.toLocaleString('fa-IR')} مورد · ${filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString('fa-IR')} تومان`}
+            open={openFold === 'tx'}
+            onToggle={() => setOpenFold((v) => (v === 'tx' ? null : 'tx'))}
+          >
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-extrabold text-slate-700">
@@ -515,6 +561,7 @@ export const ExpensesPage: React.FC = () => {
               })
             )}
           </div>
+          </Fold>
         </div>
       </IonContent>
 

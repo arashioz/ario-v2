@@ -31,7 +31,7 @@ const inSegment = (c: Customer, id: SegmentId, now: number) => {
   if (id === 'debt') return c.balance > 0;
   if (id === 'quiet') {
     if (c.kind === 'walkin') return false;
-    const last = c.lastTransactionDate ? new Date(c.lastTransactionDate).getTime() : 0;
+    const last = c.lastSaleAt ? new Date(c.lastSaleAt).getTime() : 0;
     return !last || now - last >= QUIET_DAYS * DAY;
   }
   if (c.kind === 'walkin') return false;

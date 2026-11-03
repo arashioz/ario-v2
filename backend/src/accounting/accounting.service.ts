@@ -8,11 +8,13 @@ import {
   CustomerTransactionDocument,
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
-import { runFifo, dayKey, purchaseFreight } from './fifo';
+import { runFifo, dayKey, purchaseFreight, lineKg } from './fifo';
 import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
+import { UsersService } from '../users/users.service';
+import { SettingsService } from '../settings/settings.service';
 
 export interface Period {
   from?: string;
@@ -72,6 +74,8 @@ export class AccountingService {
     @InjectModel(CustomerTransaction.name) private txModel: Model<CustomerTransactionDocument>,
     private readonly audit: AuditService,
     private readonly pricePeriods: PricePeriodService,
+    private readonly users: UsersService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** FIFO over all invoices, cached until any invoice or product changes. */
@@ -88,9 +92,9 @@ export class AccountingService {
     const [invoices, products] = await Promise.all([
       this.invoiceModel
         .find()
-        .select('invoiceNumber type invoiceDate createdAt updatedAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost fulfillment factoryPurchaseId factorySaleId items')
+        .select('invoiceNumber type invoiceDate createdAt updatedAt customerId customerName totalAmount discount finalAmount creditAmount remainingDebt legacyPayments shippingPayer shippingCost fulfillment saleType factoryPurchaseId factorySaleId items')
         .lean(),
-      this.productModel.find().select('name unit weightPerUnitKg buyPrice stock supplierName category').lean(),
+      this.productModel.find().select('name unit weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale stock supplierName category').lean(),
     ]);
     const result = runFifo(
       invoices.map((i: any) => ({ ...i, _id: String(i._id), customerId: i.customerId ? String(i.customerId) : null })) as FifoInvoice[],
@@ -370,6 +374,171 @@ export class AccountingService {
     };
   }
 
+  /**
+   * One board for the sales module: all purchases (shop lots and factory invoices),
+   * all sales, current stock, and the same numbers per company and per product.
+   * Stock is always "right now". Purchases, sales and profit follow the period.
+   */
+  async salesBoard(period: Period = {}) {
+    const f = await this.fifo();
+    const companyOf = (pid: string, fallback = '') => {
+      const name = (f.products.get(pid)?.supplierName || '').trim() || fallback.trim();
+      return name || 'بدون شرکت';
+    };
+    const inRange = (date: Date) => !period.from && !period.to ? true : this.inPeriod(date, period);
+    type Bucket = {
+      name: string;
+      purchasedKg: number;
+      purchasedAmount: number;
+      soldKg: number;
+      soldAmount: number;
+      soldCost: number;
+      stockKg: number;
+      stockValue: number;
+    };
+    const companies = new Map<string, Bucket>();
+    const bucket = (name: string) => {
+      const key = name || 'بدون شرکت';
+      let row = companies.get(key);
+      if (!row) {
+        row = { name: key, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, stockKg: 0, stockValue: 0 };
+        companies.set(key, row);
+      }
+      return row;
+    };
+    type ProductRow = {
+      productId: string;
+      name: string;
+      company: string;
+      purchasedKg: number;
+      purchasedAmount: number;
+      soldKg: number;
+      soldAmount: number;
+      soldCost: number;
+      stockKg: number;
+      lastCost: number;
+    };
+    const products = new Map<string, ProductRow>();
+    const productRow = (pid: string, name: string, company: string) => {
+      let row = products.get(pid);
+      if (!row) {
+        row = { productId: pid, name, company, purchasedKg: 0, purchasedAmount: 0, soldKg: 0, soldAmount: 0, soldCost: 0, stockKg: 0, lastCost: 0 };
+        products.set(pid, row);
+      }
+      return row;
+    };
+
+    for (const lot of f.lots) {
+      const company = companyOf(lot.productId, lot.supplier);
+      const product = productRow(lot.productId, lot.productName, company);
+      if (lot.kgLeft > 1e-6) {
+        const value = lot.kgLeft * lot.costPerKg;
+        bucket(company).stockKg += lot.kgLeft;
+        bucket(company).stockValue += value;
+        product.stockKg += lot.kgLeft;
+      }
+      product.lastCost = lot.costPerKg;
+      if (!inRange(lot.date)) continue;
+      const amount = lot.kgIn * lot.costPerKg;
+      const co = bucket(company);
+      co.purchasedKg += lot.kgIn;
+      co.purchasedAmount += amount;
+      product.purchasedKg += lot.kgIn;
+      product.purchasedAmount += amount;
+    }
+
+    for (const inv of f.invoices) {
+      if (inv.type !== 'purchase' || stockEntersShop(inv)) continue;
+      if (!inRange(inv.invoiceDate)) continue;
+      for (const it of inv.items) {
+        const pid = String(it.productId || '');
+        const known = pid ? (f.products.get(pid)?.supplierName || '').trim() : '';
+        const co = bucket(known || inv.customerName || 'شرکت مادر');
+        const kg = lineKg(it, f.products.get(pid));
+        const amount = it.totalPrice || (it.unitPrice || 0) * (it.quantity || 0);
+        co.purchasedKg += kg;
+        co.purchasedAmount += amount;
+        if (pid) {
+          const product = productRow(pid, it.productName, known || inv.customerName || 'شرکت مادر');
+          product.purchasedKg += kg;
+          product.purchasedAmount += amount;
+        }
+      }
+    }
+
+    for (const line of f.saleLines) {
+      if (!inRange(line.date)) continue;
+      const company = companyOf(line.productId);
+      const co = bucket(company);
+      co.soldKg += line.kg;
+      co.soldAmount += line.revenue;
+      co.soldCost += line.cost;
+      const product = productRow(line.productId, line.productName, company);
+      product.soldKg += line.kg;
+      product.soldAmount += line.revenue;
+      product.soldCost += line.cost;
+    }
+
+    const pack = (row: Bucket) => {
+      const profit = row.soldAmount - row.soldCost;
+      return {
+        name: row.name,
+        purchasedKg: r1(row.purchasedKg),
+        purchasedAmount: r0(row.purchasedAmount),
+        soldKg: r1(row.soldKg),
+        soldAmount: r0(row.soldAmount),
+        profit: r0(profit),
+        marginPercent: pct(profit, row.soldAmount),
+        stockKg: r1(row.stockKg),
+        stockValue: r0(row.stockValue),
+      };
+    };
+    const companyRows = [...companies.values()].map(pack).sort((a, b) => b.soldAmount - a.soldAmount || b.purchasedAmount - a.purchasedAmount);
+    const sum = (key: 'purchasedKg' | 'purchasedAmount' | 'soldKg' | 'soldAmount' | 'profit' | 'stockKg' | 'stockValue') =>
+      companyRows.reduce((total, row) => total + (row[key] || 0), 0);
+    const soldAmount = sum('soldAmount');
+    const profit = sum('profit');
+    const productRows = [...products.values()]
+      .filter((row) => row.purchasedKg > 0 || row.soldKg > 0 || row.stockKg > 0)
+      .map((row) => {
+        const net = row.soldAmount - row.soldCost;
+        return {
+          productId: row.productId,
+          name: row.name,
+          company: row.company,
+          purchasedKg: r1(row.purchasedKg),
+          purchasedAmount: r0(row.purchasedAmount),
+          soldKg: r1(row.soldKg),
+          soldAmount: r0(row.soldAmount),
+          soldCost: r0(row.soldCost),
+          profit: r0(net),
+          marginPercent: pct(net, row.soldAmount),
+          stockKg: r1(row.stockKg),
+          stockValue: r0(row.stockKg * (row.lastCost || 0)),
+          avgBuyPerKg: row.purchasedKg ? r0(row.purchasedAmount / row.purchasedKg) : 0,
+          avgSellPerKg: row.soldKg ? r0(row.soldAmount / row.soldKg) : 0,
+          lastCostPerKg: r0(row.lastCost),
+        };
+      })
+      .sort((a, b) => b.soldKg - a.soldKg || b.stockKg - a.stockKg);
+
+    return {
+      totals: {
+        purchasedKg: r1(sum('purchasedKg')),
+        purchasedAmount: r0(sum('purchasedAmount')),
+        soldKg: r1(sum('soldKg')),
+        soldAmount: r0(soldAmount),
+        profit: r0(profit),
+        marginPercent: pct(profit, soldAmount),
+        profitPerKg: sum('soldKg') ? r0(profit / sum('soldKg')) : 0,
+        stockKg: r1(sum('stockKg')),
+        stockValue: r0(sum('stockValue')),
+      },
+      companies: companyRows,
+      products: productRows,
+    };
+  }
+
   /** ریز سود: خلاصه، به تفکیک کالا، روز و بار خرید، و فاکتورهای مشکوک. */
   async profit(period: Period = {}, channel: 'all' | 'shop' | 'factory' = 'all') {
     const f = await this.fifo();
@@ -391,7 +560,10 @@ export class AccountingService {
       return [...m.entries()].map(([key, g]) => ({ key, ...g.label, ...this.summarize(g.lines), invoices: new Set(g.lines.map((x) => x.invoiceId)).size }));
     };
 
-    const byProduct = group((l) => l.productId, (l) => ({ name: l.productName })).sort((a, b) => b.profit - a.profit);
+    const byProduct = group(
+      (l) => l.productId || `name:${l.productName}`,
+      (l) => ({ name: l.productName }),
+    ).sort((a, b) => b.kg - a.kg || b.profit - a.profit);
     const byDay = group((l) => dayKey(l.date), (l) => ({ date: dayKey(l.date) })).sort((a, b) => (a.key < b.key ? 1 : -1));
     const byCustomer = group((l) => l.customerId ?? `walkin:${l.customerName}`, (l) => ({ name: l.customerName, customerId: l.customerId }))
       .sort((a, b) => b.profit - a.profit)
@@ -1189,5 +1361,75 @@ export class AccountingService {
     const f = await this.fifo();
     const lines = f.saleLines.filter((l) => this.inPeriod(l.date, period));
     return { ...this.summarize(lines), channels: this.channels(lines) };
+  }
+
+  /**
+   * Shop + per-seller sales against the Jalali-month (or custom) target.
+   * Seller rows match invoices by createdByName to the user's full name.
+   */
+  async salesProgress(period: Period = {}) {
+    const [sales, people, shop] = await Promise.all([
+      this.invoiceModel.find({ type: 'sale' }).select('invoiceDate finalAmount totalWeightKg createdByName').lean(),
+      this.users.findAll(),
+      this.settings.get(),
+    ]);
+    const inRange = sales.filter((row) => this.inPeriod(row.invoiceDate, period));
+    type Bucket = { amount: number; kg: number; invoices: number };
+    const empty = (): Bucket => ({ amount: 0, kg: 0, invoices: 0 });
+    const add = (b: Bucket, row: { finalAmount?: number; totalWeightKg?: number }) => {
+      b.amount += row.finalAmount || 0;
+      b.kg += row.totalWeightKg || 0;
+      b.invoices += 1;
+    };
+    const shopActual = empty();
+    const byName = new Map<string, Bucket>();
+    for (const row of inRange) {
+      add(shopActual, row);
+      const name = (row.createdByName || '').trim() || 'ثبت‌نشده';
+      const bucket = byName.get(name) || empty();
+      add(bucket, row);
+      byName.set(name, bucket);
+    }
+    const used = new Set<string>();
+    const sellers = people.map((user) => {
+      const name = (user.fullName || '').trim();
+      const actual = byName.get(name) || empty();
+      used.add(name);
+      return {
+        userId: String(user._id),
+        name,
+        role: String(user.role || ''),
+        targetAmount: user.salesTargetAmount || 0,
+        targetKg: user.salesTargetKg || 0,
+        amount: r0(actual.amount),
+        kg: r1(actual.kg),
+        invoices: actual.invoices,
+      };
+    });
+    for (const [name, actual] of byName) {
+      if (used.has(name)) continue;
+      sellers.push({
+        userId: '',
+        name,
+        role: '',
+        targetAmount: 0,
+        targetKg: 0,
+        amount: r0(actual.amount),
+        kg: r1(actual.kg),
+        invoices: actual.invoices,
+      });
+    }
+    sellers.sort((a, b) => b.amount - a.amount);
+    const shopTarget = shop.salesTarget || { amount: 0, kg: 0 };
+    return {
+      shop: {
+        targetAmount: shopTarget.amount || 0,
+        targetKg: shopTarget.kg || 0,
+        amount: r0(shopActual.amount),
+        kg: r1(shopActual.kg),
+        invoices: shopActual.invoices,
+      },
+      sellers,
+    };
   }
 }

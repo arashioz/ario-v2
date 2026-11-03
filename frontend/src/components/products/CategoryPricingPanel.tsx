@@ -37,7 +37,7 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
     setSupermarket(String(rule?.supermarketPercent ?? 0));
     setWholesale(String(rule?.wholesalePercent ?? 0));
     setDistributor(String(rule?.distributorPercent ?? 0));
-    setEditPercents(!(rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent, rule.distributorPercent].some((n) => (n || 0) > 0)));
+    setEditPercents(!(rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent].some((n) => (n || 0) > 0)));
   }, [category, settings.categoryBasePrices]);
 
   const save = async () => {
@@ -51,7 +51,7 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
         retailPercent: Number(retail) || 0,
         supermarketPercent: Number(supermarket) || 0,
         wholesalePercent: Number(wholesale) || 0,
-        distributorPercent: Number(distributor) || 0,
+        distributorPercent: Number(distributor) || 0, // kept so an old stored percent is not wiped; sales no longer uses it
       });
       await settingsService.get(true);
       onSaved();
@@ -65,10 +65,9 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
   };
 
   const preview = [
-    ['فروشنده', retail],
+    ['تکی', retail],
     ['سوپرمارکت', supermarket],
     ['عمده', wholesale],
-    ['عمده‌فروش', distributor],
   ] as const;
 
   return (
@@ -77,7 +76,7 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
         <h3 className="text-sm font-bold text-blue-900">قیمت بازار</h3>
         <ol className="mt-2 space-y-1 text-xs leading-6 text-slate-600 list-decimal pr-4">
           <li>دسته را انتخاب کنید. مثلاً قند.</li>
-          <li>درصد فروشنده، سوپرمارکت، عمده و عمده‌فروش را یک بار بگذارید.</li>
+          <li>درصد تکی، سوپرمارکت و عمده را یک بار بگذارید.</li>
           <li>هر بار که قیمت بازار عوض شد، فقط قیمت پایه هر کیلو را عوض کنید. همان درصدها خودکار روی همه کالاهای دسته می‌نشیند. کارمزد بسته هر کالا سر جایش می‌ماند.</li>
         </ol>
       </div>
@@ -94,14 +93,13 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
       </label>
       {editPercents ? (
         <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs space-y-1"><span>سود فروشنده ٪</span><input className={field} type="number" min="0" value={retail} onChange={(e) => setRetail(e.target.value)} /></label>
+          <label className="text-xs space-y-1"><span>سود تکی ٪</span><input className={field} type="number" min="0" value={retail} onChange={(e) => setRetail(e.target.value)} /></label>
           <label className="text-xs space-y-1"><span>سود سوپرمارکت ٪</span><input className={field} type="number" min="0" value={supermarket} onChange={(e) => setSupermarket(e.target.value)} /></label>
           <label className="text-xs space-y-1"><span>سود عمده ٪</span><input className={field} type="number" min="0" value={wholesale} onChange={(e) => setWholesale(e.target.value)} /></label>
-          <label className="text-xs space-y-1"><span>سود عمده‌فروش ٪</span><input className={field} type="number" min="0" value={distributor} onChange={(e) => setDistributor(e.target.value)} /></label>
         </div>
       ) : (
         <button type="button" onClick={() => setEditPercents(true)} className="w-full text-right text-[11px] leading-6 text-slate-600">
-          درصدهای ذخیره‌شده: فروشنده {retail}٪ · سوپرمارکت {supermarket}٪ · عمده {wholesale}٪ · عمده‌فروش {distributor}٪
+          درصدهای ذخیره‌شده: تکی {retail}٪ · سوپرمارکت {supermarket}٪ · عمده {wholesale}٪
           <span className="block font-bold text-sky-700 mt-0.5">تغییر درصد</span>
         </button>
       )}

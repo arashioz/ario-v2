@@ -8,6 +8,10 @@ export interface User {
   fullName: string;
   role: 'admin' | 'marketer';
   phoneNumber?: string;
+  homeLayout?: string[];
+  homeWarehouses?: string[];
+  salesTargetAmount?: number;
+  salesTargetKg?: number;
 }
 
 interface AuthContextType {
@@ -18,6 +22,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  patchUser: (partial: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -94,6 +99,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const patchUser = (partial: Partial<User>) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...partial };
+      localStorage.setItem('ario_user', JSON.stringify(next));
+      return next;
+    });
+  };
+
   const logout = () => {
     // Fire-and-forget so the logout is recorded in the audit log; the token is dropped regardless.
     const current = localStorage.getItem('ario_token');
@@ -116,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         checkAuth,
+        patchUser,
       }}
     >
       {children}

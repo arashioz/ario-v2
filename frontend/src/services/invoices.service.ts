@@ -101,6 +101,7 @@ export interface Invoice {
   shippingCost?: number;
   proformaNumber?: string;
   proformaDate?: string;
+  registeredAt?: string;
   shippedAt?: string;
   paidAt?: string;
   legacyPayments?: { date: string; amount: number; method?: string; accountId?: string }[];
@@ -239,7 +240,7 @@ export const invoicesService = {
     return response.data;
   },
 
-  setDates: async (id: string, dates: { proformaDate?: string; shippedAt?: string; paidAt?: string }): Promise<Invoice> => {
+  setDates: async (id: string, dates: { proformaDate?: string; shippedAt?: string; paidAt?: string; registeredAt?: string }): Promise<Invoice> => {
     const response = await api.patch<Invoice>(`/invoices/${id}/dates`, dates);
     return response.data;
   },

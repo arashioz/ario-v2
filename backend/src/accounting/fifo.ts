@@ -25,6 +25,10 @@ export interface FifoProduct {
   unit: string;
   weightPerUnitKg?: number;
   buyPrice?: number;
+  sellPrice?: number;
+  priceRetail?: number;
+  priceSupermarket?: number;
+  priceWholesale?: number;
   stock?: number;
   supplierName?: string;
   category?: string;
@@ -48,6 +52,7 @@ export interface FifoInvoice {
   updatedAt?: Date;
   /** factory sales are not taken from shop lots. */
   fulfillment?: string;
+  saleType?: string;
   factoryPurchaseId?: string;
   /** On the parent-company purchase, the customer sale it belongs to. */
   factorySaleId?: string;
@@ -209,6 +214,8 @@ export interface FifoWorkshop {
 
 export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], workshops: FifoWorkshop[] = []): FifoResult {
   const products = new Map(productList.map((p) => [String(p._id), p]));
+  const productsByName = new Map(productList.map((p) => [p.name.trim(), p]));
+  const resolveProduct = (pid: string, name?: string) => products.get(pid) || (name ? productsByName.get(name.trim()) : undefined);
 
   const sorted = [...invoices].sort(
     (a, b) =>
@@ -303,11 +310,13 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
       lines.forEach(({ it, idx }, i) => {
         const { kg, invoicePricePerKg, freightPerKg, costPerKg: newCost } = costs[i];
         if (kg <= 0) return;
-        const prev = lastCost.get(it.productId);
+        const found = resolveProduct(String(it.productId || ''), it.productName);
+        const pid = found ? String(found._id) : String(it.productId || '');
+        const prev = lastCost.get(pid);
         if (prev !== undefined && Math.abs(newCost - prev) > 0.5) {
-          const stockKg = (queue.get(it.productId) ?? []).reduce((s, l) => s + l.kgLeft, 0);
+          const stockKg = (queue.get(pid) ?? []).reduce((s, l) => s + l.kgLeft, 0);
           priceChanges.push({
-            productId: it.productId,
+            productId: pid,
             productName: it.productName,
             date: inv.invoiceDate,
             invoiceId: id,
@@ -325,7 +334,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
           supplier: inv.customerName,
           date: inv.invoiceDate,
           createdAt: inv.createdAt ? new Date(inv.createdAt) : null,
-          productId: it.productId,
+          productId: pid,
           productName: it.productName,
           kgIn: kg,
           kgLeft: kg,
@@ -337,11 +346,11 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
           cost: 0,
         };
         lots.push(lot);
-        if (!lotsByProduct.has(it.productId)) lotsByProduct.set(it.productId, []);
-        lotsByProduct.get(it.productId)!.push(lot);
-        if (!queue.has(it.productId)) queue.set(it.productId, []);
-        queue.get(it.productId)!.push(lot);
-        lastCost.set(it.productId, lot.costPerKg);
+        if (!lotsByProduct.has(pid)) lotsByProduct.set(pid, []);
+        lotsByProduct.get(pid)!.push(lot);
+        if (!queue.has(pid)) queue.set(pid, []);
+        queue.get(pid)!.push(lot);
+        lastCost.set(pid, lot.costPerKg);
       });
       continue;
     }
@@ -355,9 +364,24 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
     const ip: InvoiceProfit = { invoiceId: id, revenue: 0, cost: 0, profit: 0, kg: 0, estimated: false };
 
     for (const it of inv.items) {
-      const pid = it.productId;
-      const kg = lineKg(it, products.get(pid));
-      const revenue = (it.totalPrice || 0) * discountFactor;
+      const found = resolveProduct(String(it.productId || ''), it.productName);
+      const pid = found ? String(found._id) : String(it.productId || '');
+      const product = found;
+      const kg = lineKg(it, product);
+      let revenue = (it.totalPrice || 0) * discountFactor;
+      // Zero totalPrice (common on early factory sales) must not hide the sale.
+      let pricedFromList = false;
+      if (revenue <= 0 && (it.quantity || 0) > 0) {
+        const list =
+          inv.saleType === 'retail' ? product?.priceRetail
+          : inv.saleType === 'supermarket' ? product?.priceSupermarket
+          : product?.priceWholesale || product?.sellPrice;
+        const unit = Math.round(Number(it.unitPrice) || Number(list) || Number(product?.sellPrice) || 0);
+        if (unit > 0) {
+          revenue = unit * (it.quantity || 0) * (sumItems > 0 ? discountFactor : 1);
+          pricedFromList = true;
+        }
+      }
 
       // Confirmed factory prices are immutable cost snapshots. Legacy sales
       // without a confirmed price may still use the historical purchase basis.
@@ -368,9 +392,39 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
         // The buy price of this date, not a later price that was written onto the old invoice.
         const factoryUnit = it.factoryCostConfirmed ? typed : historical > 0 ? historical : typed;
         const cost = factoryUnit * (it.quantity || 0);
-        const estimatedKg = factoryUnit > 0 || it.factoryCostConfirmed ? 0 : kg;
+        const estimatedKg = pricedFromList || !(factoryUnit > 0 || it.factoryCostConfirmed) ? kg : 0;
         if (estimatedKg > 0) ip.estimated = true;
         const perKg = kg > 0 ? cost / kg : 0;
+        const purchase = inv.factoryPurchaseId ? sorted.find((row) => String(row._id) === String(inv.factoryPurchaseId)) : undefined;
+        const lotId = purchase ? `factory:${String(purchase._id)}:${pid}` : `factory-sale:${id}:${pid}`;
+        let lot = lots.find((row) => row.id === lotId);
+        if (!lot) {
+          const source = purchase?.items.find((row) => String(row.productId) === pid);
+          const kgIn = Math.max(kg, source ? lineKg(source, product) : 0);
+          lot = {
+            id: lotId,
+            invoiceId: purchase ? String(purchase._id) : id,
+            invoiceNumber: purchase?.invoiceNumber || inv.invoiceNumber,
+            supplier: purchase?.customerName || 'کارخانه',
+            date: purchase?.invoiceDate || inv.invoiceDate,
+            createdAt: null,
+            productId: pid,
+            productName: it.productName,
+            kgIn,
+            kgLeft: kgIn,
+            costPerKg: perKg,
+            invoicePricePerKg: perKg,
+            freightPerKg: 0,
+            kgSold: 0,
+            revenue: 0,
+            cost: 0,
+          };
+          lots.push(lot);
+        }
+        lot.kgSold += kg;
+        lot.revenue += revenue;
+        lot.cost += cost;
+        lot.kgLeft = Math.max(0, lot.kgIn - lot.kgSold);
         saleLines.push({
           invoiceId: id,
           invoiceNumber: inv.invoiceNumber,

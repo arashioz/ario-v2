@@ -35,6 +35,20 @@ export class User {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  /** Widget ids on the home tab, in order. Empty means the shared default template. */
+  @Prop({ type: [String], default: [] })
+  homeLayout: string[];
+
+  /** Company warehouses this user wants on the home card. Empty follows the shop setting. */
+  @Prop({ type: [String], default: [] })
+  homeWarehouses: string[];
+
+  @Prop({ default: 0 })
+  salesTargetAmount: number;
+
+  @Prop({ default: 0 })
+  salesTargetKg: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

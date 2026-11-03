@@ -34,6 +34,7 @@ import { PosSectionsSettings } from '../components/settings/PosSectionsSettings'
 import { BackupSettings } from '../components/settings/BackupSettings';
 import { CustomerPlanSettings } from '../components/settings/CustomerPlanSettings';
 import { HomeWarehouseSettings } from '../components/settings/HomeWarehouseSettings';
+import { SalesTargetSettings } from '../components/settings/SalesTargetSettings';
 
 const LAYOUTS: { id: PosLayout; label: string; icon: React.ElementType }[] = [
   { id: 'grid', label: 'کارتی', icon: LayoutGrid },
@@ -380,6 +381,7 @@ export const SettingsPage: React.FC = () => {
             </>
           )}
           {isAdmin && <CustomerPlanSettings />}
+          {isAdmin && <SalesTargetSettings />}
           {!adminPart && <Group title="صفحه فروش">
             <Row id="layout" title="نمایش کالاها" hint={LAYOUTS.find((l) => l.id === pos.layout)?.label} icon={LayoutGrid} tone="sky" {...row}>
               <div className="space-y-2.5">

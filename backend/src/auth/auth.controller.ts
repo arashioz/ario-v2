@@ -61,6 +61,18 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch('home')
+  async setHome(@Request() req: any, @Body() body: { homeLayout?: string[]; homeWarehouses?: string[] }) {
+    return this.usersService.setHome(req.user.id, body || {});
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('target')
+  async setTarget(@Request() req: any, @Body() body: { salesTargetAmount?: number; salesTargetKg?: number }) {
+    return this.usersService.setTarget(req.user.id, body || {});
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch('password')
   async changePassword(@Request() req: any, @Body() body: { currentPassword: string; newPassword: string }) {
     return this.usersService.changePassword(req.user.id, body?.currentPassword, body?.newPassword);

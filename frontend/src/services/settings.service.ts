@@ -237,6 +237,7 @@ export interface AppSettings {
   bankCards: BankCard[];
   smsTemplates: SmsTemplates;
   backup: BackupSettings;
+  salesTarget: { amount: number; kg: number };
   legacy?: { cashBalance?: number; cardBalance?: number; openingDate?: string; exportedAt?: string } | null;
 }
 
@@ -269,11 +270,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   bankCards: [],
   smsTemplates: DEFAULT_SMS_TEMPLATES,
   backup: { enabled: true, hour: 2, keepDays: 14 },
+  salesTarget: { amount: 0, kg: 0 },
   legacy: null,
 };
 
 export const SALE_TYPE_LABELS: Record<SaleType, string> = {
-  retail: 'فروشنده',
+  retail: 'تکی',
   supermarket: 'سوپرمارکت',
   wholesale: 'عمده',
   distributor: 'عمده‌فروش',
@@ -322,6 +324,7 @@ const publish = (s: AppSettings) => {
     salesView: { ...DEFAULT_SETTINGS.salesView, ...(s.salesView || {}) },
     posView: { ...DEFAULT_SETTINGS.posView, ...(s.posView || {}) },
     backup: { ...DEFAULT_SETTINGS.backup, ...(s.backup || {}) },
+    salesTarget: { amount: s.salesTarget?.amount || 0, kg: s.salesTarget?.kg || 0 },
     homeWarehouses: Array.isArray(s.homeWarehouses) ? s.homeWarehouses : [],
     categoryOrder: Array.isArray(s.categoryOrder) ? s.categoryOrder : [],
     subcategoryOrder: typeof s.subcategoryOrder === 'object' && s.subcategoryOrder ? s.subcategoryOrder : {},

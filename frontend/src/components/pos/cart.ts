@@ -21,7 +21,7 @@ export const kgPerUnit = (p: Product) =>
   (p.sellBy === 'kg' ? 1 : 0);
 
 export const tierPrice = (p: Product, type: SaleType) => {
-  const tier = type === 'distributor' ? p.priceDistributor : type === 'wholesale' ? p.priceWholesale : type === 'supermarket' ? p.priceSupermarket : p.priceRetail;
+  const tier = type === 'wholesale' || type === 'distributor' ? p.priceWholesale : type === 'supermarket' ? p.priceSupermarket : p.priceRetail;
   return tier && tier > 0 ? tier : p.sellPrice;
 };
 

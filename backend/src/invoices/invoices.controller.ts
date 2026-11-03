@@ -39,6 +39,10 @@ class SetInvoiceDatesDto {
   @IsOptional()
   @IsDateString({}, { message: 'تاریخ پرداخت نامعتبر است' })
   paidAt?: string;
+
+  @IsOptional()
+  @IsDateString({}, { message: 'تاریخ ثبت نامعتبر است' })
+  registeredAt?: string;
 }
 
 class SetDueDaysDto {

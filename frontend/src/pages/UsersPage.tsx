@@ -36,9 +36,11 @@ interface FormState {
   phoneNumber: string;
   role: UserRole;
   isActive: boolean;
+  salesTargetAmount: number;
+  salesTargetKg: number;
 }
 
-const emptyForm: FormState = { fullName: '', username: '', password: '', phoneNumber: '', role: 'marketer', isActive: true };
+const emptyForm: FormState = { fullName: '', username: '', password: '', phoneNumber: '', role: 'marketer', isActive: true, salesTargetAmount: 0, salesTargetKg: 0 };
 
 const UserSheet: React.FC<{ user: AppUser | null; open: boolean; selfId?: string; onClose: () => void; onSaved: () => void }> = ({
   user,
@@ -56,7 +58,7 @@ const UserSheet: React.FC<{ user: AppUser | null; open: boolean; selfId?: string
     if (!open) return;
     setForm(
       user
-        ? { fullName: user.fullName, username: user.username, password: '', phoneNumber: user.phoneNumber || '', role: user.role, isActive: user.isActive }
+        ? { fullName: user.fullName, username: user.username, password: '', phoneNumber: user.phoneNumber || '', role: user.role, isActive: user.isActive, salesTargetAmount: user.salesTargetAmount || 0, salesTargetKg: user.salesTargetKg || 0 }
         : emptyForm,
     );
   }, [open, user]);
@@ -69,7 +71,7 @@ const UserSheet: React.FC<{ user: AppUser | null; open: boolean; selfId?: string
     try {
       setSaving(true);
       if (user) {
-        const input: UserInput = { fullName: form.fullName.trim(), username: form.username.trim(), phoneNumber: form.phoneNumber.trim() };
+        const input: UserInput = { fullName: form.fullName.trim(), username: form.username.trim(), phoneNumber: form.phoneNumber.trim(), salesTargetAmount: form.salesTargetAmount, salesTargetKg: form.salesTargetKg };
         if (!isSelf) {
           input.role = form.role;
           input.isActive = form.isActive;
@@ -119,6 +121,24 @@ const UserSheet: React.FC<{ user: AppUser | null; open: boolean; selfId?: string
       <Field label="شماره تلفن">
         <input value={form.phoneNumber} onChange={(e) => set('phoneNumber', e.target.value)} className={inputCls} dir="ltr" inputMode="tel" />
       </Field>
+      {user && <Field label="تارگت فروش این ماه" hint="مبلغ تومان و وزن کیلو. فروش ثبت‌شده با نام همین کاربر شمرده می‌شود.">
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            value={form.salesTargetAmount ? form.salesTargetAmount.toLocaleString('fa-IR') : ''}
+            onChange={(e) => set('salesTargetAmount', Number(e.target.value.replace(/[^\d]/g, '')) || 0)}
+            className={inputCls}
+            placeholder="مبلغ تومان"
+            inputMode="numeric"
+          />
+          <input
+            value={form.salesTargetKg ? String(form.salesTargetKg) : ''}
+            onChange={(e) => set('salesTargetKg', Number(e.target.value.replace(/[^\d.]/g, '')) || 0)}
+            className={inputCls}
+            placeholder="کیلو"
+            inputMode="decimal"
+          />
+        </div>
+      </Field>}
       <Field label="نقش" hint={isSelf ? 'نقش و وضعیت حساب خودتان را نمی‌توانید تغییر دهید' : ROLE_HELP[form.role]}>
         <div className={isSelf ? 'opacity-50 pointer-events-none' : ''}>
           <Segments<UserRole> value={form.role} onChange={(v) => set('role', v)} items={[['marketer', ROLE_LABELS.marketer], ['admin', ROLE_LABELS.admin]]} />

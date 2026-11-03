@@ -15,6 +15,8 @@ export interface AppUser {
   role: UserRole;
   isActive: boolean;
   createdAt: string;
+  salesTargetAmount?: number;
+  salesTargetKg?: number;
 }
 
 export interface UserInput {
@@ -24,6 +26,8 @@ export interface UserInput {
   phoneNumber?: string;
   role?: UserRole;
   isActive?: boolean;
+  salesTargetAmount?: number;
+  salesTargetKg?: number;
 }
 
 export const usersService = {

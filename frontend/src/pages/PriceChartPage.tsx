@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IonPage, IonContent, IonRefresher, IonRefresherContent } from '@ionic/react';
 import type { RefresherEventDetail } from '@ionic/react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -134,6 +135,8 @@ const Spark: React.FC<{ p: PriceChartProduct; from: number }> = ({ p, from }) =>
 };
 
 export const PriceChartPage: React.FC = () => {
+  const [params] = useSearchParams();
+  const requested = params.get('product') || '';
   const [items, setItems] = useState<PriceChartProduct[] | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<string>('');
@@ -146,11 +149,11 @@ export const PriceChartPage: React.FC = () => {
       setError('');
       const data = await watchService.priceChart();
       setItems(data);
-      setSelected((cur) => cur || data[0]?.productId || '');
+      setSelected((cur) => (requested && data.some((item) => item.productId === requested) ? requested : cur || data[0]?.productId || ''));
     } catch (err) {
       setError(apiErrorMessage(err, 'دریافت چارت قیمت ناموفق بود'));
     }
-  }, []);
+  }, [requested]);
 
   useEffect(() => {
     load();

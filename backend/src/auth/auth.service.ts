@@ -50,6 +50,10 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         phoneNumber: user.phoneNumber,
+        homeLayout: user.homeLayout || [],
+        homeWarehouses: user.homeWarehouses || [],
+        salesTargetAmount: user.salesTargetAmount || 0,
+        salesTargetKg: user.salesTargetKg || 0,
       },
     };
   }
@@ -77,6 +81,10 @@ export class AuthService {
       role: user.role,
       phoneNumber: user.phoneNumber,
       isActive: user.isActive,
+      homeLayout: user.homeLayout || [],
+      homeWarehouses: user.homeWarehouses || [],
+      salesTargetAmount: user.salesTargetAmount || 0,
+      salesTargetKg: user.salesTargetKg || 0,
     };
   }
 }

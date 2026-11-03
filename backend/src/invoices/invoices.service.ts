@@ -992,7 +992,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   }
 
   /** The order day, the ship day, and the payment day are three different facts. */
-  async setDates(id: string, body: { proformaDate?: string; shippedAt?: string; paidAt?: string }) {
+  async setDates(id: string, body: { proformaDate?: string; shippedAt?: string; paidAt?: string; registeredAt?: string }) {
     const invoice = await this.findById(id);
     const at = (value?: string) => {
       if (!value) return undefined;
@@ -1003,7 +1003,8 @@ export class InvoicesService implements OnApplicationBootstrap {
     const proformaDate = at(body.proformaDate);
     const shippedAt = at(body.shippedAt);
     const paidAt = at(body.paidAt);
-    if (!proformaDate && !shippedAt && !paidAt) throw new BadRequestException('تاریخی برای ذخیره نیست');
+    const registeredAt = at(body.registeredAt);
+    if (!proformaDate && !shippedAt && !paidAt && !registeredAt) throw new BadRequestException('تاریخی برای ذخیره نیست');
     if (proformaDate) {
       invoice.proformaDate = proformaDate;
       invoice.invoiceDate = proformaDate;
@@ -1015,6 +1016,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       }
     }
     if (shippedAt) invoice.shippedAt = shippedAt;
+    if (registeredAt) invoice.registeredAt = registeredAt;
     if (paidAt) {
       invoice.paidAt = paidAt;
       await this.customersService.movePaymentDate(String(invoice._id), paidAt);
