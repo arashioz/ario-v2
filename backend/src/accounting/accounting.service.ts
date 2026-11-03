@@ -241,6 +241,10 @@ export class AccountingService {
           stockKg: p ? (p.stock ?? 0) * (p.weightPerUnitKg || 1) : 0,
           purchasedUnits: 0,
           soldUnits: 0,
+          purchasedInvoiceKg: 0,
+          purchasedCatalogKg: 0,
+          soldInvoiceKg: 0,
+          soldCatalogKg: 0,
           purchasedKg: 0,
           purchasedAmount: 0,
           purchaseCount: 0,
@@ -277,8 +281,6 @@ export class AccountingService {
       }
     }
     for (const l of f.saleLines) {
-      // Direct factory shipments never sat in this warehouse.
-      if (l.fulfillment === 'factory') continue;
       if (!this.inPeriod(l.date, period)) continue;
       const r = row(l.productId, l.productName);
       r.soldKg += l.kg;
@@ -298,30 +300,19 @@ export class AccountingService {
         if (!it.productId) continue;
         const r = row(it.productId, it.productName);
         const q = it.quantity || 0;
-        if (purchase) r.purchasedUnits += q;
-        else r.soldUnits += q;
-      }
-    }
-
-    for (const r of byProduct.values()) {
-      const pack = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
-      // Loose goods are already in kilograms. Packaged goods follow the invoices:
-      // packages bought or sold × the weight of one package, per company.
-      if (!(pack > 0) || pack === 1) continue;
-      const off = (kg: number, once: number) => once > 0 && kg > 0 && Math.abs(kg - once) / once > 0.08;
-      const boughtOnce = (r.purchasedUnits || 0) * pack;
-      if (off(r.purchasedKg, boughtOnce)) {
-        const scale = boughtOnce / r.purchasedKg;
-        r.purchasedKg = boughtOnce;
-        r.fifoRemainingKg *= scale;
-        for (const lot of r.openLots) {
-          lot.kgLeft = r1((lot.kgLeft || 0) * scale);
-          lot.costPerKg = scale > 0 ? r0((lot.costPerKg || 0) / scale) : lot.costPerKg;
+        const per = kgPerStock({ unit: r.unit, weightPerUnitKg: r.weightPerUnitKg });
+        const fromQty = per > 0 ? q * per : 0;
+        const recorded = Number(it.weightKg) || Number(it.secondaryQuantity) || 0;
+        if (purchase) {
+          r.purchasedUnits += q;
+          r.purchasedInvoiceKg += recorded;
+          r.purchasedCatalogKg += fromQty;
+        } else {
+          r.soldUnits += q;
+          r.soldInvoiceKg += recorded;
+          r.soldCatalogKg += fromQty;
         }
       }
-      if (period.from || period.to) continue;
-      const soldOnce = (r.soldUnits || 0) * pack;
-      if (off(r.soldKg, soldOnce)) r.soldKg = soldOnce;
     }
 
     const prices = new Map(
@@ -343,8 +334,8 @@ export class AccountingService {
         // On-hand weight is the packages still unsold × the weight of one package.
         // That is the same tonnage as the purchase invoices of each company, minus shop sales.
         const wpu = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
-        const onHandUnits = wpu > 0 ? expectedUnits : Math.max(0, expectedUnits);
-        const onHandKg = wpu > 0 ? expectedUnits * wpu : r.fifoRemainingKg;
+        const onHandKg = r.fifoRemainingKg;
+        const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits);
         return {
           ...r,
           expectedUnits: r1(expectedUnits),

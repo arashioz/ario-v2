@@ -5,6 +5,7 @@ import type { Customer } from '../services/customers.service';
 import type { AppSettings, BankCard, SmsTemplateKey } from '../services/settings.service';
 import { dateToYmd, formatJalaliIso, formatJalaliNumeric, faNum, ymdToJalali } from './jalali';
 import { formatToman, toman, weight } from './format';
+import { copyText, requestCopyPermission } from './permissions';
 
 type Vars = Record<string, string>;
 
@@ -262,11 +263,11 @@ export function whatsappUrl(phone: string | undefined, text: string) {
 
 /** Copy the text and open the phone's SMS app addressed to `phone`. */
 export async function openSms(phone: string | undefined, text: string) {
+  requestCopyPermission();
   try {
-    const { copyText } = await import('./permissions');
     await copyText(text);
   } catch {
-    /* clipboard can be blocked; the SMS app still gets the body */
+    /* the SMS app still gets the body */
   }
   const to = (phone || '').replace(/[^0-9+]/g, '');
   window.location.href = `sms:${to}?body=${encodeURIComponent(text)}`;

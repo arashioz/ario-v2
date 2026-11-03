@@ -42,6 +42,7 @@ import { dateToYmd, formatJalali, ymdToJalali, JALALI_MONTHS, faNum } from '../l
 import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
 import { formatToman, num, percent, toman, tons } from '../lib/format';
+import { copyText, requestCopyPermission } from '../lib/permissions';
 
 type View = 'payments' | 'purchases' | 'sales' | 'aggregate' | 'adjustments' | 'products' | 'month' | 'ledger';
 
@@ -184,7 +185,7 @@ export const SupplierAccountPage: React.FC = () => {
   }, [name]);
 
   const copy = async (text: string) => {
-    const { copyText } = await import('../lib/permissions');
+    requestCopyPermission();
     await copyText(text);
     showNotification({ title: 'کپی شد', message: text, type: 'info' });
   };

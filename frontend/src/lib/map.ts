@@ -1,5 +1,6 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { requestLocationPermission } from './permissions';
 
 export type MapStyle = 'street' | 'satellite';
 
@@ -69,7 +70,7 @@ export const geoErrorMessage = (err: unknown) => {
   if (err instanceof Error && err.message && err.message !== 'unsupported') return err.message;
   const code = (err as GeolocationPositionError | undefined)?.code;
   if (code === 1) {
-    return 'اجازه موقعیت داده نشد. در پیام مرورگر Location را Allow کنید، GPS را روشن کنید و دوباره بزنید. اگر پیامی نیامد، این مرورگر روی آدرس http دیالوگ لوکیشن را نشان نمی‌دهد.';
+    return 'اجازه موقعیت داده نشد. دوباره روی موقعیت بزنید و در پیام گوشی Allow را انتخاب کنید.';
   }
   if (code === 3) return 'دریافت موقعیت طول کشید. GPS را روشن کنید و دوباره بزنید.';
   if (!navigator.geolocation) return 'این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.';
@@ -135,8 +136,8 @@ const readCapacitor = async (): Promise<GeoResult | null> => {
 
 /** Must be called directly from a tap so the browser shows the permission dialog. */
 export const getCurrentPosition = async (): Promise<GeoResult> => {
-  // Start the browser request before any await. Awaiting first drops the tap
-  // and Chrome/Safari then refuse to show Allow.
+  // Both calls stay in the tap, before any await, so the phone can show Allow.
+  requestLocationPermission();
   const firstFix = readBrowser(true);
   try {
     const native = await readCapacitor();

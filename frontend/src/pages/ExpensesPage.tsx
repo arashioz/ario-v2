@@ -173,6 +173,20 @@ export const ExpensesPage: React.FC = () => {
     return true;
   });
 
+  const isPersonal = (e: ExpenseItem) => e.type === 'deposit' || e.type === 'withdrawal' || e.isPersonalWithdrawal;
+  const storeRows = expenses.filter((e) => !isPersonal(e));
+  const withdrawalRows = expenses.filter((e) => e.type === 'withdrawal' || (e.isPersonalWithdrawal && e.type !== 'deposit'));
+  const depositRows = expenses.filter((e) => e.type === 'deposit');
+  const money = (rows: ExpenseItem[]) => rows.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const openEntry = (kind: 'store' | 'withdrawal' | 'deposit') => {
+    if (kind !== 'store' && !isUnlocked) {
+      setAsking(true);
+      return;
+    }
+    setEntryKind(kind);
+    setIsNewModalOpen(true);
+  };
+
   const formatDate = (isoString?: string) => {
     if (!isoString) return '-';
     try {
@@ -218,14 +232,17 @@ export const ExpensesPage: React.FC = () => {
             >
               <ArrowRight className="w-5 h-5" />
             </button>
-            <h1 className="text-sm font-black text-slate-800 flex-1">خرج و برداشت</h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-sm font-black text-slate-800">خرج و برداشت</h1>
+              <p className="text-[10px] text-slate-400 truncate">خرج مغازه جدا از پول خود مدیر است</p>
+            </div>
             <button
               type="button"
               onClick={() => (isUnlocked ? handleLock() : setAsking((v) => !v))}
-              className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center active:scale-95"
-              title={isUnlocked ? 'قفل' : 'باز کردن'}
+              className="h-8 px-2.5 rounded-xl bg-slate-100 text-slate-600 flex items-center gap-1 text-[11px] font-bold active:scale-95"
             >
               {isUnlocked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              {isUnlocked ? 'قفل برداشت' : 'رمز برداشت'}
             </button>
           </div>
           {asking && !isUnlocked && (
@@ -238,7 +255,7 @@ export const ExpensesPage: React.FC = () => {
                   setPasswordInput(e.target.value);
                   setPasswordError('');
                 }}
-                placeholder="رمز"
+                placeholder="رمز دیدن برداشت و واریز مدیر"
                 className={`w-full px-3 py-2 rounded-xl bg-slate-50 border text-center font-mono text-sm focus:outline-none ${passwordError ? 'border-rose-400' : 'border-slate-200'}`}
                 dir="ltr"
                 autoComplete="current-password"
@@ -259,7 +276,40 @@ export const ExpensesPage: React.FC = () => {
         </IonRefresher>
 
         <div className={`p-3 space-y-3 max-w-lg mx-auto pb-8 ${reveal ? 'animate-slide-up' : ''}`} dir="rtl">
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-white border border-rose-100 p-2.5">
+              <div className="text-[10px] font-bold text-rose-700">خرج مغازه</div>
+              <div className="mt-1 text-[13px] font-black font-mono text-slate-800">{formatToman(money(storeRows))}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{storeRows.length.toLocaleString('fa-IR')} مورد</div>
+            </div>
+            <button type="button" onClick={() => openEntry('withdrawal')} className="rounded-2xl bg-white border border-purple-100 p-2.5 text-right">
+              <div className="text-[10px] font-bold text-purple-700">برداشت مدیر</div>
+              <div className="mt-1 text-[13px] font-black font-mono text-slate-800">{isUnlocked ? formatToman(money(withdrawalRows)) : 'قفل'}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{isUnlocked ? `${withdrawalRows.length.toLocaleString('fa-IR')} مورد` : 'با رمز باز می‌شود'}</div>
+            </button>
+            <button type="button" onClick={() => openEntry('deposit')} className="rounded-2xl bg-white border border-emerald-100 p-2.5 text-right">
+              <div className="text-[10px] font-bold text-emerald-700">واریز مدیر</div>
+              <div className="mt-1 text-[13px] font-black font-mono text-slate-800">{isUnlocked ? formatToman(money(depositRows)) : 'قفل'}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{isUnlocked ? `${depositRows.length.toLocaleString('fa-IR')} مورد` : 'با رمز باز می‌شود'}</div>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => openEntry('store')}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-2xl bg-rose-600 text-white font-bold text-[13px] active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              خرج مغازه
+            </button>
+            <button
+              onClick={() => openEntry('withdrawal')}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-2xl bg-purple-600 text-white font-bold text-[13px] active:scale-[0.98]"
+            >
+              <Wallet className="w-4 h-4" />
+              برداشت / واریز
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
             <button
               onClick={loadData}
               disabled={loading}
@@ -268,19 +318,6 @@ export const ExpensesPage: React.FC = () => {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={() => {
-                setEntryKind('store');
-                setIsNewModalOpen(true);
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-sky-600 text-white font-bold text-xs active:scale-[0.98]"
-            >
-              <Plus className="w-4 h-4" />
-              ثبت هزینه
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-slate-500">بازه گزارش</span>
             <PeriodPicker value={period} onChange={setPeriod} />
           </div>
           <Fold
@@ -422,11 +459,11 @@ export const ExpensesPage: React.FC = () => {
           {/* Tab Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {[
-              { id: 'all', label: 'همه هزینه‌ها' },
-              ...(isUnlocked ? [{ id: 'withdrawals', label: 'برداشت و واریز مدیر' }] : []),
-              { id: 'store', label: 'هزینه‌های جاری مغازه' },
-              { id: 'shipping', label: 'ارسال بار' },
-              { id: 'salary', label: 'حقوق پرسنل' },
+              { id: 'all', label: 'همه' },
+              { id: 'store', label: 'خرج مغازه' },
+              ...(isUnlocked ? [{ id: 'withdrawals', label: 'برداشت و واریز' }] : []),
+              { id: 'shipping', label: 'ارسال' },
+              { id: 'salary', label: 'حقوق' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -451,17 +488,11 @@ export const ExpensesPage: React.FC = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="جستجو در شرح هزینه، مبلغ یا دسته‌بندی..."
+              placeholder="جستجو در شرح، مبلغ یا دسته"
               className="w-full pr-10 pl-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-500 shadow-sm"
             />
           </div>
 
-          <Fold
-            title="ریز تراکنش"
-            hint={`${filteredExpenses.length.toLocaleString('fa-IR')} مورد · ${filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString('fa-IR')} تومان`}
-            open={openFold === 'tx'}
-            onToggle={() => setOpenFold((v) => (v === 'tx' ? null : 'tx'))}
-          >
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-extrabold text-slate-700">
@@ -561,7 +592,6 @@ export const ExpensesPage: React.FC = () => {
               })
             )}
           </div>
-          </Fold>
         </div>
       </IonContent>
 

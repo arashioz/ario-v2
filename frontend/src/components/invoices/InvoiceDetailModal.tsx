@@ -37,7 +37,7 @@ import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
 import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
-import { copyText } from '../../lib/permissions';
+import { copyText, requestCopyPermission } from '../../lib/permissions';
 import { formatToman, num, tons } from '../../lib/format';
 import { dateToYmd, formatJalali } from '../../lib/jalali';
 import { JalaliDateSheet } from '../ui/JalaliDatePicker';
@@ -160,6 +160,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   );
 
   const handleCopyAndSms = async () => {
+    requestCopyPermission();
     const text = await invoiceText();
     showNotification({
       title: 'متن فاکتور کپی شد',
@@ -178,12 +179,13 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   };
 
   const handleCopyText = async () => {
+    requestCopyPermission();
     const text = await invoiceText();
     const ok = await copyText(text);
     showNotification(
       ok
         ? { title: 'فاکتور کپی شد', message: 'متن فاکتور در کلیپ‌بورد است.', type: 'success' }
-        : { title: 'کپی انجام نشد', message: 'دسترسی کپی را در تنظیمات مرورگر یا گوشی اجازه دهید.', type: 'error' },
+        : { title: 'کپی انجام نشد', message: 'دکمه کپی را دوباره بزنید و در پیام گوشی Allow را انتخاب کنید.', type: 'error' },
     );
   };
 

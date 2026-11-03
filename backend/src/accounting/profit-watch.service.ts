@@ -301,14 +301,16 @@ export class ProfitWatchService implements OnModuleInit, OnModuleDestroy {
             id: `missing_weight:${id}:${idx}`,
             detail: `وزن هر ${product.unit} «${product.name}» در کالا ثبت نشده؛ ${fa(it.quantity, 3)} ${it.unit} به‌عنوان ${fa(it.quantity, 3)} کیلو حساب شد`,
           });
-        } else if (kgPerStock(product) > 1) {
-          const computed = lineKg(it, product);
+        } else if (kgPerStock(product) > 0 && kgPerStock(product) !== 1) {
+          const per = kgPerStock(product);
+          const fromQty = (it.quantity || 0) * per;
           const stored = Number(it.weightKg) || 0;
-          if (stored > 0 && Math.abs(stored - computed) > Math.max(0.6, computed * 0.02)) {
+          const used = lineKg(it, product);
+          if (stored > 0 && fromQty > 0 && Math.abs(stored - fromQty) > Math.max(0.6, fromQty * 0.02)) {
             push('weight_conflict', {
               ...lineRef,
               id: `weight_conflict:${id}:${idx}`,
-              detail: `وزن ثبت‌شده ${fa(stored, 1)} کیلو است ولی ${fa(it.quantity, 2)} ${product.unit || it.unit} × ${fa(kgPerStock(product), 2)} کیلو = ${fa(computed, 1)} کیلو. جمع تناژ و سود هر کیلو با این وزن غلط می‌شود.`,
+              detail: `فاکتور ${fa(stored, 1)} کیلو نوشته و ${fa(it.quantity, 2)} ${product.unit || it.unit} × ${fa(per, 2)} = ${fa(fromQty, 1)} کیلو است. در جمع تناژ ${fa(used, 1)} کیلو حساب شد.`,
             });
           }
         }

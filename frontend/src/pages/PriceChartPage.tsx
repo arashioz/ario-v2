@@ -22,6 +22,7 @@ import type { ChartSeries } from '../components/reports/PriceChart';
 import { useInvoiceOpener } from '../components/reports/useInvoiceOpener';
 import { formatJalaliIso } from '../lib/jalali';
 import { num, percent, weight } from '../lib/format';
+import { copyText, requestCopyPermission } from '../lib/permissions';
 
 type Range = '30' | '90' | '180' | 'all';
 type Unit = 'kg' | 'unit';
@@ -258,7 +259,8 @@ export const PriceChartPage: React.FC = () => {
 
   const handleCopyReport = () => {
     if (!report?.copyText) return;
-    void import('../lib/permissions').then(({ copyText }) => copyText(report.copyText));
+    requestCopyPermission();
+    void copyText(report.copyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

@@ -196,9 +196,11 @@ export const kgPerStock = (product?: Pick<FifoProduct, 'unit' | 'weightPerUnitKg
 };
 
 /**
- * Weight of a line. For a packaged good the invoice quantity is the package count,
- * so the kilograms are quantity × pack weight. A stored weightKg is not added on top:
- * it was sometimes the bag count, sometimes the real kg, and sometimes both (440 recorded as 880).
+ * Kilograms on one invoice line.
+ * Catalog math is quantity × pack weight. The invoice may also store weightKg.
+ * A stored weight that is only the bag count, or exactly twice the catalog math, is not used.
+ * Any other stored weight that is larger than the catalog math is the invoice's own tonnage and wins,
+ * so a line is never shrunk below what the invoice wrote.
  */
 export const lineKg = (it: FifoInvoice['items'][number], product?: FifoProduct): number => {
   const qty = Number(it.quantity) || 0;
@@ -206,10 +208,14 @@ export const lineKg = (it: FifoInvoice['items'][number], product?: FifoProduct):
   const fromQty = per > 0 ? qty * per : 0;
   const w = Number(it.weightKg) || 0;
   const sec = Number(it.secondaryQuantity) || 0;
-  if (per > 0 && per !== 1 && qty > 0) return fromQty;
-  if (w > 0) return w;
+  const recorded = w > 0 ? w : sec;
+  const close = (a: number, b: number) => b > 0 && Math.abs(a - b) <= Math.max(0.6, b * 0.02);
+  if (fromQty > 0 && recorded > 0 && per !== 1 && close(recorded, fromQty * 2)) return fromQty;
+  if (fromQty > 0 && recorded > 0 && close(recorded, fromQty)) return fromQty;
+  if (fromQty > 0 && per > 1 && recorded > 0 && close(recorded, qty)) return fromQty;
+  if (recorded > fromQty && recorded > 0) return recorded;
   if (fromQty > 0) return fromQty;
-  if (sec > 0) return sec;
+  if (recorded > 0) return recorded;
   return qty;
 };
 

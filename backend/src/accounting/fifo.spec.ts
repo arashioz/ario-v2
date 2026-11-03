@@ -34,6 +34,7 @@ describe('packaged line weight', () => {
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 440 }, rice)).toBe(440);
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 44 }, rice)).toBe(440);
     expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44 }, rice)).toBe(440);
+    expect(lineKg({ productId: 'rice', productName: 'برنج', quantity: 44, unit: 'کیسه', unitPrice: 1, totalPrice: 44, weightKg: 900 }, rice)).toBe(900);
   });
 
   it('does not treat bag quantity as kilograms when costing a sale', () => {

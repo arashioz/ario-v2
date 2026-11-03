@@ -5,6 +5,7 @@ import { productsService } from '../../services/products.service';
 import type { CatalogTier } from '../../services/products.service';
 import { useNotification } from '../../context/NotificationContext';
 import { catalogLinkSms, openSms, priceListSms } from '../../lib/sms';
+import { copyText, requestCopyPermission } from '../../lib/permissions';
 import { useSettings } from '../../services/settings.service';
 
 const TIERS: { key: CatalogTier; label: string; hint: string }[] = [
@@ -24,7 +25,7 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
   const url = catalogUrl(tier);
 
   const copy = async () => {
-    const { copyText } = await import('../../lib/permissions');
+    requestCopyPermission();
     await copyText(url);
     showNotification({ title: 'لینک کپی شد', message: url, type: 'info' });
   };
