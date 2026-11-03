@@ -23,7 +23,7 @@ export class Proforma {
   @Prop({ type: String, enum: ['pending', 'shipped', 'cancelled'], default: 'pending', index: true })
   status: string;
 
-  @Prop({ type: String, enum: ['retail', 'supermarket', 'wholesale'], default: 'wholesale' })
+  @Prop({ type: String, enum: ['retail', 'supermarket', 'wholesale', 'distributor'], default: 'wholesale' })
   saleType: string;
 
   /** shop: leaves Ario stock when shipped. factory: parent-company shipment, stock stays. */

@@ -24,8 +24,8 @@ describe('category base and product commissions', () => {
   it('applies a different percent to each sale channel from the same base', () => {
     const tiers = channelPrices(
       { ...product, commissionAmount: 0, commissionPercent: 0 },
-      { category: 'نبات', amount: 10000, unit: 'kg', retailPercent: 10, supermarketPercent: 5, wholesalePercent: 2 },
+      { category: 'نبات', amount: 10000, unit: 'kg', retailPercent: 10, supermarketPercent: 5, wholesalePercent: 2, distributorPercent: 0 },
     );
-    expect(tiers).toEqual({ retail: 33000, supermarket: 31500, wholesale: 30600 });
+    expect(tiers).toEqual({ retail: 33000, supermarket: 31500, wholesale: 30600, distributor: 30000 });
   });
 });

@@ -123,7 +123,11 @@ export class BackupSettings {
 /** Single document holding shop-wide preferences. */
 @Schema({ timestamps: true, collection: 'appsettings' })
 export class AppSettings {
-  @Prop({ type: [Object], default: [] }) categoryBasePrices: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }[];
+  @Prop({ type: [Object], default: [] }) categoryBasePrices: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }[];
+
+  /** Who counts as a loyal customer, and when a quiet loyal buyer should be called. */
+  @Prop({ type: Object, default: () => ({ championInvoices: 6, championAmount: 20000000, quietDays: 21, planDays: 3 }) })
+  loyalty: { championInvoices: number; championAmount: number; quietDays: number; planDays: number };
 
   @Prop({ trim: true, default: 'فروشگاه آریو' })
   shopName: string;

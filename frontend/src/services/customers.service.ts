@@ -13,7 +13,7 @@ export interface Customer {
   phoneSecondary?: string;
   address?: string;
   branches?: string[];
-  customerType?: 'retail' | 'supermarket' | 'wholesale';
+  customerType?: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
   kind?: CustomerKind;
   latitude?: number;
   longitude?: number;
@@ -77,7 +77,7 @@ export interface CreateCustomerInput {
   phoneSecondary?: string;
   address?: string;
   branches?: string[];
-  customerType?: 'retail' | 'supermarket' | 'wholesale';
+  customerType?: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
   kind?: CustomerKind;
   latitude?: number;
   longitude?: number;
@@ -146,6 +146,18 @@ export const customersService = {
 
   update(id: string, data: Partial<CreateCustomerInput>): Promise<Customer> {
     return this.updateCustomer(id, data);
+  },
+
+  async loyalty(): Promise<{
+    plan: { championInvoices: number; championAmount: number; quietDays: number; planDays: number };
+    champions: { customer: Customer; invoices: number; amount: number; daysSincePurchase: number; quiet: boolean }[];
+    quiet: { customer: Customer; invoices: number; amount: number; daysSincePurchase: number; quiet: boolean }[];
+  }> {
+    return (await api.get('/customers/loyalty')).data;
+  },
+
+  async planLoyalty(): Promise<{ planned: number }> {
+    return (await api.post('/customers/loyalty/plan')).data;
   },
 
   async getCustomerStats(): Promise<CustomerStats> {

@@ -1079,10 +1079,16 @@ export class InvoicesService implements OnApplicationBootstrap {
    * Purchases count only when the goods were received. Sales count only when they left Ario stock.
    */
   async rebuildStock() {
+    const catalog = await this.productModel.find().select('_id name').lean().exec();
+    const byName = new Map<string, string>();
+    const fold = (s: string) => s.replace(/ي/g, 'ی').replace(/ك/g, 'ک').replace(/\s+/g, ' ').trim().toLowerCase();
+    for (const product of catalog) {
+      const key = fold(product.name || '');
+      if (key && !byName.has(key)) byName.set(key, String(product._id));
+    }
     const invoices = await this.invoiceModel
       .find({ type: { $in: ['sale', 'purchase'] } })
       .select('type fulfillment customerName items')
-      .lean()
       .exec();
 
     const totals = new Map<string, number>();
@@ -1094,11 +1100,23 @@ export class InvoicesService implements OnApplicationBootstrap {
       if (!purchase && inv.fulfillment === 'factory') continue;
       if (purchase) purchases++;
       else sales++;
+      let dirty = false;
       for (const item of inv.items || []) {
-        const productId = String(item.productId || '');
+        let productId = String(item.productId || '');
+        if (purchase && !Types.ObjectId.isValid(productId)) {
+          const linked = byName.get(fold(item.productName || ''));
+          if (!linked) continue;
+          item.productId = linked;
+          productId = linked;
+          dirty = true;
+        }
         if (!Types.ObjectId.isValid(productId)) continue;
         if (purchase && item.received === false) continue;
         totals.set(productId, (totals.get(productId) || 0) + (purchase ? 1 : -1) * (item.quantity || 0));
+      }
+      if (dirty) {
+        inv.markModified('items');
+        await inv.save();
       }
     }
 

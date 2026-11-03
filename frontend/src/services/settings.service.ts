@@ -3,7 +3,7 @@ import { api } from './api';
 import { cachedGet } from './offlineCache';
 
 export type SalesLayout = 'cards' | 'compact' | 'table';
-export type SaleType = 'retail' | 'supermarket' | 'wholesale';
+export type SaleType = 'retail' | 'supermarket' | 'wholesale' | 'distributor';
 
 export interface SalesView {
   layout: SalesLayout;
@@ -207,9 +207,11 @@ export const SMS_PLACEHOLDERS: Record<SmsTemplateKey, [string, string][]> = {
   ],
 };
 
-export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }
+export interface CategoryBasePrice { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }
+export interface LoyaltyPlan { championInvoices: number; championAmount: number; quietDays: number; planDays: number }
 export interface AppSettings {
   categoryBasePrices: CategoryBasePrice[];
+  loyalty: LoyaltyPlan;
   shopName: string;
   shopPhone: string;
   shopAddress: string;
@@ -245,6 +247,7 @@ export interface BackupSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   categoryBasePrices: [],
+  loyalty: { championInvoices: 6, championAmount: 20000000, quietDays: 21, planDays: 3 },
   shopName: 'فروشگاه آریو',
   shopPhone: '',
   shopAddress: '',
@@ -267,9 +270,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const SALE_TYPE_LABELS: Record<SaleType, string> = {
-  retail: 'تک‌فروشی',
+  retail: 'فروشنده',
   supermarket: 'سوپرمارکت',
-  wholesale: 'عمده بنکداری',
+  wholesale: 'عمده',
+  distributor: 'عمده‌فروش',
 };
 
 /** Card colors so a supermarket order and a wholesale order are obvious at a glance. */
@@ -291,6 +295,12 @@ export const SALE_TYPE_TONE: Record<SaleType, { card: string; badge: string; sol
     badge: 'bg-violet-600 text-white',
     solid: 'bg-violet-600 text-white',
     note: 'bg-violet-50 text-violet-900',
+  },
+  distributor: {
+    card: 'bg-amber-50 border-amber-200',
+    badge: 'bg-amber-600 text-white',
+    solid: 'bg-amber-600 text-white',
+    note: 'bg-amber-50 text-amber-900',
   },
 };
 

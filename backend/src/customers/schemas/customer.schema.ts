@@ -27,7 +27,7 @@ export class Customer {
 
   @Prop({
     trim: true,
-    enum: ['retail', 'supermarket', 'wholesale'],
+    enum: ['retail', 'supermarket', 'wholesale', 'distributor'],
     default: 'supermarket',
     index: true,
   })

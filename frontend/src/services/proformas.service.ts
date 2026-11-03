@@ -7,7 +7,7 @@ export interface Proforma {
   _id: string;
   number: string;
   status: ProformaStatus;
-  saleType: 'retail' | 'supermarket' | 'wholesale';
+  saleType: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
   fulfillment?: 'shop' | 'factory';
   customerId?: string;
   customerName: string;

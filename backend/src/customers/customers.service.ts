@@ -16,6 +16,7 @@ import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { RecordTransactionDto } from './dto/record-transaction.dto';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class CustomersService implements OnModuleInit {
@@ -28,6 +29,7 @@ export class CustomersService implements OnModuleInit {
     private transactionModel: Model<CustomerTransactionDocument>,
     @InjectModel(Invoice.name)
     private invoiceModel: Model<InvoiceDocument>,
+    private settingsService: SettingsService,
   ) {}
 
   async onModuleInit() {
@@ -848,6 +850,63 @@ export class CustomersService implements OnModuleInit {
 
     const total = rows.reduce((s, r) => s + (r.amount || 0), 0);
     return { total, count: rows.length, items: rows };
+  }
+
+  /** Rank buyers by spend and recency, then mark loyal customers who have gone quiet. */
+  async loyalty() {
+    const settings = await this.settingsService.get();
+    const plan = {
+      championInvoices: settings.loyalty?.championInvoices || 6,
+      championAmount: settings.loyalty?.championAmount || 20_000_000,
+      quietDays: settings.loyalty?.quietDays || 21,
+      planDays: settings.loyalty?.planDays || 3,
+    };
+    const rows = await this.invoiceModel.aggregate<{ _id: Types.ObjectId; invoices: number; amount: number; last: Date }>([
+      { $match: { type: 'sale', customerId: { $exists: true, $ne: null } } },
+      { $group: { _id: '$customerId', invoices: { $sum: 1 }, amount: { $sum: '$finalAmount' }, last: { $max: '$invoiceDate' } } },
+    ]);
+    const customers = await this.customerModel.find({ _id: { $in: rows.map((r) => r._id) }, isActive: true }).select('name phoneNumber balance customerType kind').lean();
+    const byId = new Map(customers.map((c) => [String(c._id), c]));
+    const now = Date.now();
+    const ranked = rows
+      .map((row) => {
+        const customer = byId.get(String(row._id));
+        if (!customer) return null;
+        const days = Math.floor((now - new Date(row.last).getTime()) / 86400000);
+        const loyal = row.invoices >= plan.championInvoices || row.amount >= plan.championAmount;
+        return {
+          customer,
+          invoices: row.invoices,
+          amount: Math.round(row.amount || 0),
+          lastPurchaseAt: row.last,
+          daysSincePurchase: days,
+          loyal,
+          quiet: loyal && days >= plan.quietDays,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => !!row)
+      .sort((a, b) => Number(b.loyal) - Number(a.loyal) || b.amount - a.amount);
+    return {
+      plan,
+      champions: ranked.filter((row) => row.loyal && !row.quiet).slice(0, 12),
+      quiet: ranked.filter((row) => row.quiet).slice(0, 12),
+    };
+  }
+
+  /** Put a follow-up on loyal customers who have not bought within the planned quiet window. */
+  async planLoyalty() {
+    const report = await this.loyalty();
+    const when = new Date();
+    when.setDate(when.getDate() + report.plan.planDays);
+    when.setHours(12, 0, 0, 0);
+    const ids = report.quiet.map((row) => row.customer._id);
+    if (ids.length) {
+      await this.customerModel.updateMany(
+        { _id: { $in: ids }, $or: [{ nextFollowUpAt: { $exists: false } }, { nextFollowUpAt: null }, { nextFollowUpAt: { $lt: new Date() } }] },
+        { $set: { nextFollowUpAt: when } },
+      );
+    }
+    return { planned: ids.length, when };
   }
 
   async getStats(): Promise<{

@@ -26,7 +26,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { useSettings } from '../../services/settings.service';
-import type { Invoice } from '../../services/invoices.service';
+import { invoicesService, type Invoice } from '../../services/invoices.service';
 import { useNotification } from '../../context/NotificationContext';
 import { EditInvoiceSheet } from './EditInvoiceSheet';
 import { DeleteInvoiceSheet } from './DeleteInvoiceSheet';

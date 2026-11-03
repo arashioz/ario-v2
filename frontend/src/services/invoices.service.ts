@@ -46,7 +46,7 @@ export interface Invoice {
   _id: string;
   invoiceNumber: string;
   type: 'sale' | 'purchase';
-  saleType: 'retail' | 'supermarket' | 'wholesale';
+  saleType: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
   customerId?: string;
   customerName: string;
   /** Company this invoice's goods belong to. A mixed cart is saved as one invoice per company. */
@@ -108,7 +108,7 @@ export interface Invoice {
 
 export interface CreateInvoiceInput {
   type?: 'sale' | 'purchase';
-  saleType?: 'retail' | 'supermarket' | 'wholesale';
+  saleType?: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
   customerId?: string;
   customerName: string;
   customerPhone?: string;

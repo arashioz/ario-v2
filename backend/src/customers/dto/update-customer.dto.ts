@@ -32,8 +32,8 @@ export class UpdateCustomerDto {
   kind?: CustomerKind;
 
   @IsOptional()
-  @IsIn(['retail', 'supermarket', 'wholesale'])
-  customerType?: 'retail' | 'supermarket' | 'wholesale';
+  @IsIn(['retail', 'supermarket', 'wholesale', 'distributor'])
+  customerType?: 'retail' | 'supermarket' | 'wholesale' | 'distributor';
 
   @IsOptional()
   @IsNumber()

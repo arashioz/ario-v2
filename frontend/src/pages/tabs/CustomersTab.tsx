@@ -14,7 +14,6 @@ import { useNotification } from '../../context/NotificationContext';
 import { customersService } from '../../services/customers.service';
 import type {
   Customer,
-  CustomerKind,
   CustomerStats,
   CustomerTransaction,
 } from '../../services/customers.service';

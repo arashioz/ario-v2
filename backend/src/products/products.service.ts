@@ -405,6 +405,7 @@ export class ProductsService implements OnModuleInit {
       product.sellPrice = product.priceRetail = tiers.retail;
       product.priceSupermarket = tiers.supermarket;
       product.priceWholesale = tiers.wholesale;
+      product.priceDistributor = tiers.distributor;
       product.priceHistory[0].oldPrice = product.priceHistory[0].newPrice = tiers.retail;
     }
     return product.save();
@@ -494,9 +495,9 @@ export class ProductsService implements OnModuleInit {
       const merged = { ...existing.toObject(), ...updateDto };
       const settings = await this.settings.get();
       const tiers = channelPrices(merged, settings.categoryBasePrices?.find((r) => r.category === merged.category));
-      Object.assign(set, { sellPrice: tiers.retail, priceRetail: tiers.retail, priceSupermarket: tiers.supermarket, priceWholesale: tiers.wholesale });
+      Object.assign(set, { sellPrice: tiers.retail, priceRetail: tiers.retail, priceSupermarket: tiers.supermarket, priceWholesale: tiers.wholesale, priceDistributor: tiers.distributor });
     }
-    const priceChanged = ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale'].some((k) => set[k] !== undefined && set[k] !== existing[k]);
+    const priceChanged = ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale', 'priceDistributor'].some((k) => set[k] !== undefined && set[k] !== existing[k]);
     if (priceChanged) set.priceSetAt = new Date();
     const product = await this.productModel
       .findByIdAndUpdate(id, { $set: set, ...(priceChanged ? { $unset: { priceCostBasisPerKg: 1 } } : {}) }, { new: true })
@@ -520,6 +521,7 @@ export class ProductsService implements OnModuleInit {
       retailPercent: pct(rule.retailPercent),
       supermarketPercent: pct(rule.supermarketPercent),
       wholesalePercent: pct(rule.wholesalePercent),
+      distributorPercent: pct(rule.distributorPercent),
     };
     const products = await this.productModel.find({ category, isActive: true });
     const changes: { product: ProductDocument; tiers: ReturnType<typeof channelPrices> }[] = [];
@@ -543,6 +545,7 @@ export class ProductsService implements OnModuleInit {
           priceRetail: tiers.retail,
           priceSupermarket: tiers.supermarket,
           priceWholesale: tiers.wholesale,
+          priceDistributor: tiers.distributor,
           priceSetAt: new Date(),
           autoPricing: true,
           ...(next.unit === 'kg' ? { basePrice: next.amount } : {}),

@@ -147,6 +147,22 @@ export class SettingsService {
       }
     }
 
+    if (body.loyalty && typeof body.loyalty === 'object') {
+      const day = (n: unknown, fallback: number, max: number) => {
+        const v = Math.round(Number(n));
+        if (!Number.isFinite(v) || v < 1 || v > max) throw new BadRequestException('عدد برنامه مشتریان نامعتبر است');
+        return v;
+      };
+      const amount = Math.round(Number(body.loyalty.championAmount));
+      if (!Number.isFinite(amount) || amount < 0) throw new BadRequestException('مبلغ وفاداری نامعتبر است');
+      set.loyalty = {
+        championInvoices: day(body.loyalty.championInvoices, 6, 500),
+        championAmount: amount,
+        quietDays: day(body.loyalty.quietDays, 21, 365),
+        planDays: day(body.loyalty.planDays, 3, 90),
+      };
+    }
+
     if (body.backup && typeof body.backup === 'object') {
       const b = body.backup;
       if (b.enabled !== undefined) set['backup.enabled'] = !!b.enabled;

@@ -5,6 +5,7 @@ import { Customer, CustomerDocument } from '../customers/schemas/customer.schema
 import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import { FollowUp, FollowUpDocument, FollowUpResult } from './schemas/follow-up.schema';
 import { LogFollowUpDto } from './dto/log-follow-up.dto';
+import { SettingsService } from '../settings/settings.service';
 
 export type DueReason = 'promise' | 'scheduled' | 'debt' | 'inactive';
 
@@ -41,9 +42,12 @@ export class FollowUpsService {
     @InjectModel(FollowUp.name) private followUpModel: Model<FollowUpDocument>,
     @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
+    private settingsService: SettingsService,
   ) {}
 
   async getDue() {
+    const settings = await this.settingsService.get();
+    const inactiveDays = settings.loyalty?.quietDays || RULES.inactiveDays;
     const now = new Date();
     const todayStart = startOfDay(now);
     const todayEnd = new Date(todayStart.getTime() + DAY);
@@ -77,7 +81,7 @@ export class FollowUpsService {
       } else if (
         c.phoneNumber &&
         lastPurchaseAt &&
-        daysSince(lastPurchaseAt)! >= RULES.inactiveDays &&
+        daysSince(lastPurchaseAt)! >= inactiveDays &&
         (contactAge === null || contactAge >= RULES.inactiveRecontactDays)
       ) {
         reason = 'inactive';

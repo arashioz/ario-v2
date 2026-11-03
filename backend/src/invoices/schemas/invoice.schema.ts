@@ -89,7 +89,7 @@ export class Invoice {
 
   @Prop({
     required: true,
-    enum: ['retail', 'supermarket', 'wholesale'],
+    enum: ['retail', 'supermarket', 'wholesale', 'distributor'],
     default: 'retail',
     index: true,
   })

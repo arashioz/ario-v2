@@ -97,7 +97,10 @@ export class Product {
   priceSupermarket?: number; // قیمت سوپرمارکت و فروشگاه
 
   @Prop({ default: 0 })
-  priceWholesale?: number; // قیمت عمده و بنک‌داری
+  priceWholesale?: number; // قیمت عمده
+
+  @Prop({ default: 0 })
+  priceDistributor?: number; // قیمت عمده‌فروش
 
   /** Last time any sell price tier was set; price suggestions compare against the purchase cost at that moment. */
   @Prop()

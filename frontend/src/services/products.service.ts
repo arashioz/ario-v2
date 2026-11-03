@@ -69,6 +69,7 @@ export interface Product {
   priceRetail?: number;
   priceSupermarket?: number;
   priceWholesale?: number;
+  priceDistributor?: number;
   stock: number;
   minStockAlert: number;
   priceHistory: PriceHistoryItem[];
@@ -116,6 +117,7 @@ export interface CreateProductInput {
   priceRetail?: number;
   priceSupermarket?: number;
   priceWholesale?: number;
+  priceDistributor?: number;
   stock?: number;
   minStockAlert?: number;
   description?: string;
@@ -126,6 +128,7 @@ export interface UpdatePriceInput {
   newBuyPrice?: number;
   priceSupermarket?: number;
   priceWholesale?: number;
+  priceDistributor?: number;
   reason?: string;
 }
 
@@ -165,7 +168,7 @@ export const productsService = {
   async setFactoryPrice(id: string, price: number | null): Promise<Product> {
     return (await api.patch(`/products/${id}/factory-price`, { price })).data;
   },
-  async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }) {
+  async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }) {
     return (await api.post<{ modified: number; skipped?: string[] }>('/products/category-price', rule)).data;
   },
   async getForSale(): Promise<Product[]> {

@@ -107,7 +107,7 @@ export class CreateInvoiceDto {
   type?: string = 'sale';
 
   @IsOptional()
-  @IsEnum(['retail', 'supermarket', 'wholesale'])
+  @IsEnum(['retail', 'supermarket', 'wholesale', 'distributor'])
   saleType?: string = 'retail';
 
   @IsOptional()

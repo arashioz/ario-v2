@@ -32,6 +32,7 @@ import { BankAccountsSettings } from '../components/settings/BankAccountsSetting
 import { SmsTemplatesSettings } from '../components/settings/SmsTemplatesSettings';
 import { PosSectionsSettings } from '../components/settings/PosSectionsSettings';
 import { BackupSettings } from '../components/settings/BackupSettings';
+import { CustomerPlanSettings } from '../components/settings/CustomerPlanSettings';
 
 const LAYOUTS: { id: PosLayout; label: string; icon: React.ElementType }[] = [
   { id: 'grid', label: 'کارتی', icon: LayoutGrid },
@@ -374,6 +375,7 @@ export const SettingsPage: React.FC = () => {
               <span className="block text-[11px] font-normal text-slate-500 mt-1">موجودی، تاریخ خرید و فاکتورهای خرید و فروش هر دسته</span>
             </Link>
           )}
+          {isAdmin && <CustomerPlanSettings />}
           {!adminPart && <Group title="صفحه فروش">
             <Row id="layout" title="نمایش کالاها" hint={LAYOUTS.find((l) => l.id === pos.layout)?.label} icon={LayoutGrid} tone="sky" {...row}>
               <div className="space-y-2.5">

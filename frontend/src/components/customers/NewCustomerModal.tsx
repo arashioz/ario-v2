@@ -27,7 +27,7 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneSecondary, setPhoneSecondary] = useState('');
-  const [customerType, setCustomerType] = useState<'supermarket' | 'wholesale' | 'retail'>('supermarket');
+  const [customerType, setCustomerType] = useState<'supermarket' | 'wholesale' | 'retail' | 'distributor'>('supermarket');
   const [address, setAddress] = useState('');
   const [initialDebt, setInitialDebt] = useState<string>('');
   const [creditLimit, setCreditLimit] = useState<string>('');
@@ -166,7 +166,7 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
               <label className="text-xs font-medium text-slate-700 block">
                 نوع مشتری و طرف حساب <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-3 gap-2 p-1 bg-white rounded-2xl border border-sky-100 shadow-sm">
+              <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-2xl border border-sky-100 shadow-sm">
                 <button
                   type="button"
                   onClick={() => setCustomerType('supermarket')}
@@ -187,7 +187,18 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  عمده / بنکداری
+                  عمده
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerType('distributor')}
+                  className={`py-2 text-xs font-medium rounded-xl transition ${
+                    customerType === 'distributor'
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  عمده‌فروش
                 </button>
                 <button
                   type="button"
@@ -198,7 +209,7 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                       : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  تک‌فروشی
+                  فروشنده
                 </button>
               </div>
             </div>

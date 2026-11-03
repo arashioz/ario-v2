@@ -26,6 +26,16 @@ export class CustomersController {
     return this.customersService.getStats();
   }
 
+  @Get('loyalty')
+  loyalty() {
+    return this.customersService.loyalty();
+  }
+
+  @Post('loyalty/plan')
+  planLoyalty() {
+    return this.customersService.planLoyalty();
+  }
+
   @Get('payments')
   async listPayments(
     @Query('from') from?: string,

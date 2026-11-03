@@ -6,6 +6,7 @@ export interface CategoryBasePrice {
   retailPercent?: number;
   supermarketPercent?: number;
   wholesalePercent?: number;
+  distributorPercent?: number;
 }
 export function automaticPrice(product: {
   category: string; unit: string; weightPerUnitKg?: number; hasDualUnit?: boolean; secondaryUnit?: string; unitRatio?: number;
@@ -37,10 +38,10 @@ export function automaticPrice(product: {
 
 /** Cost of one package, then a separate profit percent for each sale channel. */
 export function channelPrices(product: Parameters<typeof automaticPrice>[0], rule: CategoryBasePrice | undefined) {
-  const hasChannel = rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent].some((n) => n !== undefined && n !== null);
+  const hasChannel = rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent, rule.distributorPercent].some((n) => n !== undefined && n !== null);
   if (!hasChannel) {
     const price = automaticPrice(product, rule);
-    return { retail: price, supermarket: price, wholesale: price };
+    return { retail: price, supermarket: price, wholesale: price, distributor: price };
   }
   const cost = automaticPrice({ ...product, commissionPercent: 0 }, rule);
   const apply = (pct: number | undefined) => Math.round(cost * (1 + (Number(pct) || 0) / 100));
@@ -48,5 +49,6 @@ export function channelPrices(product: Parameters<typeof automaticPrice>[0], rul
     retail: apply(rule?.retailPercent),
     supermarket: apply(rule?.supermarketPercent),
     wholesale: apply(rule?.wholesalePercent),
+    distributor: apply(rule?.distributorPercent),
   };
 }

@@ -62,7 +62,7 @@ export class ProductsController {
   }
 
   @Post('category-price')
-  async categoryPrice(@Body() body: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number }, @Request() req: any) {
+  async categoryPrice(@Body() body: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }, @Request() req: any) {
     return this.productsService.saveCategoryPrice(body, req.user?.fullName || req.user?.username || 'کاربر سیستم');
   }
 
