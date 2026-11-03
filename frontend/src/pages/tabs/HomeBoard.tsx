@@ -331,11 +331,14 @@ export const HomeBoard: React.FC<{
             ] as const).map(([label, s, ch]) => (
               <div key={label} className="rounded-2xl bg-emerald-50/70 p-3">
                 <div className="text-[11px] text-emerald-800">{label}</div>
-                <div className={`text-sm font-bold font-mono mt-0.5 ${s && s.profit > 0 ? 'text-emerald-900' : s && s.profit < 0 ? 'text-rose-800' : 'text-slate-700'}`}>
+                <div className="text-[10px] text-slate-500 mt-1">فروش</div>
+                <div className="text-[13px] font-bold font-mono text-slate-800">{s ? formatToman(s.revenue) : '...'}</div>
+                <div className="text-[10px] text-emerald-800 mt-1.5">سود</div>
+                <div className={`text-sm font-bold font-mono ${s && s.profit > 0 ? 'text-emerald-900' : s && s.profit < 0 ? 'text-rose-800' : 'text-slate-700'}`}>
                   {s ? profitCaption(s.profit, { sold: s.revenue, unknown: s.unknownRevenue }) : '...'}
                 </div>
                 <div className="text-[10px] text-emerald-700/80 font-mono mt-0.5">
-                  {s ? (s.revenue > 0 && Math.abs(s.profit) < 0.5 ? `فروش ${formatToman(s.revenue)}` : `${percent(s.marginPercent)} · کیلویی ${formatToman(s.profitPerKg)}`) : ''}
+                  {s && Math.abs(s.profit) >= 0.5 ? `${percent(s.marginPercent)} · کیلویی ${formatToman(s.profitPerKg)}` : ''}
                 </div>
                 {s && (s.unknownRevenue || 0) > 0 && Math.abs(s.profit) > 0.5 && (
                   <div className="text-[10px] text-amber-800 mt-1 leading-4">بهای {formatToman(s.unknownRevenue)} فروش ثبت نشده</div>

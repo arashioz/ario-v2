@@ -229,6 +229,67 @@ export function isDoubleDiscount(inv: { totalAmount: number; finalAmount: number
   return d > 0 && Math.abs(sumItems - inv.totalAmount - d) <= 5 && Math.abs(inv.totalAmount - inv.finalAmount - d) <= 5;
 }
 
+/**
+ * One sale's toman. Shipping the customer paid is not sales. A doubled discount
+ * is undone. Line prices never add money on top of this figure.
+ */
+export function goodsAmount(inv: {
+  totalAmount?: number;
+  finalAmount?: number;
+  discount?: number;
+  shippingPayer?: string | null;
+  shippingCost?: number;
+  items?: { totalPrice?: number }[];
+}): number {
+  const items = inv.items || [];
+  const sumItems = items.reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
+  const shipping = inv.shippingPayer === 'customer' ? Number(inv.shippingCost) || 0 : 0;
+  const paid = isDoubleDiscount(
+    { totalAmount: Number(inv.totalAmount) || 0, finalAmount: Number(inv.finalAmount) || 0, discount: inv.discount },
+    sumItems,
+  )
+    ? Number(inv.totalAmount) || 0
+    : Math.max(0, (Number(inv.finalAmount) || 0) - shipping);
+  return Math.max(0, Math.round(paid));
+}
+
+/** Split `goodsAmount` across lines. The parts add up to the invoice, never to a price list. */
+export function lineRevenues(inv: {
+  totalAmount?: number;
+  finalAmount?: number;
+  discount?: number;
+  shippingPayer?: string | null;
+  shippingCost?: number;
+  items?: { totalPrice?: number; quantity?: number; unitPrice?: number }[];
+}): number[] {
+  const items = inv.items || [];
+  const goods = goodsAmount(inv);
+  if (!items.length) return [];
+  if (goods <= 0) return items.map(() => 0);
+  const weightOf = (it: { totalPrice?: number; quantity?: number; unitPrice?: number }) => {
+    const priced = Number(it.totalPrice) || 0;
+    if (priced > 0) return priced;
+    const unit = Number(it.unitPrice) || 0;
+    const qty = Number(it.quantity) || 0;
+    return unit > 0 && qty > 0 ? unit * qty : 0;
+  };
+  let weights = items.map(weightOf);
+  let sum = weights.reduce((s, w) => s + w, 0);
+  if (sum <= 0) {
+    weights = items.map((it) => Math.max(Number(it.quantity) || 0, 0));
+    sum = weights.reduce((s, w) => s + w, 0);
+  }
+  if (sum <= 0) {
+    const even = Math.round(goods / items.length);
+    const out = items.map(() => even);
+    out[out.length - 1] = goods - even * (items.length - 1);
+    return out;
+  }
+  const out = weights.map((w, i) => (i === weights.length - 1 ? 0 : Math.round((goods * w) / sum)));
+  out[out.length - 1] = goods - out.reduce((s, n) => s + n, 0);
+  return out;
+}
+
 /** Freight/unloading the shop paid on a purchase; it is part of the goods' cost, not an expense. */
 export const purchaseFreight = (inv: Pick<FifoInvoice, 'type' | 'shippingPayer' | 'shippingCost'>) =>
   inv.type === 'purchase' && inv.shippingPayer === 'me' ? inv.shippingCost || 0 : 0;
@@ -400,33 +461,18 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
       continue;
     }
 
-    // Revenue is the money actually received for the goods, spread over the lines by their price.
-    // Delivery charged to the customer passes through to the carrier; it is not sales revenue.
-    const shippingCharge = inv.shippingPayer === 'customer' ? inv.shippingCost || 0 : 0;
-    const sumItems = inv.items.reduce((s, it) => s + (it.totalPrice || 0), 0);
-    const received = isDoubleDiscount(inv, sumItems) ? inv.totalAmount : inv.finalAmount - shippingCharge;
-    const discountFactor = sumItems > 0 ? received / sumItems : 1;
+    // Every line's revenue is a share of the invoice's own toman. A missing line
+    // price only decides the share; it never adds the catalog price on top.
+    const revenues = lineRevenues(inv);
     const ip: InvoiceProfit = { invoiceId: id, revenue: 0, cost: 0, profit: 0, kg: 0, estimated: false, unknownRevenue: 0 };
 
-    for (const it of inv.items) {
+    for (const [idx, it] of inv.items.entries()) {
       const found = resolveProduct(String(it.productId || ''), it.productName);
       const pid = found ? String(found._id) : String(it.productId || '');
       const product = found;
       const kg = lineKg(it, product);
-      let revenue = (it.totalPrice || 0) * discountFactor;
-      // Zero totalPrice (common on early factory sales) must not hide the sale.
-      let pricedFromList = false;
-      if (revenue <= 0 && (it.quantity || 0) > 0) {
-        const list =
-          inv.saleType === 'retail' ? product?.priceRetail
-          : inv.saleType === 'supermarket' ? product?.priceSupermarket
-          : product?.priceWholesale || product?.sellPrice;
-        const unit = Math.round(Number(it.unitPrice) || Number(list) || Number(product?.sellPrice) || 0);
-        if (unit > 0) {
-          revenue = unit * (it.quantity || 0) * (sumItems > 0 ? discountFactor : 1);
-          pricedFromList = true;
-        }
-      }
+      const revenue = revenues[idx] || 0;
+      const pricedFromList = false;
 
       // Direct factory shipment: sell − parent-company invoice cost. Never shop FIFO,
       // and never treat missing cost as 100% profit.

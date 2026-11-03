@@ -17,7 +17,7 @@ import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
-import { kgPerStock, lineKg } from '../accounting/fifo';
+import { goodsAmount, kgPerStock, lineKg } from '../accounting/fifo';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 import { PricePeriodService } from '../pricing/price-period.service';
@@ -1106,7 +1106,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     startOfToday.setHours(0, 0, 0, 0);
 
     const allSales = await this.invoiceModel
-      .find({ type: 'sale' }, { finalAmount: 1, totalWeightKg: 1, invoiceDate: 1, createdAt: 1 })
+      .find({ type: 'sale' }, { totalAmount: 1, finalAmount: 1, discount: 1, shippingPayer: 1, shippingCost: 1, items: 1, totalWeightKg: 1, invoiceDate: 1, createdAt: 1 })
       .lean()
       .exec();
 
@@ -1125,7 +1125,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
 
     for (const inv of allSales) {
-      const amount = inv.finalAmount || 0;
+      const amount = goodsAmount(inv);
       const weight = inv.totalWeightKg || 0;
       totalSalesAmount += amount;
       totalSalesWeightKg += weight;

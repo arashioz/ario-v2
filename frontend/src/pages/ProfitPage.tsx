@@ -104,6 +104,9 @@ export const ProfitPage: React.FC = () => {
               <TrendingUp className="w-4 h-4" />
               سود ناخالص · {period.label}
             </div>
+            <div className="mt-1 text-[12px] text-emerald-100">
+              فروش، بدون سود <span className="font-mono font-bold text-white">{formatToman(s?.revenue)}</span>
+            </div>
             <div className="mt-2 text-3xl font-bold font-mono">
               {(s?.unknownRevenue || 0) > 0 && Math.abs(s?.profit || 0) < 0.5 ? (
                 <span className="text-lg">سود نامشخص</span>
@@ -197,7 +200,7 @@ export const ProfitPage: React.FC = () => {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <StatCard icon={<Scale className="w-4 h-4" />} tone="sky" title="فروش" main={`${tons(s?.kg)} تن`} sub={formatToman(s?.revenue)} />
+            <StatCard icon={<Scale className="w-4 h-4" />} tone="sky" title="فروش، بدون سود" main={formatToman(s?.revenue)} sub={`${tons(s?.kg)} تن`} />
             <StatCard
               icon={<Truck className="w-4 h-4" />}
               tone="amber"

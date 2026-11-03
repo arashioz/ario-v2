@@ -8,7 +8,7 @@ import {
   CustomerTransactionDocument,
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
-import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg } from './fifo';
+import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg, goodsAmount } from './fifo';
 import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
@@ -209,10 +209,10 @@ export class AccountingService {
       monthChannels: this.channels(monthLines),
       creditOutstanding: r0(credit),
       work: {
-        sold: r0(sales.reduce((s, i) => s + (i.finalAmount || 0), 0)),
+        sold: r0(sales.reduce((s, i) => s + goodsAmount(i), 0)),
         soldKg: todaySummary.kg,
         invoices: sales.length,
-        factorySold: r0(sales.filter((i) => i.fulfillment === 'factory').reduce((s, i) => s + (i.finalAmount || 0), 0)),
+        factorySold: r0(sales.filter((i) => i.fulfillment === 'factory').reduce((s, i) => s + goodsAmount(i), 0)),
         factoryInvoices: sales.filter((i) => i.fulfillment === 'factory').length,
         credit: r0(sales.reduce((s, i) => s + (i.creditAmount || 0), 0)),
         creditInvoices: sales.filter((i) => (i.creditAmount ?? 0) > 0).length,
@@ -1590,15 +1590,15 @@ export class AccountingService {
    */
   async salesProgress(period: Period = {}) {
     const [sales, people, shop] = await Promise.all([
-      this.invoiceModel.find({ type: 'sale' }).select('invoiceDate finalAmount totalWeightKg createdByName').lean(),
+      this.invoiceModel.find({ type: 'sale' }).select('invoiceDate totalAmount finalAmount discount shippingPayer shippingCost items.totalPrice totalWeightKg createdByName').lean(),
       this.users.findAll(),
       this.settings.get(),
     ]);
     const inRange = sales.filter((row) => this.inPeriod(row.invoiceDate, period));
     type Bucket = { amount: number; kg: number; invoices: number };
     const empty = (): Bucket => ({ amount: 0, kg: 0, invoices: 0 });
-    const add = (b: Bucket, row: { finalAmount?: number; totalWeightKg?: number }) => {
-      b.amount += row.finalAmount || 0;
+    const add = (b: Bucket, row: { totalWeightKg?: number }) => {
+      b.amount += goodsAmount(row as FifoInvoice);
       b.kg += row.totalWeightKg || 0;
       b.invoices += 1;
     };

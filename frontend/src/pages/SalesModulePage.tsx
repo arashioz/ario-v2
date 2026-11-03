@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { IonContent, IonPage, IonRefresher, IonRefresherContent } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Check, ChevronLeft, Package, Settings2, TrendingUp, Wallet } from 'lucide-react';
+import { Building2, Check, ChevronLeft, Settings2, TrendingUp, Wallet } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
 import type { SalesBoard, SalesBoardCompany, SalesBoardInvoice, SalesBoardProduct } from '../services/accounting.service';
 import { settingsService, useSettings } from '../services/settings.service';
@@ -193,18 +193,19 @@ export const SalesModulePage: React.FC = () => {
                   <span className="block text-[11px] text-slate-400 mt-0.5">سود همان شرکت جدا از جمع کل نشان داده می‌شود</span>
                 </button>
               )}
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  [Wallet, 'خرید', weight(t.purchasedKg), 'text-amber-700 bg-amber-50'],
-                  [TrendingUp, 'فروش', weight(t.soldKg), 'text-sky-700 bg-sky-50'],
-                  [Package, 'انبار', weight(t.stockKg), 'text-slate-700 bg-slate-100'],
-                ] as const).map(([Icon, label, value, tone]) => (
-                  <div key={label} className="bg-white rounded-2xl border border-slate-100 p-3">
-                    <span className={`w-7 h-7 rounded-xl flex items-center justify-center ${tone}`}><Icon className="w-3.5 h-3.5" /></span>
-                    <div className="text-[11px] text-slate-400 mt-2">{label}</div>
-                    <div className="text-[13px] font-bold font-mono text-slate-800 mt-0.5">{value}</div>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white rounded-2xl border border-slate-100 p-3">
+                  <span className="w-7 h-7 rounded-xl flex items-center justify-center text-sky-700 bg-sky-50"><TrendingUp className="w-3.5 h-3.5" /></span>
+                  <div className="text-[11px] text-slate-400 mt-2">فروش، بدون سود</div>
+                  <div className="text-[13px] font-bold font-mono text-slate-800 mt-0.5">{formatToman(t.soldAmount)}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">{weight(t.soldKg)}</div>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 p-3">
+                  <span className="w-7 h-7 rounded-xl flex items-center justify-center text-emerald-700 bg-emerald-50"><Wallet className="w-3.5 h-3.5" /></span>
+                  <div className="text-[11px] text-slate-400 mt-2">سود همین فروش</div>
+                  <div className={`text-[13px] font-bold font-mono mt-0.5 ${profitColor(t.profit)}`}>{profitCaption(t.profit, { sold: t.soldAmount, unknown: t.unknownSold })}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">{percent(t.marginPercent)}</div>
+                </div>
               </div>
               <section className="space-y-2">
                 <div className="flex items-center justify-between px-1">
