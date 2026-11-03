@@ -178,6 +178,17 @@ export const InventoryPage: React.FC = () => {
     };
   }, [data, items]);
   const inStock = items.filter((i) => i.stockKg > 0).length;
+  const tonGaps = useMemo(() => {
+    return (data?.items ?? [])
+      .map((i) => {
+        const invoice = (i.purchasedInvoiceKg || 0) + (i.soldInvoiceKg || 0);
+        const catalog = (i.purchasedCatalogKg || 0) + (i.soldCatalogKg || 0);
+        return { id: i.productId, name: i.name, invoice, catalog };
+      })
+      .filter((g) => g.invoice > 0 && g.catalog > 0 && Math.abs(g.invoice - g.catalog) > Math.max(50, Math.max(g.invoice, g.catalog) * 0.08))
+      .sort((a, b) => Math.abs(b.invoice - b.catalog) - Math.abs(a.invoice - a.catalog))
+      .slice(0, 8);
+  }, [data]);
   const allTime = !period.from && !period.to;
 
   return (
@@ -286,6 +297,23 @@ export const InventoryPage: React.FC = () => {
                     <div className="text-xs font-bold font-mono text-slate-800 mt-0.5">
                       {formatToman(t.currentValue[k])}
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tonGaps.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-900 leading-6">
+              <b>تناژ فاکتور با وزن کاتالوگ یکی نیست</b>
+              <p className="mt-1 text-amber-800">
+                جمع خرید و فروش از وزن خود فاکتور حساب می‌شود وقتی از تعداد × وزن بسته بزرگ‌تر باشد. نگهبان سود همین اختلاف را فاکتور به فاکتور نشان می‌دهد.
+              </p>
+              <div className="mt-2 space-y-1">
+                {tonGaps.map((g) => (
+                  <div key={g.id} className="flex items-center justify-between gap-2 font-mono">
+                    <span className="font-sans font-bold truncate">{g.name}</span>
+                    <span className="shrink-0">فاکتور {tons(g.invoice)} تن · کاتالوگ {tons(g.catalog)} تن</span>
                   </div>
                 ))}
               </div>

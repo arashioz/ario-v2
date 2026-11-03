@@ -315,6 +315,33 @@ export class AccountingService {
       }
     }
 
+    // Direct factory shipments are not shop stock, but their invoice tons still belong
+    // in «کل خرید» and «فروش رفته».
+    for (const inv of f.invoices) {
+      const factoryPurchase = inv.type === 'purchase' && !stockEntersShop(inv);
+      const factorySale = inv.type === 'sale' && inv.fulfillment === 'factory';
+      if (!factoryPurchase && !factorySale) continue;
+      if (factorySale && !this.inPeriod(inv.invoiceDate, period)) continue;
+      for (const it of inv.items) {
+        if (factoryPurchase && it.received === false) continue;
+        if (!it.productId) continue;
+        const r = row(it.productId, it.productName);
+        const q = it.quantity || 0;
+        const per = kgPerStock({ unit: r.unit, weightPerUnitKg: r.weightPerUnitKg });
+        const recorded = Number(it.weightKg) || Number(it.secondaryQuantity) || 0;
+        if (factoryPurchase) {
+          r.purchasedKg += lineKg(it, f.products.get(String(it.productId)));
+          r.purchasedAmount += Number(it.totalPrice) || 0;
+          r.purchaseCount++;
+          r.purchasedInvoiceKg += recorded;
+          r.purchasedCatalogKg += per > 0 ? q * per : 0;
+        } else {
+          r.soldInvoiceKg += recorded;
+          r.soldCatalogKg += per > 0 ? q * per : 0;
+        }
+      }
+    }
+
     const prices = new Map(
       (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale').lean()).map((p: any) => [String(p._id), p]),
     );

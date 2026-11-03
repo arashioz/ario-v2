@@ -16,13 +16,14 @@ import {
   EyeOff,
   Package,
   Wallet,
+  ChevronLeft,
 } from 'lucide-react';
 import type { CustomerStats } from '../../services/customers.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import type { AccountingDashboard } from '../../services/accounting.service';
 import { PARENT_COMPANY, type SupplierAccount } from '../../services/suppliers.service';
 import { formatJalali, todayYmd } from '../../lib/jalali';
-import { formatToman, num, percent, profitCaption, weight } from '../../lib/format';
+import { formatToman, num, percent, profitCaption, tons, weight } from '../../lib/format';
 import Toman from '../../components/ui/Toman';
 import { FollowUpCard } from '../../components/followups/FollowUpCard';
 import { StickyNotesCard } from '../../components/notes/StickyNotesCard';
@@ -122,14 +123,33 @@ export const HomeBoard: React.FC<{
 
   const widgets: Record<HomeWidgetId, React.ReactNode> = {
     warehouse: (
-      <section className="relative overflow-hidden rounded-[28px] text-white shadow-[0_12px_40px_rgba(0,122,255,0.28)]">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#64D2FF] via-[#007AFF] to-[#0040DD]" />
-        <div className="pointer-events-none absolute -left-6 -top-10 h-28 w-28 rounded-full bg-white/30 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-10 right-4 h-24 w-36 rounded-full bg-white/20 blur-2xl" />
-        <div className="relative grid grid-cols-2">
-          <button type="button" onClick={openWarehouse} className="min-w-0 px-4 pt-4 pb-3.5 text-right border-l border-white/25 active:bg-white/10">
-            <span className="flex items-center justify-between gap-2">
-              <span className="text-[12px] font-semibold text-white/80">ارزش انبار</span>
+      <button
+        type="button"
+        onClick={openWarehouse}
+        className="relative block w-full overflow-hidden rounded-[28px] text-white text-right shadow-[0_12px_40px_rgba(0,122,255,0.28)] active:scale-[0.99]"
+      >
+        <span className="absolute inset-0 bg-gradient-to-br from-[#64D2FF] via-[#007AFF] to-[#0040DD]" />
+        <span className="pointer-events-none absolute -left-8 -top-12 h-32 w-32 rounded-full bg-white/30 blur-2xl" />
+        <span className="pointer-events-none absolute -bottom-12 right-0 h-28 w-40 rounded-full bg-white/15 blur-2xl" />
+        <span className="relative block px-5 pt-4 pb-4">
+          <span className="flex items-center justify-between gap-2">
+            <span className="min-w-0">
+              <span className="block text-[12px] font-semibold text-white/80">موجودی انبار</span>
+              <span className="block text-[11px] text-white/60 truncate">{defaultHouse?.name || 'انبار'}</span>
+            </span>
+            <span className="shrink-0 inline-flex items-center gap-0.5 text-[11px] font-bold text-white/90">
+              جزئیات
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </span>
+          </span>
+          <span className="mt-3 flex items-end gap-1.5">
+            <span className="text-[40px] font-bold leading-none tracking-tight">{ready ? tons(stockKg) : '—'}</span>
+            <span className="mb-1 text-[15px] font-semibold text-white/80">تن</span>
+          </span>
+          <span className="mt-3 flex items-center justify-between gap-2 border-t border-white/20 pt-3">
+            <span className="text-[12px] text-white/75">ارزش همین موجودی</span>
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-[15px] font-bold truncate">{ready ? money(stockValue) : '—'}</span>
               <span
                 role="button"
                 tabIndex={0}
@@ -150,18 +170,9 @@ export const HomeBoard: React.FC<{
                 {showStockValue ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </span>
             </span>
-            <span className="mt-2 block text-[15px] font-bold font-mono leading-6 tracking-tight break-words">
-              {ready ? money(stockValue) : '—'}
-            </span>
-          </button>
-          <button type="button" onClick={openWarehouse} className="min-w-0 px-4 pt-4 pb-3.5 text-right active:bg-white/10">
-            <span className="flex items-center h-7 text-[12px] font-semibold text-white/80">تناژ موجود</span>
-            <span className="mt-2 block text-[22px] font-bold leading-7 tracking-tight">
-              {ready ? weight(stockKg) : '—'}
-            </span>
-          </button>
-        </div>
-      </section>
+          </span>
+        </span>
+      </button>
     ),
     shortcuts: (
       <div className="bg-white rounded-3xl p-2.5 border border-sky-100 shadow-sm">

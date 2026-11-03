@@ -54,6 +54,10 @@ export interface InventoryItem {
   stockValue: number;
   currentValue: TierValues;
   purchasedKg: number;
+  purchasedInvoiceKg?: number;
+  purchasedCatalogKg?: number;
+  soldInvoiceKg?: number;
+  soldCatalogKg?: number;
   purchasedAmount: number;
   purchaseCount: number;
   avgBuyPerKg: number;
