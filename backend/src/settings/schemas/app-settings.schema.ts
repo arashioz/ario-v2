@@ -177,6 +177,10 @@ export class AppSettings {
   @Prop({ type: Object, default: () => ({}) })
   subcategoryOrder: Record<string, string[]>;
 
+  /** Company warehouses shown on the home card. Empty shows only the title. */
+  @Prop({ type: [String], default: [] })
+  homeWarehouses: string[];
+
   /** Order of product IDs on the sales screen. */
   @Prop({ type: [String], default: [] })
   productOrder: string[];

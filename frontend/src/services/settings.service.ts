@@ -228,6 +228,8 @@ export interface AppSettings {
   categoryOrder: string[];
   /** Order of subcategories per category on the sales screen. */
   subcategoryOrder: Record<string, string[]>;
+  /** Company warehouses pinned on the home card. */
+  homeWarehouses: string[];
   /** Order of product IDs on the sales screen. */
   productOrder: string[];
   /** Order and visibility of the blocks on the sales screen. */
@@ -261,6 +263,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   posView: { layout: 'grid', size: 'sm', showImages: true, showPerKg: true, showStock: true, cartPopupBeforeInvoice: false },
   categoryOrder: [],
   subcategoryOrder: {},
+  homeWarehouses: [],
   productOrder: [],
   posSections: DEFAULT_POS_SECTIONS,
   bankCards: [],
@@ -319,6 +322,7 @@ const publish = (s: AppSettings) => {
     salesView: { ...DEFAULT_SETTINGS.salesView, ...(s.salesView || {}) },
     posView: { ...DEFAULT_SETTINGS.posView, ...(s.posView || {}) },
     backup: { ...DEFAULT_SETTINGS.backup, ...(s.backup || {}) },
+    homeWarehouses: Array.isArray(s.homeWarehouses) ? s.homeWarehouses : [],
     categoryOrder: Array.isArray(s.categoryOrder) ? s.categoryOrder : [],
     subcategoryOrder: typeof s.subcategoryOrder === 'object' && s.subcategoryOrder ? s.subcategoryOrder : {},
     productOrder: Array.isArray(s.productOrder) ? s.productOrder : [],

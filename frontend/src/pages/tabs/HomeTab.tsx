@@ -12,14 +12,16 @@ import { useAuth } from '../../context/AuthContext';
 import { customersService } from '../../services/customers.service';
 import type { CustomerStats } from '../../services/customers.service';
 import { productsService } from '../../services/products.service';
-import type { Product, ProductStats } from '../../services/products.service';
+import type { Product } from '../../services/products.service';
 import { invoicesService } from '../../services/invoices.service';
 import type { InvoiceStats } from '../../services/invoices.service';
 import { accountingService } from '../../services/accounting.service';
 import type { AccountingDashboard } from '../../services/accounting.service';
 import { formatJalali, jalaliMonthRange, todayYmd, ymdToJalali } from '../../lib/jalali';
 import { JalaliDateSheet } from '../../components/ui/JalaliDatePicker';
-import { formatToman, num, percent, tons, weight } from '../../lib/format';
+import { formatToman, num, percent, weight } from '../../lib/format';
+import { Bone } from '../../components/ui/Skeleton';
+import { useSettings } from '../../services/settings.service';
 import { suppliersService } from '../../services/suppliers.service';
 import type { SupplierAccount } from '../../services/suppliers.service';
 import Toman from '../../components/ui/Toman';
@@ -33,11 +35,7 @@ import {
   AlertCircle,
   ShieldCheck,
   Briefcase,
-  Wallet,
   Tag,
-  Scale,
-  Boxes,
-  Warehouse,
   MapPin,
   BarChart3,
   CreditCard,
@@ -45,6 +43,7 @@ import {
   TrendingUp,
   Hourglass,
   Flame,
+  ChevronLeft,
   Building2,
   Eye,
   EyeOff,
@@ -55,12 +54,13 @@ import { useNavigate } from 'react-router-dom';
 export const HomeTab: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const settings = useSettings();
 
   const [customerStats, setCustomerStats] = useState<CustomerStats | null>(null);
-  const [productStats, setProductStats] = useState<ProductStats | null>(null);
   const [goods, setGoods] = useState<Product[]>([]);
   const [invoiceStats, setInvoiceStats] = useState<InvoiceStats | null>(null);
   const [acc, setAcc] = useState<AccountingDashboard | null>(null);
+  const [ready, setReady] = useState(false);
   const [supplier, setSupplier] = useState<SupplierAccount | null>(null);
   const [chartDay, setChartDay] = useState<number | null>(null);
   const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
@@ -75,9 +75,8 @@ export const HomeTab: React.FC = () => {
     try {
       const today = homeDate;
       const j = ymdToJalali(today);
-      const [cStats, pStats, iStats, aStats, sAcc, catalog] = await Promise.all([
+      const [cStats, iStats, aStats, sAcc, catalog] = await Promise.all([
         customersService.getCustomerStats().catch(() => null),
-        productsService.getStats().catch(() => null),
         invoicesService.getStats().catch(() => null),
         accountingService.dashboard(today, jalaliMonthRange(j.jy, j.jm).from).catch(() => null),
         suppliersService.account().catch(() => null),
@@ -86,11 +85,12 @@ export const HomeTab: React.FC = () => {
       if (aStats) setAcc(aStats);
       if (sAcc) setSupplier(sAcc);
       if (cStats) setCustomerStats(cStats);
-      if (pStats) setProductStats(pStats);
       if (iStats) setInvoiceStats(iStats);
       setGoods(catalog);
     } catch (e) {
       console.warn('Stats load error', e);
+    } finally {
+      setReady(true);
     }
   }, [homeDate]);
 
@@ -114,19 +114,27 @@ export const HomeTab: React.FC = () => {
   };
 
   const homeWarehouses = useMemo(() => {
+    const picked = new Set(settings.homeWarehouses || []);
     const rows = new Map<string, { count: number; kg: number }>();
     for (const product of goods) {
-      const name = product.category || 'عمومی';
+      const name = (product.supplierName || '').trim() || 'بدون شرکت';
+      if (!picked.has(name)) continue;
       const row = rows.get(name) || { count: 0, kg: 0 };
       const perKg = product.weightPerUnitKg || (product.unit === 'کیلوگرم' ? 1 : 0);
       row.count += 1;
       row.kg += (product.stock || 0) * perKg;
       rows.set(name, row);
     }
-    return [...rows.entries()]
-      .map(([name, row]) => ({ name, ...row }))
-      .sort((a, b) => b.kg - a.kg || a.name.localeCompare(b.name, 'fa'));
-  }, [goods]);
+    const order = settings.homeWarehouses || [];
+    return order
+      .map((name) => {
+        const row = rows.get(name);
+        return row ? { name, ...row } : null;
+      })
+      .filter((row): row is { name: string; count: number; kg: number } => !!row);
+  }, [goods, settings.homeWarehouses]);
+
+  const featured = homeWarehouses[0];
 
   const chartData = invoiceStats?.chartData || [];
   const maxVal = Math.max(
@@ -200,47 +208,22 @@ export const HomeTab: React.FC = () => {
             {formatJalali(homeDate, { weekday: true })}
           </button>
 
-          <section className="rounded-3xl bg-white border border-sky-100 shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-l from-sky-700 to-indigo-700 text-white px-4 py-3 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-bold flex items-center gap-1.5">
-                <Boxes className="w-4 h-4" />
-                انبارها
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <button type="button" onClick={() => navigate('/inventory')} className="text-[11px] font-bold bg-white/15 px-2.5 py-1 rounded-xl">جزئیات</button>
-                <button type="button" onClick={() => navigate('/warehouses')} className="text-[11px] font-bold bg-white text-sky-800 px-2.5 py-1 rounded-xl">همه انبارها</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-px bg-slate-100">
-              <button type="button" onClick={() => navigate('/inventory')} className="bg-white px-3 py-2.5 text-right">
-                <span className="text-[10px] text-slate-400 flex items-center gap-1"><Scale className="w-3 h-3" />موجودی کل</span>
-                <span className="block text-sm font-bold font-mono text-slate-800 mt-0.5">{acc ? `${num(acc.stockKg, 1)} کیلو` : '...'}</span>
-                <span className="text-[10px] text-slate-400">{acc ? `${tons(acc.stockKg)} تن` : ''} · {productStats ? num(productStats.totalProducts) : num(goods.length)} قلم</span>
-              </button>
-              <button type="button" onClick={() => navigate('/inventory')} className="bg-white px-3 py-2.5 text-right">
-                <span className="text-[10px] text-slate-400 flex items-center gap-1"><Wallet className="w-3 h-3" />ارزش عمده</span>
-                <span className="block text-sm font-bold font-mono text-slate-800 mt-0.5">{acc?.currentValue ? formatToman(acc.currentValue.wholesale) : '...'}</span>
-              </button>
-            </div>
-            <div className="p-2 space-y-1.5">
-              {homeWarehouses.length === 0 ? (
-                <button type="button" onClick={() => navigate('/warehouses')} className="w-full rounded-2xl border border-dashed border-sky-200 py-4 text-xs text-slate-400">انبارها بعد از دریافت کالاها اینجا می‌آیند</button>
-              ) : homeWarehouses.map((house) => (
-                <button
-                  key={house.name}
-                  type="button"
-                  onClick={() => navigate(`/warehouses?open=${encodeURIComponent(house.name)}`)}
-                  className="w-full flex items-center justify-between gap-2 rounded-2xl bg-slate-50 px-3 py-2.5 text-right active:bg-sky-50"
-                >
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-slate-800"><Warehouse className="w-3.5 h-3.5 text-indigo-600 shrink-0" />انبار {house.name}</span>
-                    <span className="block text-[10px] text-slate-400 mt-0.5">{num(house.count)} کالا</span>
-                  </span>
-                  <span className="text-[11px] font-mono font-bold text-sky-800 shrink-0">{weight(house.kg)}</span>
-                </button>
-              ))}
-            </div>
-          </section>
+          <button
+            type="button"
+            onClick={() => navigate(featured ? `/warehouses?open=${encodeURIComponent(featured.name)}` : '/warehouses')}
+            className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-3.5 py-3 flex items-center justify-between gap-3 text-right active:bg-slate-50"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] font-bold text-slate-800">انبار</span>
+              <span className="block text-[11px] text-slate-400 mt-0.5 truncate">
+                {!ready ? <Bone className="h-3 w-36" /> : !featured ? 'از تنظیمات یک شرکت انتخاب کنید' : `${featured.name} · ${weight(featured.kg)}${homeWarehouses.length > 1 ? ` · ${num(homeWarehouses.length - 1)} شرکت دیگر` : ''}`}
+              </span>
+            </span>
+            <span className="flex items-center gap-0.5 text-[12px] font-bold text-sky-700 shrink-0">
+              جزئیات
+              <ChevronLeft className="w-4 h-4" />
+            </span>
+          </button>
 
           <div className="bg-white rounded-3xl p-2.5 border border-sky-100 shadow-sm">
             <div className="grid grid-cols-4 gap-1">

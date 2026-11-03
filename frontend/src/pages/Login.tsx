@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { IonPage, IonContent } from '@ionic/react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { LoadingOverlay } from '../components/LoadingOverlay';
+import { SplashScreen } from '../components/SplashScreen';
 import { Lock, User, Eye, EyeOff, ShieldCheck, Briefcase, ArrowLeft } from 'lucide-react';
 
 interface LoginProps {
@@ -78,7 +78,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   return (
     <IonPage className="login-page">
       <IonContent fullscreen className="ion-padding">
-        <LoadingOverlay isOpen={isSubmitting} message="در حال تأیید اطلاعات کاربری..." />
+        {isSubmitting && <SplashScreen message="در حال ورود…" />}
 
         <div className="login-shell flex flex-col justify-between py-6 px-4 max-w-md mx-auto relative select-none">
 

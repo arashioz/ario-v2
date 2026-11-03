@@ -528,7 +528,9 @@ export class ProductsService implements OnModuleInit {
     const skipped: string[] = [];
     for (const product of products) {
       try {
-        changes.push({ product, tiers: channelPrices(product, next) });
+        const source = typeof product.toObject === 'function' ? product.toObject() : product;
+        const priced = next.unit === 'kg' ? { ...source, basePrice: next.amount } : source;
+        changes.push({ product, tiers: channelPrices(priced, next) });
       } catch {
         skipped.push(product.name);
       }
@@ -691,6 +693,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     product.stock = newStock;
+    product.stockAdjust = (product.stockAdjust || 0) + dto.quantityChange;
     return product.save();
   }
 

@@ -29,7 +29,6 @@ function load(file, dependencies) {
 }
 const apiModule = load('frontend/src/services/api.ts', {
   axios,
-  './pageActivity': load('frontend/src/services/pageActivity.ts', {}),
   './confirmPassword': { askPassword: () => { throw Error('Unexpected password prompt'); } },
 });
 

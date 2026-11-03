@@ -119,8 +119,8 @@ const REPORTS: Item[] = [
   },
   {
     path: '/warehouses',
-    title: 'انبارهای جدا',
-    desc: 'انبار قند، روغن و هر دسته با خرید و فروش خودش',
+    title: 'انبار شرکت‌ها',
+    desc: 'کالا، خرید و فروش هر شرکت و اصلاح موجودی',
     icon: Boxes,
     tone: 'bg-indigo-100 text-indigo-700',
   },

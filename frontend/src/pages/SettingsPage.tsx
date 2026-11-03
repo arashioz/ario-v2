@@ -33,6 +33,7 @@ import { SmsTemplatesSettings } from '../components/settings/SmsTemplatesSetting
 import { PosSectionsSettings } from '../components/settings/PosSectionsSettings';
 import { BackupSettings } from '../components/settings/BackupSettings';
 import { CustomerPlanSettings } from '../components/settings/CustomerPlanSettings';
+import { HomeWarehouseSettings } from '../components/settings/HomeWarehouseSettings';
 
 const LAYOUTS: { id: PosLayout; label: string; icon: React.ElementType }[] = [
   { id: 'grid', label: 'کارتی', icon: LayoutGrid },
@@ -370,10 +371,13 @@ export const SettingsPage: React.FC = () => {
       <IonContent fullscreen className="bg-slate-50">
         <div className="p-3 space-y-4 max-w-md mx-auto pb-8">
           {isAdmin && (
-            <Link to="/warehouses" className="block rounded-2xl bg-white border border-indigo-100 px-4 py-3 text-sm font-bold text-indigo-800">
-              انبارهای جدا
-              <span className="block text-[11px] font-normal text-slate-500 mt-1">موجودی، تاریخ خرید و فاکتورهای خرید و فروش هر دسته</span>
-            </Link>
+            <>
+              <Link to="/warehouses" className="block rounded-2xl bg-white border border-slate-200 px-4 py-3 text-sm font-bold text-slate-800">
+                انبار شرکت‌ها
+                <span className="block text-[11px] font-normal text-slate-500 mt-1">کالا، خرید و فروش هر شرکت، با کم و زیاد کردن موجودی</span>
+              </Link>
+              <HomeWarehouseSettings />
+            </>
           )}
           {isAdmin && <CustomerPlanSettings />}
           {!adminPart && <Group title="صفحه فروش">

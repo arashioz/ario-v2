@@ -27,6 +27,7 @@ export interface FactoryLine {
   sellPrice: number;
   priceWholesale: number;
   kgPerUnit: number;
+  category?: string;
 }
 
 export interface CheckoutResult {
@@ -103,6 +104,7 @@ export const CheckoutSheet: React.FC<Props> = ({
   const [costError, setCostError] = useState('');
   const editedCosts = useRef(new Set<string>());
   const [sellPrices, setSellPrices] = useState<Record<string, number>>({});
+  const [useBasePrice, setUseBasePrice] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const factoryOn = !!settings.factorySalesEnabled;
 
@@ -123,6 +125,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setFactoryCosts({});
     editedCosts.current.clear();
     setSellPrices(Object.fromEntries(factoryLines.map((l) => [l.productId, l.sellPrice || 0])));
+    setUseBasePrice(saleType === 'wholesale');
     if (bulk) setTimeout(() => searchRef.current?.focus(), 120);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -163,10 +166,25 @@ export const CheckoutSheet: React.FC<Props> = ({
 
   const pricingFactory = factoryOn && fulfillment === 'factory';
   const editingPrices = bulk && asProforma;
+  const percentOf = (category?: string) => {
+    const rule = settings.categoryBasePrices.find((row) => row.category === category);
+    const raw = saleType === 'supermarket' ? rule?.supermarketPercent
+      : saleType === 'wholesale' ? rule?.wholesalePercent
+      : saleType === 'distributor' ? rule?.distributorPercent
+      : rule?.retailPercent;
+    return Math.min(1000, Math.max(0, Number(raw) || 0));
+  };
+  const pricedUnit = (line: FactoryLine) => {
+    const catalog = sellPrices[line.productId] ?? line.sellPrice;
+    if (!(pricingFactory && useBasePrice)) return catalog;
+    const cost = factoryCosts[line.productId] || 0;
+    return cost > 0 ? Math.round(cost * (1 + percentOf(line.category) / 100)) : catalog;
+  };
   const goodsTotal = useMemo(() => {
+    if (pricingFactory && useBasePrice) return factoryLines.reduce((sum, line) => sum + Math.round(line.quantity * pricedUnit(line)), 0);
     if (!editingPrices) return subtotal;
     return factoryLines.reduce((s, l) => s + Math.round(l.quantity * (sellPrices[l.productId] ?? l.sellPrice)), 0);
-  }, [editingPrices, factoryLines, sellPrices, subtotal]);
+  }, [pricingFactory, useBasePrice, editingPrices, factoryLines, sellPrices, subtotal, factoryCosts, settings.categoryBasePrices, saleType]);
 
   if (!open) return null;
 
@@ -243,7 +261,9 @@ export const CheckoutSheet: React.FC<Props> = ({
       fulfillment: fromFactory ? 'factory' : 'shop',
       branchName: branches.includes(branch) ? branch : undefined,
       factoryUnitCosts: fromFactory ? factoryCosts : undefined,
-      factorySellPrices: bulk && asProforma ? sellPrices : undefined,
+      factorySellPrices: fromFactory && useBasePrice
+        ? Object.fromEntries(factoryLines.map((line) => [line.productId, pricedUnit(line)]))
+        : bulk && asProforma ? sellPrices : undefined,
     });
   };
 
@@ -491,6 +511,21 @@ export const CheckoutSheet: React.FC<Props> = ({
           </span>
         </button>
       )}
+      {pricingFactory && bulk && (
+        <button
+          type="button"
+          onClick={() => setUseBasePrice((on) => !on)}
+          className={`w-full flex items-center justify-between rounded-2xl border px-3 py-2.5 ${useBasePrice ? 'bg-white border-slate-300' : 'bg-white border-slate-200'}`}
+        >
+          <span className="text-right">
+            <span className="block text-xs font-bold text-slate-800">قیمت پایه</span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">قیمت کارخانه به‌علاوه درصد سود {SALE_TYPE_LABELS[saleType]}، روی فاکتور فروش ثبت می‌شود</span>
+          </span>
+          <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${useBasePrice ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-300'}`}>
+            {useBasePrice && <Check className="w-3.5 h-3.5" />}
+          </span>
+        </button>
+      )}
 
       <PaymentTermsForm
         terms={terms}
@@ -525,14 +560,16 @@ export const CheckoutSheet: React.FC<Props> = ({
         {(pricingFactory || editingPrices) && (
           <div className="space-y-2 pt-1">
             {pricingFactory && (
-              <p className="text-[10px] text-amber-800 leading-5">
-                قیمت نمایش به مشتری همان قیمت آریو است و عوض نمی‌شود. قیمت کارخانه فقط بهای خرید شرکت مادر است و روی فاکتور مشتری نمی‌آید.
+              <p className="text-[10px] text-slate-500 leading-5">
+                {useBasePrice
+                  ? 'قیمت مشتری از قیمت کارخانهٔ همین کالا و درصد سود دسته حساب می‌شود و در فاکتور فروش می‌نشیند. قیمت کارخانه روی فاکتور مشتری نمی‌آید.'
+                  : 'قیمت مشتری همان قیمت سبد است. قیمت کارخانه فقط بهای خرید شرکت مادر است.'}
               </p>
             )}
             {pricingFactory && costError && <p role="alert" className="text-xs text-rose-700">{costError}</p>}
             {factoryLines.map((l) => {
               const cost = factoryCosts[l.productId] || 0;
-              const sell = l.sellPrice;
+              const sell = pricedUnit(l);
               const lineProfit = Math.round(l.quantity * sell) - Math.round(l.quantity * cost);
               return (
                 <div key={l.productId} className="rounded-xl bg-white border border-amber-100 p-2 space-y-1.5">
@@ -554,7 +591,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                   )}
                   {pricingFactory && (
                     <>
-                      <div className="text-[11px] text-slate-700">قیمت آریو به مشتری: <b className="font-mono">{formatToman(sell)}</b></div>
+                      <div className="text-[11px] text-slate-700">قیمت مشتری: <b className="font-mono">{formatToman(sell)}</b>{useBasePrice ? ` · سود ${num(percentOf(l.category))}٪` : ''}</div>
                       <div className={`text-[10px] font-mono font-bold ${lineProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                         سود این ردیف {formatToman(lineProfit)}
                       </div>
@@ -570,7 +607,7 @@ export const CheckoutSheet: React.FC<Props> = ({
                   {formatToman(
                     factoryLines.reduce((s, l) => {
                       const cost = (factoryCosts[l.productId] || 0) * l.quantity;
-                      const sell = l.sellPrice * l.quantity;
+                      const sell = pricedUnit(l) * l.quantity;
                       return s + Math.round(sell - cost);
                     }, 0),
                   )}

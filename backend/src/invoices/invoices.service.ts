@@ -338,6 +338,38 @@ export class InvoicesService implements OnApplicationBootstrap {
     return found;
   }
 
+  /** A zero customer price on a factory sale becomes the factory cost plus that channel's percent. */
+  private channelPercent(rule: { retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number } | undefined, saleType?: string) {
+    const raw = !rule ? 0
+      : saleType === 'supermarket' ? rule.supermarketPercent
+      : saleType === 'wholesale' ? rule.wholesalePercent
+      : saleType === 'distributor' ? rule.distributorPercent
+      : rule.retailPercent;
+    return Math.min(1000, Math.max(0, Math.round(Number(raw) || 0)));
+  }
+
+  private async fillFactorySalePrices(items: { productId: any; quantity?: number; unitPrice?: number; totalPrice?: number; factoryUnitCost?: number }[], dto: CreateInvoiceDto) {
+    const missing = items.filter((it) => !(Number(it.unitPrice) > 0) && Number(it.factoryUnitCost) > 0);
+    if (!missing.length) return;
+    const ids = missing.map((it) => it.productId).filter((id) => Types.ObjectId.isValid(String(id)));
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category').lean() : [];
+    const category = new Map(products.map((p) => [String(p._id), p.category]));
+    const settings = await this.settingsService.get();
+    for (const it of missing) {
+      const rule = (settings.categoryBasePrices || []).find((row) => row.category === category.get(String(it.productId)));
+      const percent = this.channelPercent(rule, dto.saleType);
+      it.unitPrice = Math.round(Number(it.factoryUnitCost) * (1 + percent / 100));
+      it.totalPrice = Math.round((it.quantity || 0) * it.unitPrice);
+    }
+    if (!(dto.totalAmount > 0)) {
+      const goods = items.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
+      const discount = Math.max(0, Math.round(Number(dto.discount) || 0));
+      const shipping = dto.shippingPayer === 'customer' ? Math.max(0, Math.round(Number(dto.shippingCost) || 0)) : 0;
+      dto.totalAmount = goods;
+      dto.finalAmount = Math.max(0, goods - discount) + shipping;
+    }
+  }
+
   /**
    * Direct factory sale: the parent company invoiced Ario, the goods never entered the shop,
    * and the customer invoice is what Ario sends. Stock is untouched on both sides.
@@ -384,7 +416,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       factorySaleId: String(sale._id),
       shippingPayer: 'none',
       shippingCost: 0,
-      notes: `ارسال مستقیم از کارخانه برای فاکتور ${sale.invoiceNumber}. از موجودی آریو کم نشده.`,
+      notes: `ارسال مستقیم از کارخانه برای ${sale.customerName || 'مشتری'}، فاکتور ${sale.invoiceNumber}. از موجودی آریو کم نشده.`,
       createdByName: recordedByName || sale.createdByName || 'مدیر سیستم',
     };
 
@@ -609,7 +641,10 @@ export class InvoicesService implements OnApplicationBootstrap {
     const fromFactory = isSale && dto.fulfillment === 'factory';
     if (fromFactory) await this.assertFactoryEnabled();
     const { items, totalWeightKg } = await this.prepareItems(dto.items, isSale && !fromFactory, isSale ? undefined : dto.customerName);
-    if (fromFactory) for (const it of items) it.factoryCostConfirmed = true;
+    if (fromFactory) {
+      for (const it of items) it.factoryCostConfirmed = true;
+      await this.fillFactorySalePrices(items, dto);
+    }
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const branchName = this.branchName(customer, dto.branchName);
     // Purchases on credit go on the supplier's account (see SuppliersService).
@@ -715,7 +750,10 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
     if (willShopSale) await this.shiftStock(prepared.items, -1);
     else if (willShopPurchase) await this.shiftStock(prepared.items, 1, true);
-    if (willFactory && isSale) for (const it of prepared.items) it.factoryCostConfirmed = true;
+    if (willFactory && isSale) {
+      for (const it of prepared.items) it.factoryCostConfirmed = true;
+      await this.fillFactorySalePrices(prepared.items, dto);
+    }
 
     const customer = isSale ? await this.resolveCustomer(dto) : null;
     const branchName = this.branchName(customer, dto.branchName ?? invoice.branchName);

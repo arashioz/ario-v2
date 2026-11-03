@@ -93,6 +93,20 @@ const useRevealStuckPage = () => {
 export const TabsLayout: React.FC = () => {
   useRevealStuckPage();
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void import('./tabs/CustomersTab');
+      void import('./tabs/PosTab');
+      void import('./tabs/InvoicesTab');
+      void import('./tabs/MoreTab');
+      void import('./WarehousesPage');
+      void import('./ProductsPage');
+      void import('./SettingsPage');
+      void import('./InventoryPage');
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
     <IonTabs>
       <IonRouterOutlet>

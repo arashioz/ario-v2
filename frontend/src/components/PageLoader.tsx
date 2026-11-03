@@ -1,7 +1,6 @@
-import React, { useLayoutEffect } from 'react';
+import React from 'react';
 import { IonContent, IonPage } from '@ionic/react';
-import { PageSkeleton } from './ui/Skeleton';
-import { pageActivity } from '../services/pageActivity';
+import { SplashScreen } from './SplashScreen';
 
 /**
  * Suspense fallback for a lazily loaded page. It must NOT render an `IonPage`:
@@ -12,10 +11,7 @@ import { pageActivity } from '../services/pageActivity';
  * which is what turned cold starts (and slow chunk loads) into a white screen.
  * The splash is portalled to <body>, so it covers the outlet without being a page.
  */
-export const PageLoader: React.FC = () => {
-  useLayoutEffect(() => pageActivity.begin(), []);
-  return <PageSkeleton />;
-};
+export const PageLoader: React.FC = () => <SplashScreen message="در حال باز کردن صفحه…" />;
 
 /** A failed chunk download must offer recovery, rather than leave a blank screen. */
 export class PageLoadBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {

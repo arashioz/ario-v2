@@ -9,10 +9,10 @@ import { enqueueOrder, sendOrder, ORDERS_SYNCED, reserveQueuedStock, pendingOrde
 import { proformasService, type Proforma } from '../../services/proformas.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
-import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { InvoiceDateModal } from '../../components/pos/InvoiceDateModal';
 import { InvoiceDetailModal } from '../../components/invoices/InvoiceDetailModal';
 import { ProductBrowser } from '../../components/pos/ProductBrowser';
+import { CardGridSkeleton } from '../../components/ui/Skeleton';
 import { QuantitySheet } from '../../components/pos/QuantitySheet';
 import { Sheet } from '../../components/ui/Sheet';
 import { CheckoutSheet, type CheckoutResult } from '../../components/pos/CheckoutSheet';
@@ -190,12 +190,13 @@ export const PosTab: React.FC = () => {
     }
   };
 
-  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, branchName, customerName, customerPhone }: CheckoutResult) => {
+  const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName, customerName, customerPhone }: CheckoutResult) => {
     if (!hasInvoiceType || !lines.length || submittingRef.current) return;
     submittingRef.current = true;
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
-      const unitPrice = Math.round(base.unitPrice);
+      const quoted = factorySellPrices?.[l.product._id];
+      const unitPrice = Math.round(fulfillment === 'factory' && quoted != null ? quoted : base.unitPrice);
       return {
         ...base,
         unitPrice,
@@ -424,14 +425,13 @@ export const PosTab: React.FC = () => {
       </IonHeader>
 
       <IonContent className="pos-content">
-        <LoadingOverlay isOpen={loading && !products.length} message="در حال دریافت کالاها..." />
-
         <div className={`pos-workspace p-3 max-w-md mx-auto ${lines.length ? 'pb-24' : 'pb-6'}`}>
           {tiersBlock}
           <p id="pos-product-instruction" role="status" className="mb-3 px-1 text-xs text-slate-500">
             {hasInvoiceType ? 'محصولات سفارش را انتخاب کنید' : 'برای فعال شدن محصولات، ابتدا نوع فاکتور را از بالا انتخاب کنید.'}
           </p>
           {!loading && !products.length && <button onClick={() => void loadData()} className="mb-3 text-xs text-white underline">دریافت دوبارهٔ کالاها</button>}
+          {loading && !products.length ? <CardGridSkeleton /> : (
           <fieldset disabled={!hasInvoiceType} aria-describedby="pos-product-instruction" className={`m-0 min-w-0 border-0 p-0 ${hasInvoiceType ? '' : 'pos-products-locked'}`}>
           <legend className="sr-only">محصولات سفارش</legend>
           <ProductBrowser
@@ -448,6 +448,7 @@ export const PosTab: React.FC = () => {
             ignoreStock={fromFactory}
           />
           </fieldset>
+          )}
         </div>
 
         {lines.length > 0 && (
@@ -521,6 +522,7 @@ export const PosTab: React.FC = () => {
             quantity: l.quantity,
             buyPrice: l.product.buyPrice || 0,
             sellPrice: l.unitPrice,
+            category: l.product.category,
             priceWholesale: l.product.priceWholesale || 0,
             kgPerUnit: kgPerUnit(l.product),
           }))}

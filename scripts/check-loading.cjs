@@ -15,29 +15,21 @@ function load(file, dependencies, globals = {}) {
   });
   return module.exports;
 }
-const activityModule = load('frontend/src/services/pageActivity.ts', {});
-const { pageActivity } = activityModule;
 const { api } = load('frontend/src/services/api.ts', {
-  axios, './pageActivity': activityModule, './confirmPassword': {},
+  axios, './confirmPassword': {},
 }, { localStorage: { getItem: () => null }, window: new EventTarget(), Event });
-let location = { key: 'first', pathname: '/products', search: '', hash: '' };
 let state;
 let dependencies;
 let effect;
 let cleanup;
 let rerender;
 let bootRemovals = 0;
-let nextTimer = 1;
-const timers = new Map();
-const schedule = (callback) => { const id = nextTimer++; timers.set(id, callback); return id; };
-const cancel = (id) => timers.delete(id);
 const React = {
   createElement: (type, props) => ({ type, props }),
   useState: (initial) => {
     state ??= initial;
-    return [state, (next) => { state = next; rerender = true; }];
+    return [state, (next) => { state = typeof next === 'function' ? next(state) : next; rerender = true; }];
   },
-  useSyncExternalStore: (_subscribe, snapshot) => snapshot(),
   useLayoutEffect: (callback, deps) => {
     if (!dependencies || deps.some((dep, i) => !Object.is(dep, dependencies[i]))) {
       dependencies = deps;
@@ -47,12 +39,8 @@ const React = {
 };
 const { NavigationSplash } = load('frontend/src/components/NavigationSplash.tsx', {
   react: React,
-  'react-router-dom': { useLocation: () => location },
-  '../services/pageActivity': activityModule,
   './SplashScreen': { SplashScreen: 'SplashScreen' },
 }, {
-  window: { setTimeout: schedule }, clearTimeout: cancel,
-  requestAnimationFrame: schedule, cancelAnimationFrame: cancel,
   document: { getElementById: () => ({ remove: () => bootRemovals++ }) },
 });
 function render() {
@@ -61,51 +49,26 @@ function render() {
   if (effect) { cleanup?.(); const run = effect; effect = null; cleanup = run(); }
   return tree;
 }
-function paint() {
-  for (const [id, callback] of [...timers]) { timers.delete(id); callback(); }
-}
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 async function main() {
-  const lazyDone = pageActivity.begin();
-  assert.ok(render(), 'Initial route shows the full splash');
-  paint(); paint();
-  assert.ok(render(), 'An unresolved page must keep the splash visible');
+  assert.ok(render(), 'The first paint still shows the splash');
+  assert.equal(render(), null, 'The splash leaves as soon as the app is mounted');
+  assert.equal(bootRemovals, 1, 'The static boot screen is removed once');
+  assert.equal(render(), null, 'Moving to another page does not bring the splash back');
+
   let finish;
   api.defaults.adapter = (config) => new Promise((resolve) => { finish = () => resolve({ config, data: [], status: 200 }); });
   const request = api.get('/products');
   await flush();
-  lazyDone(); lazyDone();
-  assert.equal(pageActivity.getSnapshot(), 1, 'A repeated release cannot end another request');
-  assert.ok(render());
-  finish(); await request;
-  assert.equal(pageActivity.getSnapshot(), 0);
-  render(); paint(); paint();
-  assert.equal(render(), null, 'Ready data dismisses the splash');
-  assert.equal(bootRemovals, 1, 'Static boot stays until the app is ready');
+  finish();
+  await request;
+  assert.equal(render(), null, 'A request in flight does not cover the page');
 
-  location = { ...location, key: 'next', pathname: '/workshop' };
-  assert.ok(render(), 'Even cached page navigation starts with a splash');
-  const done = pageActivity.begin();
-  render(); paint(); paint();
-  assert.ok(render(), 'New work cancels a previously scheduled dismissal');
-  done(); render(); paint(); paint();
-  assert.equal(render(), null);
-
-  location = { ...location, key: 'back', pathname: '/products' };
-  api.defaults.adapter = async (config) => { throw { config, response: { status: 503 } }; };
-  const failed = api.get('/products').catch(() => undefined);
-  render(); await failed;
-  assert.equal(pageActivity.getSnapshot(), 0, 'Failures release the loader');
-  render(); paint(); paint();
-  assert.equal(render(), null, 'Failures reveal the page error/retry UI');
-
-  location = { ...location, key: 'slow', pathname: '/workshop' };
-  assert.ok(render());
-  location = { ...location, key: 'back', pathname: '/products' };
-  assert.ok(render(), 'Returning during a transition must start a fresh splash');
-  paint(); paint(); assert.equal(render(), null);
   const html = fs.readFileSync('frontend/index.html', 'utf8');
   assert.ok(html.indexOf('id="boot"') < html.indexOf('id="root"'), 'Boot survives React mounting');
-  console.log('PASS: cold start, lazy pages, pending data, cached navigation, quick back, errors, and boot handoff.');
+  const loader = fs.readFileSync('frontend/src/components/PageLoader.tsx', 'utf8');
+  assert.match(loader, /export const PageLoader[^\n]*=[\s\S]*SplashScreen/, 'A missing chunk uses the splash, not a blank page');
+  assert.ok(!loader.includes('pageActivity'), 'Chunk loading must not hold later pages');
+  console.log('PASS: boot splash, instant later routes, and requests that do not cover the page.');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
