@@ -87,6 +87,17 @@ export class Product {
   @Prop({ required: true, default: 0 })
   buyPrice: number;
 
+  /**
+   * Announced unit price for factory shipments (to customers and the factory).
+   * Cost remains last factory invoice; profit is this minus that cost.
+   */
+  @Prop({ default: 0, min: 0 })
+  agencyBasePrice?: number;
+
+  /** Toman added to the last factory invoice to make agencyBasePrice, e.g. 5000. */
+  @Prop({ default: 0, min: 0 })
+  agencyGap?: number;
+
   /** Quantity-weighted average landed buy price, rebuilt from invoices. */
   @Prop({ default: 0 })
   avgBuyPrice?: number;

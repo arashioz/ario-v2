@@ -63,7 +63,7 @@ export class ProductsController {
 
   @Post('channel-prices')
   async channelPrices(
-    @Body() body: { items?: { productId: string; retail: number; supermarket: number; wholesale: number }[] },
+    @Body() body: { items?: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number }[] },
     @Request() req: any,
   ) {
     return this.productsService.applyChannelPrices(body?.items || [], req.user?.fullName || req.user?.username || 'کاربر سیستم');

@@ -29,6 +29,7 @@ export class PerformanceSnapshot {
   @Prop({ type: Date }) rebuiltAt?: Date;
   @Prop({ default: false }) auto?: boolean;
   @Prop({ trim: true, default: '' }) lastComputedDay?: string;
+  @Prop({ trim: true, default: '' }) lastNightlyDay?: string;
 }
 
 export const PerformanceSnapshotSchema = SchemaFactory.createForClass(PerformanceSnapshot);

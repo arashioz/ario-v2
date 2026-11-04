@@ -351,7 +351,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   async priceBoard(company?: string) {
     const products = await this.productModel
       .find({ isActive: { $ne: false } })
-      .select('name category unit supplierName weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale')
+      .select('name category unit supplierName weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale agencyBasePrice agencyGap')
       .sort({ name: 1 })
       .lean();
     const companyOf = (name?: string) => {
@@ -409,6 +409,8 @@ export class InvoicesService implements OnApplicationBootstrap {
           weightPerUnitKg: p.weightPerUnitKg || 0,
           buyPrice: Math.round(p.buyPrice || 0),
           lastPurchase: latest.get(id) || null,
+          agencyBasePrice: Math.round(p.agencyBasePrice || 0),
+          agencyGap: Math.round(p.agencyGap || 0),
           retail,
           supermarket: Math.round(p.priceSupermarket || retail),
           wholesale: Math.round(p.priceWholesale || retail),
@@ -474,18 +476,17 @@ export class InvoicesService implements OnApplicationBootstrap {
     const missing = items.filter((it) => !(Number(it.unitPrice) > 0));
     if (!missing.length) return;
     const ids = [...new Set(items.map((it) => it.productId).filter((id) => Types.ObjectId.isValid(String(id))))];
-    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category sellPrice priceRetail priceSupermarket priceWholesale priceDistributor buyPrice').lean() : [];
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category sellPrice priceRetail priceSupermarket priceWholesale priceDistributor buyPrice agencyBasePrice agencyGap').lean() : [];
     const byId = new Map(products.map((p) => [String(p._id), p]));
-    const settings = await this.settingsService.get();
     let filled = false;
     for (const it of missing) {
       const product = byId.get(String(it.productId));
-      const catalog = this.arioUnit(product, dto.saleType);
       const cost = Math.round(Number(it.factoryUnitCost) || Number(product?.buyPrice) || 0);
       if (!(it.factoryUnitCost > 0) && cost > 0) it.factoryUnitCost = cost;
-      const rule = (settings.categoryBasePrices || []).find((row) => row.category === product?.category);
-      const percent = this.channelPercent(rule, dto.saleType);
-      const priced = catalog > 0 ? catalog : (cost > 0 ? Math.round(cost * (1 + percent / 100)) : 0);
+      const announced = Math.round(Number(product?.agencyBasePrice) || 0);
+      const fromGap = cost > 0 ? cost + Math.round(Number(product?.agencyGap) || 0) : 0;
+      const catalog = this.arioUnit(product, dto.saleType);
+      const priced = announced > 0 ? announced : fromGap > 0 ? fromGap : catalog;
       if (!(priced > 0)) continue;
       it.unitPrice = priced;
       it.totalPrice = Math.round((it.quantity || 0) * priced);
@@ -1144,7 +1145,13 @@ export class InvoicesService implements OnApplicationBootstrap {
       items: { $elemMatch: { productId: id, unitPrice: { $gt: 0 } } },
     });
     if (later) return;
-    await this.productModel.updateOne({ _id: id }, { $set: { buyPrice: Math.round(unitPrice) } }).exec();
+    const landed = Math.round(unitPrice);
+    const product = await this.productModel.findById(id).select('agencyGap').lean();
+    const gap = Math.round(Number(product?.agencyGap) || 0);
+    await this.productModel.updateOne(
+      { _id: id },
+      { $set: { buyPrice: landed, ...(gap > 0 ? { agencyBasePrice: landed + gap } : {}) } },
+    ).exec();
   }
 
   async setDueDays(id: string, days: number): Promise<InvoiceDocument> {

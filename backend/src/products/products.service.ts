@@ -549,7 +549,7 @@ export class ProductsService implements OnModuleInit {
 
   /** Writes the three sale prices used by the catalog and the sale screen. */
   async applyChannelPrices(
-    items: { productId: string; retail: number; supermarket: number; wholesale: number }[],
+    items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number }[],
     actor: string,
   ) {
     const clean = (items || []).filter((it) => it && Types.ObjectId.isValid(String(it.productId || '')));
@@ -567,14 +567,14 @@ export class ProductsService implements OnModuleInit {
       const retail = money(it.retail);
       const supermarket = money(it.supermarket) || retail;
       const wholesale = money(it.wholesale) || retail;
-      if (!(retail > 0)) throw new BadRequestException(`قیمت تکی «${product.name}» را وارد کنید`);
+      const agencyBasePrice = money(it.agencyBasePrice);
+      const agencyGap = money(it.agencyGap);
+      if (!(retail > 0) && !(agencyBasePrice > 0)) throw new BadRequestException(`قیمت تکی یا قیمت پایه «${product.name}» را وارد کنید`);
       return [{ updateOne: { filter: { _id: product._id }, update: {
         $set: {
-          sellPrice: retail,
-          priceRetail: retail,
-          priceSupermarket: supermarket,
-          priceWholesale: wholesale,
-          priceDistributor: wholesale,
+          ...(retail > 0 ? { sellPrice: retail, priceRetail: retail, priceSupermarket: supermarket, priceWholesale: wholesale, priceDistributor: wholesale } : {}),
+          agencyBasePrice,
+          agencyGap,
           priceSetAt: new Date(),
           autoPricing: false,
         },

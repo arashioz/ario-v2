@@ -76,6 +76,7 @@ const SCALARS = [
   'autoSaleType',
   'proformaForBulk',
   'factorySalesEnabled',
+  'performanceRunAt',
 ] as const;
 
 const VIEW_FLAGS = ['groupByDay', 'showWeight', 'showPayment', 'showItems', 'showSaleType'] as const;
@@ -110,6 +111,12 @@ export class SettingsService {
         set[k] = v;
       } else if (k === 'autoSaleType' || k === 'proformaForBulk' || k === 'factorySalesEnabled') {
         set[k] = !!body[k];
+      } else if (k === 'performanceRunAt') {
+        const t = String(body[k] || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
+        if (!/^\d{1,2}:\d{2}$/.test(t)) throw new BadRequestException('ساعت محاسبه عملکرد نامعتبر است');
+        const [h, m] = t.split(':').map(Number);
+        if (h > 23 || m > 59) throw new BadRequestException('ساعت محاسبه عملکرد نامعتبر است');
+        set[k] = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
       } else {
         set[k] = String(body[k]).trim();
       }

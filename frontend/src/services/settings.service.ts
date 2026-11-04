@@ -253,6 +253,8 @@ export interface AppSettings {
   homeWarehouses: string[];
   /** Company shown first in the sales module. */
   salesFocusCompany: string;
+  /** Tehran HH:mm for the nightly performance save. */
+  performanceRunAt: string;
   /** Order of product IDs on the sales screen. */
   productOrder: string[];
   /** Order and visibility of the blocks on the sales screen. */
@@ -290,6 +292,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   subcategoryOrder: {},
   homeWarehouses: [],
   salesFocusCompany: '',
+  performanceRunAt: '23:00',
   productOrder: [],
   posSections: DEFAULT_POS_SECTIONS,
   bankCards: [],
@@ -354,6 +357,7 @@ const publish = (s: AppSettings) => {
     customerWatch: { ...DEFAULT_WATCH, ...(s.customerWatch || {}) },
     homeWarehouses: Array.isArray(s.homeWarehouses) ? s.homeWarehouses : [],
     salesFocusCompany: typeof s.salesFocusCompany === 'string' ? s.salesFocusCompany.trim() : '',
+    performanceRunAt: /^\d{1,2}:\d{2}$/.test(String(s.performanceRunAt || '')) ? String(s.performanceRunAt) : '23:00',
     categoryOrder: Array.isArray(s.categoryOrder) ? s.categoryOrder : [],
     subcategoryOrder: typeof s.subcategoryOrder === 'object' && s.subcategoryOrder ? s.subcategoryOrder : {},
     productOrder: Array.isArray(s.productOrder) ? s.productOrder : [],

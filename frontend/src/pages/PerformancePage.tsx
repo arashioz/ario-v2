@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { IonContent, IonPage, IonRefresher, IonRefresherContent } from '@ionic/react';
+import { RefreshCw } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
 import type { PerformanceReport, PerformanceSnapshot } from '../services/accounting.service';
+import { settingsService, useSettings } from '../services/settings.service';
 import { ReportHeader, Segments } from '../components/reports/ReportUI';
 import { PriceChart } from '../components/reports/PriceChart';
 import type { ChartSeries } from '../components/reports/PriceChart';
@@ -41,11 +43,13 @@ const Mini: React.FC<{ label: string; value: string; tone?: string }> = ({ label
 
 export const PerformancePage: React.FC = () => {
   const { showNotification } = useNotification();
+  const settings = useSettings();
   const [data, setData] = useState<PerformanceReport | null>(null);
   const [error, setError] = useState('');
   const [grain, setGrain] = useState<Grain>('month');
   const [kind, setKind] = useState<ChartKind>('money');
   const [rebuilding, setRebuilding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -62,11 +66,30 @@ export const PerformancePage: React.FC = () => {
     setRebuilding(true);
     try {
       setData(await accountingService.rebuildPerformance());
-      showNotification({ title: 'عملکرد حساب شد', message: 'از این به بعد تا همان روزی که وارد ماژول می‌شوید، خودکار به‌روز می‌ماند.', type: 'success' });
+      showNotification({ title: 'عملکرد حساب شد', message: 'تاریخچه ذخیره شد. از این به بعد فقط همان روز، سر ساعت تنظیم‌شده به‌روز می‌شود.', type: 'success' });
     } catch {
       showNotification({ title: 'حساب نشد', message: 'محاسبه از روی فاکتورها انجام نشد.', type: 'error' });
     } finally {
       setRebuilding(false);
+    }
+  };
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      setData(await accountingService.refreshPerformance());
+    } catch {
+      showNotification({ title: 'به‌روز نشد', message: 'محاسبه امروز انجام نشد.', type: 'error' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const saveHour = async (value: string) => {
+    try {
+      await settingsService.update({ performanceRunAt: value });
+    } catch {
+      showNotification({ title: 'ذخیره نشد', message: 'ساعت اجرای شبانه ذخیره نشد.', type: 'error' });
     }
   };
 
@@ -107,7 +130,17 @@ export const PerformancePage: React.FC = () => {
 
   return (
     <IonPage>
-      <ReportHeader title="عملکرد" subtitle="خرید، فروش، پرداخت، رشد و ضرر از روی فاکتورها" />
+      <ReportHeader
+        title="عملکرد"
+        subtitle="خرید، فروش، پرداخت، رشد و ضرر از روی فاکتورها"
+        right={
+          data?.rebuilt ? (
+            <button type="button" onClick={() => void refresh()} disabled={refreshing || rebuilding} className="p-2 rounded-xl bg-sky-50 text-sky-700" title="محاسبه امروز">
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          ) : null
+        }
+      />
       <IonContent fullscreen className="bg-slate-50">
         <IonRefresher slot="fixed" onIonRefresh={(e) => load().finally(() => e.detail.complete())}>
           <IonRefresherContent />
@@ -119,7 +152,7 @@ export const PerformancePage: React.FC = () => {
             <section className="rounded-3xl bg-emerald-50 border border-emerald-200 p-4 space-y-3">
               <h2 className="text-sm font-bold text-emerald-950">راه‌اندازی اولیه</h2>
               <p className="text-[12px] text-emerald-900 leading-6">
-                یک بار از روی همه فاکتورهای خرید و فروش حساب می‌شود و در دیتابیس می‌ماند. از آن به بعد تا همان روزی که وارد این صفحه می‌شوید خودکار به‌روز می‌شود.
+                یک بار همه فاکتورها حساب و ذخیره می‌شود. بعد از آن هر روز فقط همان روز، سر ساعتی که پایین می‌گذارید (پیش‌فرض ۱۱ شب) به‌روز می‌شود.
               </p>
               <button type="button" disabled={rebuilding} onClick={() => void rebuild()} className="w-full rounded-2xl bg-emerald-600 py-3 text-sm font-bold text-white disabled:opacity-40">
                 {rebuilding ? 'در حال محاسبه از اول…' : 'محاسبه عملکرد از اول'}
@@ -129,11 +162,17 @@ export const PerformancePage: React.FC = () => {
 
           {data?.rebuilt && (
             <>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>تا {data.lastComputedDay ? formatJalali(data.lastComputedDay) : '—'} · خودکار {data.auto ? 'روشن' : 'خاموش'}</span>
-                <button type="button" disabled={rebuilding} onClick={() => void rebuild()} className="font-bold text-sky-700">
-                  {rebuilding ? 'در حال محاسبه…' : 'محاسبه دوباره از اول'}
-                </button>
+              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 bg-white rounded-2xl border border-slate-100 px-3 py-2">
+                <span>آخرین ذخیره: {data.lastComputedDay ? formatJalali(data.lastComputedDay) : '—'}</span>
+                <label className="flex items-center gap-1.5 font-bold text-slate-700">
+                  اجرای شبانه
+                  <input
+                    type="time"
+                    value={settings.performanceRunAt || data.runAt || '23:00'}
+                    onChange={(e) => void saveHour(e.target.value)}
+                    className="rounded-lg border border-slate-200 px-1.5 py-1 text-[11px]"
+                  />
+                </label>
               </div>
 
               {now && (

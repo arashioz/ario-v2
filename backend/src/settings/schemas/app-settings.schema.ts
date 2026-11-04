@@ -188,6 +188,10 @@ export class AppSettings {
   @Prop({ type: String, default: '' })
   salesFocusCompany: string;
 
+  /** Tehran clock (HH:mm) when daily performance is saved. History is not rebuilt. */
+  @Prop({ trim: true, default: '23:00' })
+  performanceRunAt: string;
+
   /** Order of product IDs on the sales screen. */
   @Prop({ type: [String], default: [] })
   productOrder: string[];

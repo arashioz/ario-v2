@@ -93,6 +93,12 @@ export class AccountingController {
     return this.performance.rebuild();
   }
 
+  @Post('performance/refresh')
+  @HttpCode(HttpStatus.OK)
+  refreshPerformance() {
+    return this.performance.refresh();
+  }
+
   /** نگهبان سود: بررسی خودکار و قاعده‌محور همه فاکتورها (بدون مدل زبانی). */
   @Get('watch')
   watch(@Query('severity') severity?: string) {

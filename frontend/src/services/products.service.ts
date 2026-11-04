@@ -44,6 +44,8 @@ export interface PriceHistoryItem {
 export interface Product {
   autoPricing?: boolean;
   basePrice?: number;
+  agencyBasePrice?: number;
+  agencyGap?: number;
   packageFee?: number;
   commissionAmount?: number;
   commissionPercent?: number;
@@ -168,7 +170,7 @@ export const productsService = {
   async setFactoryPrice(id: string, price: number | null): Promise<Product> {
     return (await api.patch(`/products/${id}/factory-price`, { price })).data;
   },
-  async applyChannelPrices(items: { productId: string; retail: number; supermarket: number; wholesale: number }[]) {
+  async applyChannelPrices(items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number }[]) {
     return (await api.post<{ modified: number }>('/products/channel-prices', { items })).data;
   },
   async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }) {

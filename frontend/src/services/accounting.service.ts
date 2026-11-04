@@ -466,6 +466,7 @@ export interface PerformanceReport {
   auto: boolean;
   rebuiltAt: string | null;
   lastComputedDay: string | null;
+  runAt: string;
   computing: boolean;
   today: PerformanceSnapshot | null;
   thisMonth: PerformanceSnapshot | null;
@@ -560,6 +561,9 @@ export const accountingService = {
   },
   async rebuildPerformance(): Promise<PerformanceReport> {
     return (await api.post('/accounting/performance/rebuild', null, { timeout: 180000 })).data;
+  },
+  async refreshPerformance(): Promise<PerformanceReport> {
+    return (await api.post('/accounting/performance/refresh', null, { timeout: 60000 })).data;
   },
   async applySuggestion(s: Pick<PriceSuggestion, 'productId' | 'suggested' | 'lastCostPerUnit' | 'baseCostPerKg'>, reason: string) {
     return (

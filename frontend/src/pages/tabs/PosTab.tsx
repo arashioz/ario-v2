@@ -526,6 +526,8 @@ export const PosTab: React.FC = () => {
             quantity: l.quantity,
             buyPrice: l.product.buyPrice || 0,
             sellPrice: l.unitPrice,
+            agencyBasePrice: l.product.agencyBasePrice || 0,
+            agencyGap: l.product.agencyGap || 0,
             category: l.product.category,
             priceWholesale: l.product.priceWholesale || 0,
             kgPerUnit: kgPerUnit(l.product),
