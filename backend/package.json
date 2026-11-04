@@ -14,6 +14,7 @@
     "start:prod": "node dist/main",
     "seed:static": "node scripts/migrate-static-data.js",
     "rebuild:stock": "node scripts/rebuild-stock.js",
+    "stamp:profits": "node scripts/stamp-invoice-profits.js",
     "repair:factory-sales": "node scripts/repair-factory-sales.js",
     "fix:factory-costs": "node scripts/fix-factory-costs.js",
     "sku:assign": "node scripts/assign-skus.js",

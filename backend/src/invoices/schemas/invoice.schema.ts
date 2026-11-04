@@ -43,6 +43,14 @@ export class InvoiceItem {
   @Prop({ default: 0 })
   factoryUnitCost?: number;
   @Prop({ default: false }) factoryCostConfirmed?: boolean;
+
+  /** Landed buy price of one unit at the moment this sale was saved. */
+  @Prop({ default: 0 })
+  unitCost?: number;
+
+  /** This line's profit after the invoice discount, stored with the sale. */
+  @Prop({ default: 0 })
+  profit?: number;
 }
 
 export const InvoiceItemSchema = SchemaFactory.createForClass(InvoiceItem);
@@ -149,6 +157,14 @@ export class Invoice {
 
   @Prop({ default: 0 })
   totalWeightKg: number; // مجموع تناژ و کیلوگرم فاکتور
+
+  /** Cost of the goods on a sale, saved with the invoice. Purchases leave this at 0. */
+  @Prop({ default: 0 })
+  costAmount?: number;
+
+  /** Sale profit (money received for the goods, minus cost). Saved with the invoice from here on. */
+  @Prop({ default: 0 })
+  profitAmount?: number;
 
   @Prop({
     required: true,

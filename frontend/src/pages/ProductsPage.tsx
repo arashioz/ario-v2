@@ -12,30 +12,25 @@ import type { RefresherEventDetail } from '@ionic/react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { productsService } from '../services/products.service';
-import { invoicesService } from '../services/invoices.service';
 import type { Product, ProductStats } from '../services/products.service';
-import { UpdatePriceModal } from '../components/products/UpdatePriceModal';
 import { NewProductModal } from '../components/products/NewProductModal';
-import { BulkPriceModal } from '../components/products/BulkPriceModal';
 import {
   Search,
   Plus,
-  Tag,
   Boxes,
   AlertTriangle,
   RefreshCw,
   Barcode,
   ArrowRight,
   TrendingUp,
-  Sliders,
   Edit2,
   Trash2,
   BookOpen,
   Factory,
+  BadgePercent,
 } from 'lucide-react';
 import { formatToman, num, weight } from '../lib/format';
 import { PriceTiers, ProductPhoto, StockAmount } from '../components/products/ProductPriceInfo';
-import { CatalogShareSheet } from '../components/products/CatalogShareSheet';
 import { kgPerUnit, pricePerKg, tierPrice } from '../components/pos/cart';
 
 export const ProductsPage: React.FC = () => {
@@ -51,8 +46,6 @@ export const ProductsPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<ProductStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastPurchasePrices, setLastPurchasePrices] = useState<Record<string, number>>({});
-  const [purchasePricesUnavailable, setPurchasePricesUnavailable] = useState(false);
   const loadVersion = useRef(0);
 
   const [search, setSearch] = useState('');
@@ -75,12 +68,7 @@ export const ProductsPage: React.FC = () => {
   const [isNewProductOpen, setIsNewProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const [selectedProductForPrice, setSelectedProductForPrice] = useState<Product | null>(null);
-  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
-
-  const [isBulkPriceOpen, setIsBulkPriceOpen] = useState(false);
   const [priceBy, setPriceBy] = useState<'unit' | 'kg'>('unit');
-  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
 
   const replaceProduct = (updated: Product) =>
     setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
@@ -97,18 +85,8 @@ export const ProductsPage: React.FC = () => {
         productsService.getProductStats(),
       ]);
       if (version !== loadVersion.current) return;
-      let prices: Record<string, number> = {};
-      let unavailable = false;
-      try {
-        prices = await invoicesService.lastPurchasePrices(list.map((p) => p._id));
-      } catch {
-        unavailable = true;
-      }
-      if (version !== loadVersion.current) return;
       setProducts(list);
       setStats(statsData);
-      setLastPurchasePrices(prices);
-      setPurchasePricesUnavailable(unavailable);
     } catch {
       if (version !== loadVersion.current) return;
       showNotification({
@@ -137,17 +115,8 @@ export const ProductsPage: React.FC = () => {
     loadData();
     setEditingProduct(null);
     setIsNewProductOpen(false);
-    if (setupMode && saved) {
-      setSelectedProductForPrice(saved);
-      setIsPriceModalOpen(true);
-    }
+    if (setupMode && saved?.supplierName) navigate(`/prices?company=${encodeURIComponent(saved.supplierName)}`);
   };
-
-  const handlePriceUpdated = (updated: Product) => {
-    setProducts((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
-    loadData();
-  };
-
 
   const handleDelete = async (product: Product) => {
     if (!window.confirm(`آیا از حذف کالای «${product.name}» مطمئن هستید؟`)) {
@@ -171,11 +140,6 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
-  const openPriceModal = (product: Product) => {
-    setSelectedProductForPrice(product);
-    setIsPriceModalOpen(true);
-  };
-
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
     setIsNewProductOpen(true);
@@ -188,9 +152,9 @@ export const ProductsPage: React.FC = () => {
     if (!list.length) return;
     setupOpened.current = key;
     const needsSetup = (p: Product) => !p.category || p.category === 'عمومی' || !p.subcategory;
-    const first = list.find(needsSetup) || list[0];
-    if (needsSetup(first)) openEditModal(first);
-    else openPriceModal(first);
+    const first = list.find(needsSetup);
+    if (first) openEditModal(first);
+    else navigate(`/prices${list[0]?.supplierName ? `?company=${encodeURIComponent(list[0].supplierName)}` : ''}`);
   }, [setupMode, loading, products, setupIds.join(',')]);
 
   const visibleProducts = setupIds.length ? products.filter((p) => setupIds.includes(p._id)) : products;
@@ -286,23 +250,15 @@ export const ProductsPage: React.FC = () => {
             </div>
           </div>
 
-          <button onClick={() => navigate('/workshop')} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-sky-600 text-white text-xs font-bold">
-            <Factory className="w-4 h-4" />تولید کارگاهی و بسته‌بندی
-          </button>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setIsCatalogOpen(true)}
-              className="flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-white border border-emerald-100 text-emerald-800 text-xs font-bold active:scale-[0.98]"
-            >
-              <BookOpen className="w-4 h-4" />
-              کاتالوگ
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={() => navigate('/workshop')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-sky-600 text-white text-[11px] font-bold">
+              <Factory className="w-4 h-4" />تولید کارگاهی
             </button>
-            <button
-              onClick={() => setIsBulkPriceOpen(true)}
-              className="flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-white border border-violet-100 text-violet-800 text-xs font-bold active:scale-[0.98]"
-            >
-              <Sliders className="w-4 h-4" />
-              مدیریت قیمت
+            <button onClick={() => navigate('/catalog-manage')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-white border border-emerald-100 text-emerald-800 text-[11px] font-bold">
+              <BookOpen className="w-4 h-4" />کاتالوگ
+            </button>
+            <button onClick={() => navigate('/prices')} className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-white border border-violet-100 text-violet-800 text-[11px] font-bold">
+              <BadgePercent className="w-4 h-4" />تعیین قیمت
             </button>
           </div>
           <div className="grid grid-cols-2 gap-1 p-1 bg-white rounded-2xl border border-slate-200">
@@ -457,12 +413,6 @@ export const ProductsPage: React.FC = () => {
                     {/* Prices and Stock Grid */}
                     <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-100 space-y-2">
                       <PriceTiers product={product} by={priceBy} />
-                      <p className="text-[11px] text-slate-600">
-                        آخرین خرید هر {priceBy === 'kg' && kgPerUnit(product) > 0 ? 'کیلوگرم' : product.unit}: {' '}
-                        <strong>{purchasePricesUnavailable ? 'دریافت نشد' : lastPurchasePrices[product._id] !== undefined
-                          ? formatToman(priceBy === 'kg' && kgPerUnit(product) > 0 ? pricePerKg(lastPurchasePrices[product._id], product) : lastPurchasePrices[product._id])
-                          : 'خریدی ثبت نشده'}</strong>
-                      </p>
                       {kgPerUnit(product) > 0 && product.unit !== 'کیلوگرم' && (
                         <p className="text-[10px] text-slate-400">
                           هر {product.unit} {num(kgPerUnit(product), 2)} کیلوگرم
@@ -492,20 +442,13 @@ export const ProductsPage: React.FC = () => {
                     </div>
 
                     {/* Action Buttons Footer */}
-                    <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-100">
+                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-100">
                       <button
                         onClick={() => openEditModal(product)}
                         className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold active:scale-95 border border-slate-100"
                       >
                         <Edit2 className="w-4 h-4 text-slate-500" />
                         ویرایش
-                      </button>
-                      <button
-                        onClick={() => openPriceModal(product)}
-                        className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-sky-600 text-white text-[11px] font-bold active:scale-95"
-                      >
-                        <Tag className="w-4 h-4" />
-                        قیمت
                       </button>
                       <button
                         onClick={() => navigate('/stocktake')}
@@ -523,16 +466,6 @@ export const ProductsPage: React.FC = () => {
         </div>
 
         {/* Modals */}
-        <UpdatePriceModal
-          isOpen={isPriceModalOpen}
-          product={selectedProductForPrice}
-          onClose={() => {
-            setIsPriceModalOpen(false);
-            setSelectedProductForPrice(null);
-          }}
-          onPriceUpdated={handlePriceUpdated}
-        />
-
         <NewProductModal
           isOpen={isNewProductOpen}
           editProduct={editingProduct}
@@ -544,14 +477,6 @@ export const ProductsPage: React.FC = () => {
           onProductSaved={handleProductSaved}
         />
 
-        <BulkPriceModal
-          isOpen={isBulkPriceOpen}
-          categories={stats?.categories || []}
-          onClose={() => setIsBulkPriceOpen(false)}
-          onSuccess={() => loadData()}
-        />
-
-        <CatalogShareSheet open={isCatalogOpen} onClose={() => setIsCatalogOpen(false)} />
       </IonContent>
     </IonPage>
   );

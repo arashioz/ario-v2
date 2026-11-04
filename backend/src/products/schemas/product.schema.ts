@@ -87,6 +87,20 @@ export class Product {
   @Prop({ required: true, default: 0 })
   buyPrice: number;
 
+  /** Quantity-weighted average landed buy price, rebuilt from invoices. */
+  @Prop({ default: 0 })
+  avgBuyPrice?: number;
+
+  /** Quantity-weighted average sale price after discount, rebuilt from invoices. */
+  @Prop({ default: 0 })
+  avgSellPrice?: number;
+
+  @Prop({
+    type: [{ _id: false, month: String, buy: Number, sell: Number, buyPerKg: Number, sellPerKg: Number, buyQty: Number, sellQty: Number }],
+    default: [],
+  })
+  monthlyPrices?: { month: string; buy: number; sell: number; buyPerKg: number; sellPerKg: number; buyQty: number; sellQty: number }[];
+
   @Prop({ required: true, default: 0, index: true })
   sellPrice: number; // قیمت پایه / پیش‌فرض
 

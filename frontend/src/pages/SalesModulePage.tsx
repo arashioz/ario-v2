@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Building2, Check, ChevronLeft, Settings2, TrendingUp, Wallet } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
 import type { SalesBoard, SalesBoardCompany, SalesBoardInvoice, SalesBoardProduct } from '../services/accounting.service';
+import { watchService } from '../services/watch.service';
+import type { PriceChartProduct } from '../services/watch.service';
 import { settingsService, useSettings } from '../services/settings.service';
 import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/PeriodPicker';
 import type { Period } from '../components/ui/PeriodPicker';
@@ -64,7 +66,28 @@ const CompanyCard: React.FC<{ row: SalesBoardCompany; featured?: boolean }> = ({
   );
 };
 
-const ProductRow: React.FC<{ item: SalesBoardProduct; onOpen: () => void }> = ({ item, onOpen }) => (
+const MonthSpark: React.FC<{ chart?: PriceChartProduct }> = ({ chart }) => {
+  const rows = (chart?.months || []).filter((m) => m.buyPerKg > 0 || m.sellPerKg > 0).slice(-8);
+  if (rows.length < 2) return null;
+  const ys = rows.flatMap((m) => [m.buyPerKg, m.sellPerKg].filter((n) => n > 0));
+  const min = Math.min(...ys);
+  const max = Math.max(...ys);
+  const span = Math.max(1, max - min);
+  const w = 88;
+  const h = 28;
+  const x = (i: number) => (i / (rows.length - 1)) * (w - 4) + 2;
+  const y = (n: number) => h - 3 - ((n - min) / span) * (h - 6);
+  const path = (key: 'buyPerKg' | 'sellPerKg') =>
+    rows.map((m, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(m[key] || min).toFixed(1)}`).join(' ');
+  return (
+    <svg width={w} height={h} className="shrink-0" aria-hidden>
+      <path d={path('buyPerKg')} fill="none" stroke="#d97706" strokeWidth="1.6" />
+      <path d={path('sellPerKg')} fill="none" stroke="#0284c7" strokeWidth="1.6" />
+    </svg>
+  );
+};
+
+const ProductRow: React.FC<{ item: SalesBoardProduct; chart?: PriceChartProduct; onOpen: () => void }> = ({ item, chart, onOpen }) => (
   <button type="button" onClick={onOpen} className="w-full bg-white rounded-2xl border border-slate-100 shadow-sm px-3.5 py-3 flex items-center justify-between gap-3 text-right active:bg-slate-50">
     <span className="min-w-0">
       <span className="block text-[14px] font-bold text-slate-800 truncate">{item.name}</span>
@@ -73,7 +96,8 @@ const ProductRow: React.FC<{ item: SalesBoardProduct; onOpen: () => void }> = ({
         {item.soldKg > 0 ? ` · فروش ${weight(item.soldKg)}` : ''}
       </span>
     </span>
-    <span className="flex items-center gap-1 shrink-0">
+    <span className="flex items-center gap-2 shrink-0">
+      <MonthSpark chart={chart} />
       <span className={`text-[12px] font-bold font-mono ${item.soldAmount > 0 ? profitColor(item.profit) : 'text-slate-400'}`}>
         {item.soldAmount > 0 ? profitCaption(item.profit, { sold: item.soldAmount, unknown: item.unknownSold }) : '—'}
       </span>
@@ -109,13 +133,19 @@ export const SalesModulePage: React.FC = () => {
   const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
   const [view, setView] = useState<View>('summary');
   const [board, setBoard] = useState<SalesBoard | null>(null);
+  const [charts, setCharts] = useState<Record<string, PriceChartProduct>>({});
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
 
   const load = async (next = period) => {
     try {
       setError('');
-      setBoard(await accountingService.salesBoard(periodQuery(next)));
+      const [nextBoard, priceCharts] = await Promise.all([
+        accountingService.salesBoard(periodQuery(next)),
+        watchService.priceChart().catch(() => [] as PriceChartProduct[]),
+      ]);
+      setBoard(nextBoard);
+      setCharts(Object.fromEntries(priceCharts.map((row) => [row.productId, row])));
     } catch {
       setError('گزارش فروش بارگذاری نشد.');
     }
@@ -276,11 +306,16 @@ export const SalesModulePage: React.FC = () => {
                 placeholder="جستجوی نام کالا یا شرکت"
                 className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-white text-xs"
               />
-              <p className="text-[11px] text-slate-400 leading-5 px-1">هر کالا را بزنید. اعداد، میانگین قیمت، نمودار، لیست خریدها و فروش‌ها در صفحه خودش باز می‌شود.</p>
+              <p className="text-[11px] text-slate-400 leading-5 px-1">خط نارنجی میانگین خرید ماه، خط آبی میانگین فروش. کالا را بزنید تا نمودار کامل باز شود.</p>
               {products.length === 0 ? (
                 <div className="bg-white rounded-2xl p-6 text-center text-xs text-slate-400">کالایی پیدا نشد.</div>
               ) : products.map((item) => (
-                <ProductRow key={item.productId} item={item} onOpen={() => navigate(`/sales/product/${encodeURIComponent(item.productId)}`)} />
+                <ProductRow
+                  key={item.productId}
+                  item={item}
+                  chart={charts[item.productId]}
+                  onOpen={() => navigate(`/sales/product/${encodeURIComponent(item.productId)}`)}
+                />
               ))}
             </div>
           )}

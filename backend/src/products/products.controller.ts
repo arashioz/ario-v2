@@ -61,6 +61,14 @@ export class ProductsController {
     return this.productsService.bulkUpdatePrices(dto, recordedByName);
   }
 
+  @Post('channel-prices')
+  async channelPrices(
+    @Body() body: { items?: { productId: string; retail: number; supermarket: number; wholesale: number }[] },
+    @Request() req: any,
+  ) {
+    return this.productsService.applyChannelPrices(body?.items || [], req.user?.fullName || req.user?.username || 'کاربر سیستم');
+  }
+
   @Post('category-price')
   async categoryPrice(@Body() body: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }, @Request() req: any) {
     return this.productsService.saveCategoryPrice(body, req.user?.fullName || req.user?.username || 'کاربر سیستم');

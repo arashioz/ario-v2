@@ -347,6 +347,110 @@ export class InvoicesService implements OnApplicationBootstrap {
     return found;
   }
 
+  /** Companies, then one company's products with the purchase invoice that last set the buy price. */
+  async priceBoard(company?: string) {
+    const products = await this.productModel
+      .find({ isActive: { $ne: false } })
+      .select('name category unit supplierName weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale')
+      .sort({ name: 1 })
+      .lean();
+    const companyOf = (name?: string) => {
+      const raw = String(name || '').trim();
+      return raw ? canonicalSupplier(raw) : 'سایر کالاها';
+    };
+    const companies = [...new Set(products.map((p) => companyOf(p.supplierName)))].sort((a, b) => a.localeCompare(b, 'fa'));
+    const selected = String(company || '').trim();
+    if (!selected) return { companies, company: '', products: [] as unknown[] };
+    const wanted = canonicalSupplier(selected);
+    const list = products.filter((p) => companyOf(p.supplierName) === wanted || companyOf(p.supplierName) === selected);
+    const ids = list.map((p) => String(p._id));
+    const latest = new Map<string, { price: number; invoiceId: string; invoiceNumber: string; invoiceDate: Date }>();
+    if (ids.length) {
+      const purchases = await this.invoiceModel
+        .find({ type: 'purchase', fulfillment: { $ne: 'factory' }, 'items.productId': { $in: ids } })
+        .select('invoiceNumber invoiceDate shippingPayer shippingCost totalAmount discount items createdAt')
+        .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
+        .lean();
+      const need = new Set(ids);
+      for (const inv of purchases) {
+        const prices = landedUnitPrices({
+          type: 'purchase',
+          shippingPayer: inv.shippingPayer,
+          shippingCost: inv.shippingCost,
+          totalAmount: inv.totalAmount,
+          discount: inv.discount,
+          items: inv.items || [],
+        });
+        (inv.items || []).forEach((it, i) => {
+          const pid = String(it.productId || '');
+          if (!need.has(pid) || !(prices[i] > 0)) return;
+          latest.set(pid, {
+            price: prices[i],
+            invoiceId: String(inv._id),
+            invoiceNumber: inv.invoiceNumber,
+            invoiceDate: inv.invoiceDate,
+          });
+          need.delete(pid);
+        });
+        if (!need.size) break;
+      }
+    }
+    return {
+      companies,
+      company: list.length ? companyOf(list[0].supplierName) : selected,
+      products: list.map((p) => {
+        const id = String(p._id);
+        const retail = Math.round(p.priceRetail || p.sellPrice || 0);
+        return {
+          productId: id,
+          name: p.name,
+          category: p.category || '',
+          unit: p.unit,
+          weightPerUnitKg: p.weightPerUnitKg || 0,
+          buyPrice: Math.round(p.buyPrice || 0),
+          lastPurchase: latest.get(id) || null,
+          retail,
+          supermarket: Math.round(p.priceSupermarket || retail),
+          wholesale: Math.round(p.priceWholesale || retail),
+        };
+      }),
+    };
+  }
+
+  /**
+   * Profit of a sale, frozen on the invoice: goods after discount, minus the landed buy price
+   * (or the factory price) of each line. A line with no cost contributes no profit.
+   */
+  private async stampSaleProfit(invoice: InvoiceDocument) {
+    if (invoice.type !== 'sale') return;
+    const fromFactory = invoice.fulfillment === 'factory';
+    const ids = [...new Set((invoice.items || []).map((it) => String(it.productId || '')).filter((id) => Types.ObjectId.isValid(id)))];
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('buyPrice').lean() : [];
+    const buy = new Map(products.map((p) => [String(p._id), Math.round(Number(p.buyPrice) || 0)]));
+    const goods = (invoice.items || []).reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
+    const discount = Math.min(goods, Math.max(0, Math.round(Number(invoice.discount) || 0)));
+    const factor = goods > 0 ? (goods - discount) / goods : 1;
+    let costAmount = 0;
+    let profitAmount = 0;
+    for (const it of invoice.items || []) {
+      const unitCost = fromFactory
+        ? Math.round(Number(it.factoryUnitCost) || buy.get(String(it.productId)) || 0)
+        : buy.get(String(it.productId)) || 0;
+      const qty = Number(it.quantity) || 0;
+      const lineNet = Math.round((Number(it.totalPrice) || 0) * factor);
+      const lineCost = unitCost > 0 ? Math.round(unitCost * qty) : 0;
+      const lineProfit = unitCost > 0 ? lineNet - lineCost : 0;
+      it.unitCost = unitCost;
+      it.profit = lineProfit;
+      costAmount += lineCost;
+      profitAmount += lineProfit;
+    }
+    invoice.costAmount = costAmount;
+    invoice.profitAmount = profitAmount;
+    invoice.markModified('items');
+    await invoice.save();
+  }
+
   /** A zero customer price on a factory sale becomes the factory cost plus that channel's percent. */
   private channelPercent(rule: { retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number } | undefined, saleType?: string) {
     const raw = !rule ? 0
@@ -744,6 +848,7 @@ export class InvoicesService implements OnApplicationBootstrap {
         invoice.customerNewBalance = await this.customersService.addInvoiceDebt(invoice, recordedByName);
         await invoice.save();
         await this.customersService.alignInvoiceDebts(String(customer._id));
+        await this.stampSaleProfit(invoice);
         return this.findById(String(invoice._id));
       }
     }
@@ -752,6 +857,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
       return this.withPurchasedProductIds(await this.findById(String(invoice._id)));
     }
+    await this.stampSaleProfit(invoice);
     return invoice;
   }
 
@@ -863,6 +969,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       await invoice.save();
     }
     if (customer) await this.customersService.alignInvoiceDebts(String(customer._id));
+    await this.stampSaleProfit(invoice);
     return this.findById(id);
   }
 

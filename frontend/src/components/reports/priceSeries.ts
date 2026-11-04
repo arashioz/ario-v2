@@ -1,9 +1,10 @@
 import type { PriceChartProduct } from '../../services/watch.service';
 import type { ChartSeries } from './PriceChart';
 import { num, weight } from '../../lib/format';
+import { jalaliToYmd } from '../../lib/jalali';
 
 export type ChartUnit = 'kg' | 'unit';
-export type ChartView = 'all' | 'compare' | 'purchase' | 'sale' | 'changes';
+export type ChartView = 'all' | 'compare' | 'purchase' | 'sale' | 'changes' | 'months';
 
 const COLORS = { purchase: '#d97706', sale: '#0284c7', list: '#7c3aed', change: '#be123c' };
 const tehranDay = (ymd: string) => new Date(`${ymd}T12:00:00+03:30`).getTime();
@@ -66,11 +67,35 @@ export function buildPriceSeries(p: PriceChartProduct, unit: ChartUnit, view: Ch
     mode: 'step',
     points: changePoints,
   };
+  const monthSeries = buildMonthlySeries(p, unit);
+  if (view === 'months') return monthSeries;
   if (view === 'changes') return [changeSeries];
   if (view === 'purchase') return [purchaseSeries];
   if (view === 'sale') return [saleSeries, listSeries];
   if (view === 'compare') return [saleSeries, purchaseSeries];
   return [saleSeries, purchaseSeries, listSeries];
+}
+
+export function buildMonthlySeries(p: PriceChartProduct, unit: ChartUnit): ChartSeries[] {
+  const rows = [...(p.months || [])].sort((a, b) => a.month.localeCompare(b.month));
+  const tOf = (month: string) => {
+    const [jy, jm] = month.split('-').map(Number);
+    return new Date(`${jalaliToYmd(jy, jm, 15)}T12:00:00+03:30`).getTime();
+  };
+  const buy = rows.filter((m) => (unit === 'kg' ? m.buyPerKg : m.buy) > 0).map((m) => ({
+    t: tOf(m.month),
+    y: unit === 'kg' ? m.buyPerKg : m.buy,
+    note: `میانگین خرید ${m.month}`,
+  }));
+  const sell = rows.filter((m) => (unit === 'kg' ? m.sellPerKg : m.sell) > 0).map((m) => ({
+    t: tOf(m.month),
+    y: unit === 'kg' ? m.sellPerKg : m.sell,
+    note: `میانگین فروش ${m.month}`,
+  }));
+  return [
+    { key: 'sale', label: 'میانگین فروش ماه', color: COLORS.sale, mode: 'line', points: sell },
+    { key: 'purchase', label: 'میانگین خرید ماه', color: COLORS.purchase, mode: 'line', points: buy },
+  ];
 }
 
 export { COLORS as PRICE_CHART_COLORS, tehranDay, ts };

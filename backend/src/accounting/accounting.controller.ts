@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { AccountingService, COST_BASES, SUGGEST_MODES } from './accounting.service';
 import { ProfitWatchService } from './profit-watch.service';
+import { PerformanceService } from './performance.service';
 import type { CostBasis, SuggestMode } from './accounting.service';
 
 interface SuggestQuery {
@@ -21,6 +22,7 @@ export class AccountingController {
   constructor(
     private readonly accounting: AccountingService,
     private readonly watcher: ProfitWatchService,
+    private readonly performance: PerformanceService,
   ) {}
 
   /** `today` and `monthFrom` come from the client so "this month" follows the Jalali calendar. */
@@ -78,6 +80,17 @@ export class AccountingController {
   @Get('price-chart')
   priceChart() {
     return this.accounting.priceChart();
+  }
+
+  @Get('performance')
+  performanceReport() {
+    return this.performance.report();
+  }
+
+  @Post('performance/rebuild')
+  @HttpCode(HttpStatus.OK)
+  rebuildPerformance() {
+    return this.performance.rebuild();
   }
 
   /** نگهبان سود: بررسی خودکار و قاعده‌محور همه فاکتورها (بدون مدل زبانی). */

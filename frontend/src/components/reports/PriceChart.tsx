@@ -50,12 +50,13 @@ function valueAt(s: ChartSeries, t: number, maxGap: number): ChartPoint | null {
   return best && Math.abs(best.t - t) <= maxGap ? best : null;
 }
 
-export const PriceChart: React.FC<{ series: ChartSeries[]; from: number; to: number; height?: number; unitLabel: string }> = ({
+export const PriceChart: React.FC<{ series: ChartSeries[]; from: number; to: number; height?: number; unitLabel: string; allowNegative?: boolean }> = ({
   series,
   from,
   to,
   height = 240,
   unitLabel,
+  allowNegative = false,
 }) => {
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(360);
@@ -84,12 +85,12 @@ export const PriceChart: React.FC<{ series: ChartSeries[]; from: number; to: num
     [series, from, to],
   );
 
-  const ys = visible.flatMap((s) => [...s.points.map((p) => p.y), ...(s.band ?? []).flatMap((b) => [b.lo, b.hi])]).filter((v) => v > 0);
+  const ys = visible.flatMap((s) => [...s.points.map((p) => p.y), ...(s.band ?? []).flatMap((b) => [b.lo, b.hi])]).filter((v) => Number.isFinite(v) && (allowNegative || v > 0));
   const hasData = ys.length > 0;
   const rawMin = hasData ? Math.min(...ys) : 0;
   const rawMax = hasData ? Math.max(...ys) : 1;
-  const padY = (rawMax - rawMin) * 0.08 || rawMax * 0.05 || 1;
-  const yMin = Math.max(0, rawMin - padY);
+  const padY = (rawMax - rawMin) * 0.08 || Math.abs(rawMax) * 0.05 || 1;
+  const yMin = allowNegative ? rawMin - padY : Math.max(0, rawMin - padY);
   const yMax = rawMax + padY;
   const innerW = width - PAD.left - PAD.right;
   const innerH = height - PAD.top - PAD.bottom;

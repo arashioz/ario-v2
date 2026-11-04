@@ -74,6 +74,11 @@ export class InvoicesController {
     return this.invoicesService.factoryPrices(ids?.split(',').map((id) => id.trim()).filter(Boolean));
   }
 
+  @Get('price-board')
+  priceBoard(@Query('company') company?: string) {
+    return this.invoicesService.priceBoard(company);
+  }
+
   @Get('last-purchase-prices')
   lastPurchasePrices(@Query('productIds') productIds?: string) {
     const ids = (productIds || '')

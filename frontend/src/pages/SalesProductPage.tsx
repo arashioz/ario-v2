@@ -12,7 +12,7 @@ import { PriceChart } from '../components/reports/PriceChart';
 import { buildPriceSeries } from '../components/reports/priceSeries';
 import type { ChartUnit, ChartView } from '../components/reports/priceSeries';
 import { ListSkeleton } from '../components/ui/Skeleton';
-import { formatJalaliIso } from '../lib/jalali';
+import { formatJalaliIso, jalaliToYmd } from '../lib/jalali';
 import { formatToman, percent, profitCaption, profitColor, weight } from '../lib/format';
 
 type Range = '30' | '90' | '180' | 'all';
@@ -37,9 +37,9 @@ export const SalesProductPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [block, setBlock] = useState<Block>('numbers');
-  const [range, setRange] = useState<Range>('90');
+  const [range, setRange] = useState<Range>('all');
   const [unit, setUnit] = useState<ChartUnit>('kg');
-  const [view, setView] = useState<ChartView>('compare');
+  const [view, setView] = useState<ChartView>('months');
 
   const load = async () => {
     try {
@@ -66,11 +66,15 @@ export const SalesProductPage: React.FC = () => {
 
   const to = useMemo(() => Date.now() + DAY / 2, [chart]);
   const from = useMemo(() => {
+    if (view === 'months' && chart?.months?.length && range === 'all') {
+      const [jy, jm] = chart.months[0].month.split('-').map(Number);
+      return new Date(`${jalaliToYmd(jy, jm, 1)}T12:00:00+03:30`).getTime();
+    }
     if (range !== 'all') return to - Number(range) * DAY;
     if (!chart) return to - 365 * DAY;
     const all = [...chart.purchases.map((b) => new Date(b.date).getTime()), ...chart.sales.map((s) => new Date(`${s.date}T12:00:00+03:30`).getTime())];
     return all.length ? Math.min(...all) - DAY : to - 365 * DAY;
-  }, [range, chart, to]);
+  }, [range, chart, to, view]);
 
   const series = useMemo(() => (chart ? buildPriceSeries(chart, unit, view) : []), [chart, unit, view]);
   const unitLabel = unit === 'unit' && chart ? `هر ${chart.unit}` : 'هر کیلو';
@@ -145,6 +149,20 @@ export const SalesProductPage: React.FC = () => {
                   </div>
                 )}
               </section>
+              {!!chart?.months?.length && (
+                <section className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="px-3.5 py-2.5 text-[12px] font-bold text-slate-700">میانگین هر ماه</div>
+                  <div className="divide-y divide-slate-100">
+                    {[...chart.months].reverse().slice(0, 12).map((m) => (
+                      <div key={m.month} className="px-3.5 py-2 flex items-center justify-between gap-2 text-[11px] font-mono">
+                        <span className="text-slate-500">{m.month}</span>
+                        <span className="text-amber-800">خرید {m.buyPerKg ? formatToman(m.buyPerKg) : '—'}</span>
+                        <span className="text-sky-800">فروش {m.sellPerKg ? formatToman(m.sellPerKg) : '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               <p className="text-[11px] text-slate-400 leading-5 px-1">
                 موجودی، بارِ همین لحظه است. خرید، فروش و سود مال بازه‌ای است که بالا انتخاب کرده‌اید. سود هر بار خرید را در تب «سود بارها» ببینید.
               </p>
@@ -203,10 +221,10 @@ export const SalesProductPage: React.FC = () => {
                     value={view}
                     onChange={setView}
                     items={[
-                      ['compare', 'خرید و فروش'],
+                      ['months', 'ماه به ماه'],
+                      ['compare', 'روز به روز'],
                       ['purchase', 'فقط خرید'],
                       ['sale', 'فقط فروش'],
-                      ['all', 'همه'],
                       ['changes', 'تغییر قیمت'],
                     ]}
                   />
@@ -221,7 +239,11 @@ export const SalesProductPage: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-5 px-1">این نمودار فقط همین کالا است. خط نارنجی خرید، خط آبی فروش، بنفش قیمت لیست.</p>
+                  <p className="text-[11px] text-slate-400 leading-5 px-1">
+                    {view === 'months'
+                      ? 'هر نقطه میانگین همان ماه شمسی است. نارنجی بهای تمام‌شده خرید، آبی قیمت فروش.'
+                      : 'این نمودار فقط همین کالا است. خط نارنجی خرید، خط آبی فروش.'}
+                  </p>
                 </>
               )}
             </div>

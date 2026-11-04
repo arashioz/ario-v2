@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   Briefcase,
   Tag,
+  BookOpen,
+  BadgePercent,
   PhoneCall,
   Wallet,
   LogOut,
@@ -32,6 +34,7 @@ import {
   LayoutGrid,
   Target,
   Binoculars,
+  Activity,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
@@ -62,6 +65,13 @@ const ACCOUNTS: Item[] = [
 ];
 
 const REPORTS: Item[] = [
+  {
+    path: '/performance',
+    title: 'عملکرد',
+    desc: 'چارت روزانه، ماهانه و سالانه خرید، فروش، پرداخت، رشد و ضرر',
+    icon: Activity,
+    tone: 'bg-emerald-100 text-emerald-800',
+  },
   {
     path: '/sales',
     title: 'ماژول فروش',
@@ -145,9 +155,30 @@ const SHOP: Item[] = [
   {
     path: '/products',
     title: 'مدیریت کالاها',
-    desc: 'ویرایش کالا، عکس، قیمت و موجودی',
+    desc: 'لیست کالا، دسته‌بندی و ویرایش',
     icon: Tag,
     tone: 'bg-sky-100 text-sky-600',
+  },
+  {
+    path: '/prices',
+    title: 'تعیین قیمت',
+    desc: 'آخرین خرید هر شرکت، درصد یا قیمت فروش',
+    icon: BadgePercent,
+    tone: 'bg-violet-100 text-violet-700',
+  },
+  {
+    path: '/catalog-manage',
+    title: 'کاتالوگ',
+    desc: 'لینک، کپی و پیامک لیست قیمت',
+    icon: BookOpen,
+    tone: 'bg-emerald-100 text-emerald-700',
+  },
+  {
+    path: '/factory-prices',
+    title: 'قیمت کارخانه',
+    desc: 'بهای فروش مستقیم از کارخانه',
+    icon: Factory,
+    tone: 'bg-amber-100 text-amber-800',
   },
   {
     path: '/workshop',

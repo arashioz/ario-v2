@@ -7,9 +7,11 @@ import {
   CustomerTransactionSchema,
 } from '../customers/schemas/customer-transaction.schema';
 import { WatchDismissal, WatchDismissalSchema } from './schemas/watch-dismissal.schema';
+import { PerformanceSnapshot, PerformanceSnapshotSchema } from './schemas/performance-snapshot.schema';
 import { AccountingService } from './accounting.service';
 import { AccountingController } from './accounting.controller';
 import { ProfitWatchService } from './profit-watch.service';
+import { PerformanceService } from './performance.service';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { WorkshopBatch, WorkshopBatchSchema } from '../workshop/workshop.schema';
@@ -26,10 +28,11 @@ import { UsersModule } from '../users/users.module';
       { name: WorkshopBatch.name, schema: WorkshopBatchSchema },
       { name: CustomerTransaction.name, schema: CustomerTransactionSchema },
       { name: WatchDismissal.name, schema: WatchDismissalSchema },
+      { name: PerformanceSnapshot.name, schema: PerformanceSnapshotSchema },
     ]),
   ],
   controllers: [AccountingController],
-  providers: [AccountingService, ProfitWatchService],
+  providers: [AccountingService, ProfitWatchService, PerformanceService],
   exports: [AccountingService],
 })
 export class AccountingModule {}

@@ -442,6 +442,39 @@ export interface SalesBoardProduct {
   unknownSold?: number;
 }
 
+export interface PerformanceSnapshot {
+  grain: 'day' | 'month' | 'year' | 'meta';
+  key: string;
+  purchaseAmount: number;
+  purchaseKg: number;
+  purchaseCount: number;
+  saleAmount: number;
+  saleKg: number;
+  saleCount: number;
+  profitAmount: number;
+  paidIn: number;
+  paidOut: number;
+  avgBuyPerKg: number;
+  avgSellPerKg: number;
+  saleGrowth: number;
+  purchaseGrowth: number;
+  profitGrowth: number;
+}
+
+export interface PerformanceReport {
+  rebuilt: boolean;
+  auto: boolean;
+  rebuiltAt: string | null;
+  lastComputedDay: string | null;
+  computing: boolean;
+  today: PerformanceSnapshot | null;
+  thisMonth: PerformanceSnapshot | null;
+  thisYear: PerformanceSnapshot | null;
+  days: PerformanceSnapshot[];
+  months: PerformanceSnapshot[];
+  years: PerformanceSnapshot[];
+}
+
 export interface SalesBoard {
   totals: {
     purchasedKg: number;
@@ -522,6 +555,12 @@ export const accountingService = {
     return (await api.get(`/accounting/purchase-impact/${invoiceId}`, { params: q })).data;
   },
   /** Sets all three sell-price tiers and the unit purchase price in one go. */
+  async performance(): Promise<PerformanceReport> {
+    return (await api.get('/accounting/performance', { timeout: 60000 })).data;
+  },
+  async rebuildPerformance(): Promise<PerformanceReport> {
+    return (await api.post('/accounting/performance/rebuild', null, { timeout: 180000 })).data;
+  },
   async applySuggestion(s: Pick<PriceSuggestion, 'productId' | 'suggested' | 'lastCostPerUnit' | 'baseCostPerKg'>, reason: string) {
     return (
       await api.patch(`/products/${s.productId}/price`, {

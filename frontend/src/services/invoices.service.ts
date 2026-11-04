@@ -106,6 +106,9 @@ export interface Invoice {
   paidAt?: string;
   legacyPayments?: { date: string; amount: number; method?: string; accountId?: string }[];
   notes?: string;
+  /** Saved when the sale is written: cost of goods and profit after discount. */
+  costAmount?: number;
+  profitAmount?: number;
   createdByName: string;
   createdAt: string;
   updatedAt: string;
@@ -176,7 +179,26 @@ export interface FactoryPriceRow {
   price: number | null;
 }
 
+export interface PriceBoardProduct {
+  productId: string;
+  name: string;
+  category: string;
+  unit: string;
+  weightPerUnitKg: number;
+  buyPrice: number;
+  lastPurchase: { price: number; invoiceId: string; invoiceNumber: string; invoiceDate: string } | null;
+  retail: number;
+  supermarket: number;
+  wholesale: number;
+}
+
 export const invoicesService = {
+  priceBoard: async (company?: string) => {
+    const response = await api.get<{ companies: string[]; company: string; products: PriceBoardProduct[] }>('/invoices/price-board', {
+      params: company ? { company } : undefined,
+    });
+    return response.data;
+  },
   factoryPrices: async (productIds?: string[]): Promise<FactoryPriceRow[]> => {
     if (!productIds) return (await api.get<FactoryPriceRow[]>('/invoices/factory-prices')).data;
     const ids = [...new Set(productIds.filter(Boolean))].sort();

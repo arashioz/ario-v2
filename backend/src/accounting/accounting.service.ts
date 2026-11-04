@@ -9,6 +9,7 @@ import {
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
 import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg, goodsAmount } from './fifo';
+import { ymdToJalali } from '../common/jalali';
 import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
@@ -1525,6 +1526,30 @@ export class AccountingService {
         list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const retail = p.priceRetail || p.sellPrice || 0;
 
+        const monthPad = (n: number) => String(n).padStart(2, '0');
+        const monthOf = (d: Date | string) => {
+          const j = ymdToJalali(dayKey(d));
+          return `${j.jy}-${monthPad(j.jm)}`;
+        };
+        const months = new Map<string, { buyCost: number; buyKg: number; buyQty: number; sellRev: number; sellKg: number; sellQty: number }>();
+        const touch = (key: string) => {
+          const row = months.get(key) ?? { buyCost: 0, buyKg: 0, buyQty: 0, sellRev: 0, sellKg: 0, sellQty: 0 };
+          months.set(key, row);
+          return row;
+        };
+        for (const l of lots) {
+          const row = touch(monthOf(l.date));
+          row.buyCost += l.costPerKg * l.kgIn;
+          row.buyKg += l.kgIn;
+          row.buyQty += wpu > 0 ? l.kgIn / wpu : l.kgIn;
+        }
+        for (const l of sales) {
+          const row = touch(monthOf(l.date));
+          row.sellRev += l.revenue;
+          row.sellKg += l.kg;
+          row.sellQty += wpu > 0 ? l.kg / wpu : l.kg;
+        }
+
         const lastCost = f.lastCost.get(pid) ?? null;
         const cost30 = [...lots].reverse().find((l) => dayKey(l.date) <= since30)?.costPerKg ?? lots[0]?.costPerKg ?? null;
         const recent = sales.filter((l) => dayKey(l.date) >= since30);
@@ -1568,6 +1593,15 @@ export class AccountingService {
             retailPerKg: r0(retailPerKg),
             wholesalePerKg: wpu ? r0((p.priceWholesale || retail) / wpu) : 0,
           },
+          months: [...months.entries()]
+            .sort(([a], [b]) => (a < b ? -1 : 1))
+            .map(([month, m]) => ({
+              month,
+              buy: m.buyQty > 0 ? r0(m.buyCost / m.buyQty) : 0,
+              sell: m.sellQty > 0 ? r0(m.sellRev / m.sellQty) : 0,
+              buyPerKg: m.buyKg > 0 ? r0(m.buyCost / m.buyKg) : 0,
+              sellPerKg: m.sellKg > 0 ? r0(m.sellRev / m.sellKg) : 0,
+            })),
           lastCostPerKg: lastCost !== null ? r0(lastCost) : null,
           costChange30Percent: lastCost && cost30 ? pct(lastCost - cost30, cost30) : 0,
           avgSell30PerKg: avgSell30 !== null ? r0(avgSell30) : null,

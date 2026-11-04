@@ -18,7 +18,7 @@ export const catalogUrl = (tier: CatalogTier) =>
   `${window.location.origin}/catalog${tier === 'retail' ? '' : `?tier=${tier}`}`;
 
 /** Picks which price tier the public catalog shows, then copies or shares its link. */
-export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
+export const CatalogSharePanel: React.FC = () => {
   const [tier, setTier] = useState<CatalogTier>('retail');
   const { showNotification } = useNotification();
   const settings = useSettings();
@@ -47,7 +47,7 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
   };
 
   return (
-    <Sheet open={open} title="کاتالوگ آنلاین" subtitle="لینک عمومی لیست قیمت و عکس محصولات" onClose={onClose}>
+    <div className="space-y-3">
       <div className="space-y-2">
         <p className="text-[11px] text-slate-500">کدام قیمت در کاتالوگ نمایش داده شود؟</p>
         {TIERS.map((t) => (
@@ -122,6 +122,12 @@ export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }>
         هر کسی این لینک را داشته باشد، بدون ورود به برنامه قیمت‌ها و عکس کالاها را می‌بیند. قیمت خرید و مقدار دقیق
         موجودی نمایش داده نمی‌شود؛ فقط «موجود / ناموجود».
       </p>
-    </Sheet>
+    </div>
   );
 };
+
+export const CatalogShareSheet: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => (
+  <Sheet open={open} title="کاتالوگ آنلاین" subtitle="لینک عمومی لیست قیمت و عکس محصولات" onClose={onClose}>
+    {open && <CatalogSharePanel />}
+  </Sheet>
+);

@@ -509,6 +509,12 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span>مبلغ نهایی فاکتور:</span>
                 <span className="font-mono text-sky-700">{formatToman(invoice.finalAmount)}</span>
               </div>
+              {isSale && typeof invoice.profitAmount === 'number' && (
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
+                  <span>سود این فاکتور:</span>
+                  <span className="font-mono">{formatToman(invoice.profitAmount)}</span>
+                </div>
+              )}
 
               {invoice.shippingPayer === 'me' && invoice.shippingCost ? (
                 <div className="flex items-center justify-between text-[11px] text-slate-500 print:hidden">

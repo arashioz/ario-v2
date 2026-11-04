@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { randomBytes } from 'crypto';
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -535,12 +535,6 @@ export class ProductsService implements OnModuleInit {
     delete set.stockAdjust;
     delete set.openingStock;
     const existing = await this.findOne(id);
-    if (updateDto.autoPricing ?? existing.autoPricing) {
-      const merged = { ...existing.toObject(), ...updateDto };
-      const settings = await this.settings.get();
-      const tiers = channelPrices(merged, settings.categoryBasePrices?.find((r) => r.category === merged.category));
-      Object.assign(set, { sellPrice: tiers.retail, priceRetail: tiers.retail, priceSupermarket: tiers.supermarket, priceWholesale: tiers.wholesale, priceDistributor: tiers.distributor });
-    }
     const priceChanged = ['sellPrice', 'priceRetail', 'priceSupermarket', 'priceWholesale', 'priceDistributor'].some((k) => set[k] !== undefined && set[k] !== existing[k]);
     if (priceChanged) set.priceSetAt = new Date();
     const product = await this.productModel
@@ -551,6 +545,45 @@ export class ProductsService implements OnModuleInit {
       throw new NotFoundException('کالا یافت نشد');
     }
     return product;
+  }
+
+  /** Writes the three sale prices used by the catalog and the sale screen. */
+  async applyChannelPrices(
+    items: { productId: string; retail: number; supermarket: number; wholesale: number }[],
+    actor: string,
+  ) {
+    const clean = (items || []).filter((it) => it && Types.ObjectId.isValid(String(it.productId || '')));
+    if (!clean.length) throw new BadRequestException('کالایی برای قیمت‌گذاری نیست');
+    const money = (n: unknown) => {
+      const v = Math.round(Number(n) || 0);
+      if (!Number.isFinite(v) || v < 0 || v > 1e12) throw new BadRequestException('قیمت نامعتبر است');
+      return v;
+    };
+    const products = await this.productModel.find({ _id: { $in: clean.map((it) => it.productId) } });
+    const byId = new Map(products.map((p) => [String(p._id), p]));
+    const ops = clean.flatMap((it) => {
+      const product = byId.get(String(it.productId));
+      if (!product) return [];
+      const retail = money(it.retail);
+      const supermarket = money(it.supermarket) || retail;
+      const wholesale = money(it.wholesale) || retail;
+      if (!(retail > 0)) throw new BadRequestException(`قیمت تکی «${product.name}» را وارد کنید`);
+      return [{ updateOne: { filter: { _id: product._id }, update: {
+        $set: {
+          sellPrice: retail,
+          priceRetail: retail,
+          priceSupermarket: supermarket,
+          priceWholesale: wholesale,
+          priceDistributor: wholesale,
+          priceSetAt: new Date(),
+          autoPricing: false,
+        },
+        $unset: { priceCostBasisPerKg: 1 },
+        $push: { priceHistory: { $each: [{ oldPrice: product.sellPrice, newPrice: retail, reason: 'تعیین قیمت فروش', changedByName: actor, date: new Date() }], $position: 0, $slice: 40 } },
+      } } }];
+    });
+    if (ops.length) await this.productModel.bulkWrite(ops);
+    return { modified: ops.length };
   }
 
   async saveCategoryPrice(rule: CategoryBasePrice, actor: string) {
