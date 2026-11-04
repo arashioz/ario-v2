@@ -242,7 +242,7 @@ export const PosTab: React.FC = () => {
     try {
       if (!confirmSaleLoss(items.map((item, index) => ({
         name: item.productName, quantity: item.quantity, unitPrice: item.unitPrice,
-        unitCost: fulfillment === 'factory' ? item.factoryUnitCost ?? 0 : (costOnDate[lines[index].product._id] ?? lines[index].product.buyPrice || 0),
+        unitCost: fulfillment === 'factory' ? (item.factoryUnitCost ?? 0) : ((costOnDate[lines[index].product._id] ?? lines[index].product.buyPrice) || 0),
       })), terms.discount, fulfillment === 'factory', asProforma)) return;
       setSubmitting(true);
       const order = enqueueOrder(asProforma ? 'proforma' : 'invoice', input);

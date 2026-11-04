@@ -294,7 +294,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
     if (isSale && !confirmSaleLoss(rows.map((row) => ({
       name: row.productName, quantity: row.quantity, unitPrice: row.unitPrice,
-      unitCost: fromCompany ? row.factoryUnitCost : (costOnDate[row.productId] ?? products.find((p) => p._id === row.productId)?.buyPrice || 0),
+      unitCost: fromCompany ? row.factoryUnitCost : ((costOnDate[row.productId] ?? products.find((p) => p._id === row.productId)?.buyPrice) || 0),
     })), discount, fromCompany)) return;
 
     try {

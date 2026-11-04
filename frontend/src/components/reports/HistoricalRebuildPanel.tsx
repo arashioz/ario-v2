@@ -81,7 +81,7 @@ export const HistoricalRebuildPanel: React.FC = () => {
         چهار مرحله، به ترتیب. قیمت، تعداد، تاریخ و مبلغ فاکتور خرید و فروش دست نمی‌خورد. فقط سود ذخیره‌شده با بهای خرید همان تاریخ عوض می‌شود و بعد نمودار عملکرد از نو ساخته می‌شود.
       </p>
       <ol className="text-[11px] text-slate-500 leading-6 list-decimal pr-4">
-        <li className={run?.source || run?.purchases ? 'text-emerald-700' : ''}>پیش‌بررسی، بدون هیچ تغییری</li>
+        <li className={run && run.phase !== 'idle' ? 'text-emerald-700' : ''}>پیش‌بررسی، بدون هیچ تغییری</li>
         <li className={run?.pricesDone ? 'text-emerald-700' : ''}>بازه قیمت خرید از فاکتورهای خرید</li>
         <li className={run?.profitsDone ? 'text-emerald-700' : ''}>سود فروش‌ها، دسته‌دسته</li>
         <li className={run?.performanceDone ? 'text-emerald-700' : ''}>با تأیید شما: به‌روزرسانی همه گزارش‌ها</li>
