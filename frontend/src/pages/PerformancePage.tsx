@@ -9,9 +9,9 @@ import { ReportHeader, Segments } from '../components/reports/ReportUI';
 import { PriceChart } from '../components/reports/PriceChart';
 import type { ChartSeries } from '../components/reports/PriceChart';
 import { useNotification } from '../context/NotificationContext';
-import { useAuth } from '../context/AuthContext';
-import { HistoricalRebuildPanel } from '../components/reports/HistoricalRebuildPanel';
-import { formatJalali, jalaliToYmd } from '../lib/jalali';
+import { PeriodPicker, periodPresets } from '../components/ui/PeriodPicker';
+import type { Period } from '../components/ui/PeriodPicker';
+import { formatJalali, jalaliMonthRange, jalaliToYmd } from '../lib/jalali';
 import { formatToman, percent, profitCaption, profitColor, weight } from '../lib/format';
 
 type Grain = 'day' | 'month' | 'year';
@@ -26,6 +26,25 @@ const pointTime = (row: PerformanceSnapshot) => {
     return new Date(`${jalaliToYmd(jy, jm, 15)}T12:00:00+03:30`).getTime();
   }
   return new Date(`${row.key}T12:00:00+03:30`).getTime();
+};
+
+const overlaps = (start: string, end: string, period: Period) => {
+  if (period.to && start > period.to) return false;
+  if (period.from && end < period.from) return false;
+  return true;
+};
+
+const inPeriod = (row: PerformanceSnapshot, period: Period) => {
+  if (!period.from && !period.to) return true;
+  if (row.grain === 'day') return overlaps(row.key, row.key, period);
+  if (row.grain === 'month') {
+    const [jy, jm] = row.key.split('-').map(Number);
+    const span = jalaliMonthRange(jy, jm);
+    return overlaps(span.from, span.to, period);
+  }
+  const year = Number(row.key);
+  const span = { from: jalaliMonthRange(year, 1).from, to: jalaliMonthRange(year, 12).to };
+  return overlaps(span.from, span.to, period);
 };
 
 const labelOf = (row: PerformanceSnapshot) => {
@@ -46,7 +65,6 @@ const Mini: React.FC<{ label: string; value: string; tone?: string }> = ({ label
 
 export const PerformancePage: React.FC = () => {
   const { showNotification } = useNotification();
-  const { user } = useAuth();
   const settings = useSettings();
   const [data, setData] = useState<PerformanceReport | null>(null);
   const [error, setError] = useState('');
@@ -54,6 +72,7 @@ export const PerformancePage: React.FC = () => {
   const [kind, setKind] = useState<ChartKind>('money');
   const [rebuilding, setRebuilding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [period, setPeriod] = useState<Period>(() => periodPresets()[0]);
 
   const load = useCallback(async () => {
     try {
@@ -97,7 +116,28 @@ export const PerformancePage: React.FC = () => {
     }
   };
 
-  const rows = data?.[grain === 'day' ? 'days' : grain === 'month' ? 'months' : 'years'] || [];
+  const rows = (data?.[grain === 'day' ? 'days' : grain === 'month' ? 'months' : 'years'] || []).filter((row) => inPeriod(row, period));
+  const periodDays = (data?.days || []).filter((row) => inPeriod(row, period));
+  const scoped = period.from || period.to;
+  const summary = useMemo(() => {
+    if (!scoped) return data?.thisMonth || null;
+    const sum = (pick: (row: PerformanceSnapshot) => number) => periodDays.reduce((total, row) => total + (pick(row) || 0), 0);
+    const saleKg = sum((row) => row.saleKg);
+    const purchaseKg = sum((row) => row.purchaseKg);
+    const saleAmount = sum((row) => row.saleAmount);
+    const purchaseAmount = sum((row) => row.purchaseAmount);
+    return {
+      saleAmount,
+      purchaseAmount,
+      profitAmount: sum((row) => row.profitAmount),
+      paidIn: sum((row) => row.paidIn),
+      paidOut: sum((row) => row.paidOut),
+      saleCount: sum((row) => row.saleCount),
+      purchaseCount: sum((row) => row.purchaseCount),
+      avgSellPerKg: saleKg > 0 ? Math.round(saleAmount / saleKg) : 0,
+      avgBuyPerKg: purchaseKg > 0 ? Math.round(purchaseAmount / purchaseKg) : 0,
+    };
+  }, [scoped, data?.thisMonth, periodDays]);
   const series: ChartSeries[] = useMemo(() => {
     const pts = (pick: (r: PerformanceSnapshot) => number, note: string) =>
       rows.filter((r) => pick(r) !== 0 || r.saleCount + r.purchaseCount > 0).map((r) => ({ t: pointTime(r), y: pick(r), note: `${labelOf(r)} · ${note}` }));
@@ -127,10 +167,13 @@ export const PerformancePage: React.FC = () => {
     ];
   }, [rows, kind]);
 
-  const from = series.flatMap((s) => s.points.map((p) => p.t)).sort((a, b) => a - b)[0] || Date.now();
-  const to = Date.now() + 12 * 3600000;
+  const from = period.from
+    ? new Date(`${period.from}T00:00:00+03:30`).getTime()
+    : series.flatMap((s) => s.points.map((p) => p.t)).sort((a, b) => a - b)[0] || Date.now();
+  const to = period.to ? new Date(`${period.to}T23:59:00+03:30`).getTime() : Date.now() + 12 * 3600000;
   const unitLabel = kind === 'price' ? 'هر کیلو' : kind === 'growth' ? 'درصد' : 'تومان';
-  const now = data?.thisMonth;
+  const now = summary;
+  const scopeLabel = scoped ? period.label : 'این ماه';
 
   return (
     <IonPage>
@@ -150,7 +193,6 @@ export const PerformancePage: React.FC = () => {
           <IonRefresherContent />
         </IonRefresher>
         <div className="p-3 space-y-3 max-w-lg mx-auto pb-10">
-          {user?.role === 'admin' && <HistoricalRebuildPanel />}
           {error && <div className="text-xs text-rose-700 bg-rose-50 rounded-2xl p-3">{error}</div>}
 
           {data && !data.rebuilt && (
@@ -167,7 +209,8 @@ export const PerformancePage: React.FC = () => {
 
           {data?.rebuilt && (
             <>
-              <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 bg-white rounded-2xl border border-slate-100 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 bg-white rounded-2xl border border-slate-100 px-3 py-2">
+                <PeriodPicker value={period} onChange={setPeriod} />
                 <span>آخرین ذخیره: {data.lastComputedDay ? formatJalali(data.lastComputedDay) : '—'}</span>
                 <label className="flex items-center gap-1.5 font-bold text-slate-700">
                   اجرای شبانه
@@ -182,10 +225,10 @@ export const PerformancePage: React.FC = () => {
 
               {now && (
                 <div className="grid grid-cols-2 gap-2">
-                  <Mini label="فروش این ماه" value={formatToman(now.saleAmount)} tone="text-sky-800" />
-                  <Mini label="خرید این ماه" value={formatToman(now.purchaseAmount)} tone="text-amber-800" />
-                  <Mini label="سود این ماه" value={profitCaption(now.profitAmount, { sold: now.saleAmount })} tone={profitColor(now.profitAmount)} />
-                  <Mini label="دریافت این ماه" value={formatToman(now.paidIn)} />
+                  <Mini label={`فروش ${scopeLabel}`} value={formatToman(now.saleAmount)} tone="text-sky-800" />
+                  <Mini label={`خرید ${scopeLabel}`} value={formatToman(now.purchaseAmount)} tone="text-amber-800" />
+                  <Mini label={`سود ${scopeLabel}`} value={profitCaption(now.profitAmount, { sold: now.saleAmount })} tone={profitColor(now.profitAmount)} />
+                  <Mini label={`دریافت ${scopeLabel}`} value={formatToman(now.paidIn)} />
                 </div>
               )}
 
@@ -216,7 +259,8 @@ export const PerformancePage: React.FC = () => {
               </div>
 
               <section className="space-y-2">
-                <h2 className="text-[13px] font-bold text-slate-800 px-1">عملکرد {grainLabel[grain]}</h2>
+                <h2 className="text-[13px] font-bold text-slate-800 px-1">عملکرد {grainLabel[grain]}{scoped ? ` · ${period.label}` : ''}</h2>
+                {rows.length === 0 && <p className="text-xs text-slate-400 px-1">در این بازه عملکردی ذخیره نشده.</p>}
                 {[...rows].reverse().filter((r) => r.saleCount + r.purchaseCount + r.paidIn + r.paidOut > 0).slice(0, grain === 'day' ? 45 : 36).map((r) => (
                   <article key={r.key} className="bg-white rounded-2xl border border-slate-100 px-3.5 py-3">
                     <div className="flex items-start justify-between gap-2">

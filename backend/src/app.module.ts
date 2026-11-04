@@ -23,7 +23,6 @@ import { BackupModule } from './backup/backup.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { OrderRequestsModule } from './orders/order-requests.module';
 import { WatchModule } from './watch/watch.module';
-import { HistoricalRebuildModule } from './rebuild/historical-rebuild.module';
 
 @Module({
   imports: [
@@ -61,7 +60,6 @@ import { HistoricalRebuildModule } from './rebuild/historical-rebuild.module';
     SharesModule,
     BackupModule,
     WatchModule,
-    HistoricalRebuildModule,
   ],
   controllers: [AppController],
   providers: [AppService],
