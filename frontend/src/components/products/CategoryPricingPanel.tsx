@@ -55,7 +55,7 @@ export const CategoryPricingPanel: React.FC<{ categories: string[]; onSaved: () 
       });
       await settingsService.get(true);
       onSaved();
-      const missed = result.skipped?.length ? ` ${result.skipped.length.toLocaleString('fa-IR')} کالا به‌خاطر وزن نامشخص عوض نشد.` : '';
+      const missed = result.skipped?.length ? ` ${result.skipped.length.toLocaleString('fa-IR')} کالا قیمت خرید ندارد و عوض نشد.` : '';
       showNotification({ title: 'قیمت بازار اعمال شد', message: `${result.modified.toLocaleString('fa-IR')} کالا با همان درصدهای فروش به‌روز شد.${missed}`, type: 'success' });
     } catch (error) {
       showNotification({ title: 'ذخیره نشد', message: apiErrorMessage(error, 'ذخیره قیمت پایه انجام نشد'), type: 'error' });

@@ -1,4 +1,4 @@
-import { FifoInvoice, FifoWorkshop, lineKg, runFifo } from './fifo';
+import { FifoInvoice, FifoWorkshop, landedUnitPrices, lineKg, runFifo } from './fifo';
 
 const invoice = (
   id: string,
@@ -206,5 +206,35 @@ describe('workshop FIFO', () => {
     );
     expect(result.lots[0].costPerKg).toBe(12);
     expect(result.saleLines).toHaveLength(0);
+  });
+});
+
+describe('landed purchase price', () => {
+  const bag = { _id: 'nylon', name: 'نایلون', unit: 'بسته', weightPerUnitKg: 5 };
+  const products = new Map([['nylon', bag], ['box', { _id: 'box', name: 'کارتن', unit: 'عدد', weightPerUnitKg: 1 }]]);
+
+  it('keeps the invoice unit price when there is no freight', () => {
+    const prices = landedUnitPrices({
+      type: 'purchase',
+      totalAmount: 10 * 100_000,
+      items: [{ productId: 'nylon', productName: 'نایلون', quantity: 10, unit: 'بسته', unitPrice: 100_000, totalPrice: 1_000_000, weightKg: 50 }],
+    }, products);
+    expect(prices).toEqual([100_000]);
+  });
+
+  it('adds this line’s share of freight onto the unit price', () => {
+    const prices = landedUnitPrices({
+      type: 'purchase',
+      shippingPayer: 'me',
+      shippingCost: 50_000,
+      totalAmount: 1_000_000 + 300_000,
+      items: [
+        { productId: 'nylon', productName: 'نایلون', quantity: 10, unit: 'بسته', unitPrice: 100_000, totalPrice: 1_000_000, weightKg: 50 },
+        { productId: 'box', productName: 'کارتن', quantity: 10, unit: 'عدد', unitPrice: 30_000, totalPrice: 300_000, weightKg: 10 },
+      ],
+    }, products);
+    expect(prices[0]).toBe(100_000 + Math.round((50_000 * 50) / 60 / 10));
+    expect(prices[1]).toBe(30_000 + Math.round((50_000 * 10) / 60 / 10));
+    expect(prices[0]).not.toBe(100_000);
   });
 });

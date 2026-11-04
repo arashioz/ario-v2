@@ -36,6 +36,36 @@ export function automaticPrice(product: {
   return Math.round((base + perKgFee + perPackFee) * (1 + (product.commissionPercent || 0) / 100));
 }
 
+const unitKg = (product: Parameters<typeof automaticPrice>[0]) =>
+  product.weightPerUnitKg || (product.hasDualUnit && product.secondaryUnit === 'کیلوگرم' ? product.unitRatio || 0 : 0) || (product.unit === 'کیلوگرم' ? 1 : 0);
+
+/**
+ * Same channel percents for every product. A product with no pack weight cannot use a per-kilo
+ * market price, so its own buy price (landed cost, freight included) takes the percent instead of being skipped.
+ */
+export function channelPricesForAll(product: Parameters<typeof automaticPrice>[0], rule: CategoryBasePrice | undefined) {
+  const kg = unitKg(product);
+  const kgFee = product.commissionUnit === 'kg' && (product.commissionAmount || 0) > 0;
+  const needsWeight = (rule?.unit === 'kg' || kgFee) && !(kg > 0);
+  if (!needsWeight) return channelPrices(product, rule);
+  const buy = Math.round(Number(product.buyPrice) || 0);
+  if (!(buy > 0)) throw new BadRequestException('برای قیمت یا کارمزد کیلویی، وزن هر واحد محصول را وارد کنید');
+  const pack = Math.round(Number(product.packageFee) || 0) + (product.commissionUnit === 'unit' ? Math.round(Number(product.commissionAmount) || 0) : 0);
+  const cost = buy + pack;
+  const hasChannel = rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent, rule.distributorPercent].some((n) => n !== undefined && n !== null);
+  if (!hasChannel) {
+    const price = Math.round(cost * (1 + (Number(product.commissionPercent) || 0) / 100));
+    return { retail: price, supermarket: price, wholesale: price, distributor: price };
+  }
+  const apply = (pct: number | undefined) => Math.round(cost * (1 + (Number(pct) || 0) / 100));
+  return {
+    retail: apply(rule?.retailPercent),
+    supermarket: apply(rule?.supermarketPercent),
+    wholesale: apply(rule?.wholesalePercent),
+    distributor: apply(rule?.distributorPercent),
+  };
+}
+
 /** Cost of one package, then a separate profit percent for each sale channel. */
 export function channelPrices(product: Parameters<typeof automaticPrice>[0], rule: CategoryBasePrice | undefined) {
   const hasChannel = rule && [rule.retailPercent, rule.supermarketPercent, rule.wholesalePercent, rule.distributorPercent].some((n) => n !== undefined && n !== null);

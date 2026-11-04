@@ -1,4 +1,4 @@
-import { automaticPrice, channelPrices } from './automatic-pricing';
+import { automaticPrice, channelPrices, channelPricesForAll } from './automatic-pricing';
 
 describe('category base and product commissions', () => {
   const product = { category: 'نبات', unit: 'بسته', weightPerUnitKg: 3, commissionAmount: 2000, commissionPercent: 5, commissionUnit: 'kg' };
@@ -27,5 +27,12 @@ describe('category base and product commissions', () => {
       { category: 'نبات', amount: 10000, unit: 'kg', retailPercent: 10, supermarketPercent: 5, wholesalePercent: 2, distributorPercent: 0 },
     );
     expect(tiers).toEqual({ retail: 33000, supermarket: 31500, wholesale: 30600, distributor: 30000 });
+  });
+  it('still applies the channel percent when one product has no weight', () => {
+    const tiers = channelPricesForAll(
+      { category: 'نبات', unit: 'عدد', weightPerUnitKg: 0, buyPrice: 10000, commissionAmount: 0, commissionPercent: 0 },
+      { category: 'نبات', amount: 10000, unit: 'kg', retailPercent: 10, supermarketPercent: 5, wholesalePercent: 2, distributorPercent: 0 },
+    );
+    expect(tiers).toEqual({ retail: 11000, supermarket: 10500, wholesale: 10200, distributor: 10000 });
   });
 });

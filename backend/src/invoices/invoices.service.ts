@@ -17,7 +17,7 @@ import { CustomersService } from '../customers/customers.service';
 import { UsersService } from '../users/users.service';
 import { SuppliersService } from '../suppliers/suppliers.service';
 import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
-import { goodsAmount, kgPerStock, lineKg } from '../accounting/fifo';
+import { goodsAmount, kgPerStock, landedUnitPrices, lineKg } from '../accounting/fifo';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
 import { PricePeriodService } from '../pricing/price-period.service';
@@ -50,6 +50,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   async onApplicationBootstrap() {
     await this.syncPricePeriods().catch(() => undefined);
     await this.rebuildStock().catch(() => undefined);
+    await this.repairLandedBuyPrices().catch(() => undefined);
   }
 
   // ---------------------------------------------------------------------------
@@ -689,11 +690,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     } else if (!isSale) {
       // Every received purchase adds stock, whichever company it came from.
       await this.shiftStock(items, 1, true);
-      for (const item of items) {
-        if (item.unitPrice > 0) {
-          await this.rememberBuyPrice(item.productId, item.unitPrice, this.invoiceInstant(dto.invoiceDate));
-        }
-      }
+      await this.rememberLandedBuyPrices(items, dto, this.invoiceInstant(dto.invoiceDate));
     }
 
     const customerPrevBalance = customer?.balance || 0;
@@ -853,11 +850,7 @@ export class InvoicesService implements OnApplicationBootstrap {
       if (invoice.fulfillment === 'factory' && invoice.factorySaleId) {
         await this.mirrorFactoryCostToSale(invoice);
       }
-      for (const item of prepared.items) {
-        if (willShopPurchase && item.unitPrice > 0) {
-          await this.rememberBuyPrice(item.productId, item.unitPrice, invoiceDate);
-        }
-      }
+      if (willShopPurchase) await this.rememberLandedBuyPrices(prepared.items, invoice, invoiceDate);
       await this.suppliersService.sync(invoice.customerName);
       if (canonicalSupplier(previousSupplier) !== canonicalSupplier(invoice.customerName)) {
         await this.suppliersService.sync(previousSupplier);
@@ -967,6 +960,70 @@ export class InvoicesService implements OnApplicationBootstrap {
     if (!updated.shippedAt) updated.shippedAt = updated.paidAt;
     await updated.save();
     return updated;
+  }
+
+  /**
+   * Purchases already saved stored the supplier unit price and left the freight out.
+   * Where the product price is still that unit price, replace it with the landed cost of the latest purchase.
+   */
+  private async repairLandedBuyPrices() {
+    const purchases = await this.invoiceModel
+      .find({ type: 'purchase', fulfillment: { $ne: 'factory' } })
+      .select('invoiceDate shippingPayer shippingCost totalAmount discount items')
+      .sort({ invoiceDate: 1, createdAt: 1 })
+      .lean();
+    const latest = new Map<string, { unit: number; landed: number }>();
+    for (const inv of purchases) {
+      const items = inv.items || [];
+      const prices = landedUnitPrices({
+        type: 'purchase',
+        shippingPayer: inv.shippingPayer,
+        shippingCost: inv.shippingCost,
+        totalAmount: inv.totalAmount,
+        discount: inv.discount,
+        items,
+      });
+      items.forEach((it, i) => {
+        const id = String(it.productId || '');
+        if (!Types.ObjectId.isValid(id) || !(it.unitPrice > 0) || !(prices[i] > 0)) return;
+        latest.set(id, { unit: Math.round(it.unitPrice), landed: prices[i] });
+      });
+    }
+    for (const [id, row] of latest) {
+      if (row.landed === row.unit) continue;
+      await this.productModel.updateOne({ _id: id, buyPrice: row.unit }, { $set: { buyPrice: row.landed } }).exec();
+    }
+  }
+
+  /**
+   * Writes each line's landed unit cost (invoice price after discount + its share of freight)
+   * onto the product. The invoice line keeps the supplier's unit price.
+   */
+  private async rememberLandedBuyPrices(
+    items: { productId: unknown; quantity: number; unit?: string; unitPrice: number; totalPrice?: number; weightKg?: number; secondaryQuantity?: number; productName?: string }[],
+    money: { shippingPayer?: string | null; shippingCost?: number; totalAmount?: number; discount?: number },
+    invoiceDate: Date,
+  ) {
+    const prices = landedUnitPrices({
+      type: 'purchase',
+      shippingPayer: money.shippingPayer || undefined,
+      shippingCost: money.shippingCost,
+      totalAmount: money.totalAmount || 0,
+      discount: money.discount,
+      items: items.map((it) => ({
+        productId: String(it.productId || ''),
+        productName: it.productName || '',
+        quantity: it.quantity,
+        unit: it.unit || '',
+        unitPrice: it.unitPrice,
+        totalPrice: it.totalPrice || 0,
+        weightKg: it.weightKg,
+        secondaryQuantity: it.secondaryQuantity,
+      })),
+    });
+    for (let i = 0; i < items.length; i++) {
+      if (prices[i] > 0) await this.rememberBuyPrice(items[i].productId, prices[i], invoiceDate);
+    }
   }
 
   /** A backdated purchase must not overwrite the buy price set by a newer invoice. */

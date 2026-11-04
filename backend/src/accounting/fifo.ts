@@ -308,6 +308,39 @@ export function purchaseLineCosts(inv: FifoInvoice, products: Map<string, FifoPr
   });
 }
 
+/**
+ * Landed purchase price of one stock unit (a bag, not a kilo).
+ * Invoice unit price after the supplier discount, plus that line's share of freight.
+ * With no freight and no discount this is the typed unit price.
+ */
+export function landedUnitPrices(
+  inv: Pick<FifoInvoice, 'type' | 'shippingPayer' | 'shippingCost' | 'totalAmount' | 'discount' | 'items'>,
+  products: Map<string, FifoProduct> = new Map(),
+): number[] {
+  const costs = purchaseLineCosts(
+    {
+      _id: '',
+      invoiceNumber: '',
+      invoiceDate: new Date(0),
+      customerName: '',
+      finalAmount: 0,
+      type: inv.type,
+      shippingPayer: inv.shippingPayer,
+      shippingCost: inv.shippingCost,
+      totalAmount: inv.totalAmount || 0,
+      discount: inv.discount,
+      items: inv.items,
+    },
+    products,
+  );
+  return inv.items.map((it, i) => {
+    const qty = Number(it.quantity) || 0;
+    const kg = costs[i]?.kg || 0;
+    if (!(qty > 0) || !(kg > 0)) return Math.max(0, Math.round(Number(it.unitPrice) || 0));
+    return Math.max(0, Math.round(costs[i].costPerKg * (kg / qty)));
+  });
+}
+
 export interface FifoWorkshop {
   _id: string;
   date: Date;

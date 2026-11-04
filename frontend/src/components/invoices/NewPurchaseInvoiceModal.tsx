@@ -223,6 +223,13 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
   const totalWeightKg = items.reduce((sum, it) => sum + (it.hasDualUnit ? it.secondaryQuantity : 0), 0);
   const freightPerKg = totalWeightKg > 0 ? freightNum / totalWeightKg : 0;
   const discountFactor = subtotal > 0 ? finalAmount / subtotal : 1;
+  const lineWeight = (it: (typeof items)[number]) => (it.hasDualUnit && it.secondaryQuantity > 0 ? it.secondaryQuantity : it.quantity);
+  const landedWeight = items.reduce((sum, it) => sum + lineWeight(it), 0);
+  const landedUnit = (it: (typeof items)[number]) => {
+    if (!(it.quantity > 0)) return it.unitBuyPrice;
+    const share = landedWeight > 0 ? (freightNum * lineWeight(it)) / landedWeight : 0;
+    return Math.round((it.totalPrice * discountFactor + share) / it.quantity);
+  };
 
   const handleSubmit = async () => {
     if (!supplierName.trim()) {
@@ -635,6 +642,9 @@ export const NewPurchaseInvoiceModal: React.FC<NewPurchaseInvoiceModalProps> = (
                           </span>
                         )}
                         <span>فی: {formatToman(it.unitBuyPrice)}</span>
+                        {landedUnit(it) !== it.unitBuyPrice && (
+                          <span className="text-sky-800 font-bold">تمام‌شده: {formatToman(landedUnit(it))}</span>
+                        )}
                       </div>
                     </div>
 

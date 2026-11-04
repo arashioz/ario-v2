@@ -80,6 +80,15 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const [branchName, setBranchName] = useState('');
   const settings = useSettings();
   const { bankCards } = settings;
+  const landedUnit = (r: Row) => {
+    const goods = rows.reduce((sum, row) => sum + row.quantity * row.unitPrice, 0);
+    const factor = goods > 0 ? Math.max(0, goods - discount) / goods : 1;
+    const weightOf = (row: Row) => (row.ratio > 0 ? row.quantity * row.ratio : row.quantity);
+    const totalW = rows.reduce((sum, row) => sum + weightOf(row), 0);
+    if (!(r.quantity > 0)) return Math.round(r.unitPrice);
+    const share = totalW > 0 ? (freight * weightOf(r)) / totalW : 0;
+    return Math.round((r.quantity * r.unitPrice * factor + share) / r.quantity);
+  };
 
   useEffect(() => {
     if (!invoice) return;
@@ -519,6 +528,15 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
         <div>
           <label className="text-[11px] text-slate-500 block mb-1">کرایه حمل و تخلیه (پرداختی شما، جزو بهای تمام‌شده کالا)</label>
           <AmountInput value={freight} onChange={setFreight} />
+          {freight > 0 && rows.some((r) => landedUnit(r) !== Math.round(r.unitPrice)) && (
+            <div className="mt-2 space-y-0.5 text-[10px] text-sky-800">
+              {rows.filter((r) => r.quantity > 0 && landedUnit(r) !== Math.round(r.unitPrice)).map((r) => (
+                <p key={r.productId}>
+                  {r.productName}: فی {formatToman(r.unitPrice)} → تمام‌شده {formatToman(landedUnit(r))}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

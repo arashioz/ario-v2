@@ -13,7 +13,7 @@ import { join } from 'path';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { StockCount, StockCountDocument } from './schemas/stock-count.schema';
 import { SettingsService } from '../settings/settings.service';
-import { channelPrices, CategoryBasePrice } from './automatic-pricing';
+import { channelPrices, channelPricesForAll, CategoryBasePrice } from './automatic-pricing';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import {
@@ -574,7 +574,7 @@ export class ProductsService implements OnModuleInit {
       try {
         const source = typeof product.toObject === 'function' ? product.toObject() : product;
         const priced = next.unit === 'kg' ? { ...source, basePrice: next.amount } : source;
-        changes.push({ product, tiers: channelPrices(priced, next) });
+        changes.push({ product, tiers: channelPricesForAll(priced, next) });
       } catch {
         skipped.push(product.name);
       }
