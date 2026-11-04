@@ -194,12 +194,34 @@ export interface PriceBoardProduct {
   wholesale: number;
 }
 
+export interface PricePeriodRow {
+  productId: string;
+  productName: string;
+  unitPrice: number;
+  pricePerKg: number;
+  from: string;
+  to?: string;
+  invoiceId: string;
+  invoiceNumber: string;
+}
+
 export const invoicesService = {
   priceBoard: async (company?: string) => {
     const response = await api.get<{ companies: string[]; company: string; products: PriceBoardProduct[] }>('/invoices/price-board', {
       params: company ? { company } : undefined,
     });
     return response.data;
+  },
+  costOnDate: async (date: string, productIds: string[]): Promise<Record<string, number>> => {
+    const ids = [...new Set(productIds.filter(Boolean))];
+    if (!date || !ids.length) return {};
+    const response = await api.get<{ date: string; costs: Record<string, number> }>('/invoices/cost-on-date', {
+      params: { date, productIds: ids.join(',') },
+    });
+    return response.data.costs || {};
+  },
+  pricePeriods: async (): Promise<PricePeriodRow[]> => {
+    return (await api.get<PricePeriodRow[]>('/invoices/price-periods')).data;
   },
   factoryPrices: async (productIds?: string[]): Promise<FactoryPriceRow[]> => {
     if (!productIds) return (await api.get<FactoryPriceRow[]>('/invoices/factory-prices')).data;

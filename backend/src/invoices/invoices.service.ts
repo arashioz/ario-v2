@@ -20,7 +20,8 @@ import { canonicalSupplier, isParentSupplier, PARENT_COMPANY, purchaseEntersShop
 import { goodsAmount, kgPerStock, landedUnitPrices, lineKg } from '../accounting/fifo';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
 import { SettingsService } from '../settings/settings.service';
-import { PricePeriodService } from '../pricing/price-period.service';
+import { dayKey, priceOn, PricePeriodService, tehranDayStart, type PeriodRow } from '../pricing/price-period.service';
+import { historicalSaleProfit } from '../rebuild/sale-profit';
 
 interface ActingUser {
   id?: string;
@@ -421,36 +422,58 @@ export class InvoicesService implements OnApplicationBootstrap {
 
   /**
    * Profit of a sale, frozen on the invoice: goods after discount, minus the landed buy price
-   * (or the factory price) of each line. A line with no cost contributes no profit.
+   * that was in force on the invoice date (or the factory price typed on that shipment).
+   * Today's product.buyPrice is never used. A line with no cost that day contributes no profit.
    */
-  private async stampSaleProfit(invoice: InvoiceDocument) {
+  private async stampSaleProfit(invoice: InvoiceDocument, known?: PeriodRow[]) {
     if (invoice.type !== 'sale') return;
-    const fromFactory = invoice.fulfillment === 'factory';
-    const ids = [...new Set((invoice.items || []).map((it) => String(it.productId || '')).filter((id) => Types.ObjectId.isValid(id)))];
-    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('buyPrice').lean() : [];
-    const buy = new Map(products.map((p) => [String(p._id), Math.round(Number(p.buyPrice) || 0)]));
-    const goods = (invoice.items || []).reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
-    const discount = Math.min(goods, Math.max(0, Math.round(Number(invoice.discount) || 0)));
-    const factor = goods > 0 ? (goods - discount) / goods : 1;
-    let costAmount = 0;
-    let profitAmount = 0;
-    for (const it of invoice.items || []) {
-      const unitCost = fromFactory
-        ? Math.round(Number(it.factoryUnitCost) || buy.get(String(it.productId)) || 0)
-        : buy.get(String(it.productId)) || 0;
-      const qty = Number(it.quantity) || 0;
-      const lineNet = Math.round((Number(it.totalPrice) || 0) * factor);
-      const lineCost = unitCost > 0 ? Math.round(unitCost * qty) : 0;
-      const lineProfit = unitCost > 0 ? lineNet - lineCost : 0;
-      it.unitCost = unitCost;
-      it.profit = lineProfit;
-      costAmount += lineCost;
-      profitAmount += lineProfit;
-    }
-    invoice.costAmount = costAmount;
-    invoice.profitAmount = profitAmount;
+    const ids = this.productIdsOf(invoice);
+    const periods = known || await this.pricePeriods.forProducts(ids);
+    const next = historicalSaleProfit(invoice, periods);
+    let changed = invoice.costAmount !== next.costAmount || invoice.profitAmount !== next.profitAmount;
+    (invoice.items || []).forEach((it, i) => {
+      const line = next.lines[i];
+      if (!line) return;
+      if (it.unitCost !== line.unitCost || it.profit !== line.profit) changed = true;
+      it.unitCost = line.unitCost;
+      it.profit = line.profit;
+    });
+    if (!changed) return;
+    invoice.costAmount = next.costAmount;
+    invoice.profitAmount = next.profitAmount;
     invoice.markModified('items');
     await invoice.save();
+  }
+
+  private productIdsOf(invoice: { items?: { productId?: unknown }[] }) {
+    return [...new Set((invoice.items || []).map((it) => String(it.productId || '')).filter((id) => Types.ObjectId.isValid(id)))];
+  }
+
+  /** Sales on or after this Tehran day pick up a purchase that was inserted, edited, or removed. */
+  private async restampSalesFrom(productIds: string[], from?: Date) {
+    const ids = [...new Set(productIds.filter((id) => Types.ObjectId.isValid(id)))];
+    if (!ids.length) return;
+    const filter: Record<string, unknown> = { type: 'sale', 'items.productId': { $in: ids } };
+    if (from && !Number.isNaN(+new Date(from))) filter.invoiceDate = { $gte: tehranDayStart(from) };
+    const sales = await this.invoiceModel.find(filter).exec();
+    if (!sales.length) return;
+    const periods = await this.pricePeriods.list();
+    for (const sale of sales) await this.stampSaleProfit(sale, periods);
+  }
+
+  /** Landed buy price of each product on a Tehran day. Missing history is 0, never today's price. */
+  async costOnDate(date: string, productIds: string[]) {
+    const when = this.invoiceInstant(date);
+    if (Number.isNaN(+when)) throw new BadRequestException('تاریخ نامعتبر است');
+    const ids = [...new Set((productIds || []).filter((id) => Types.ObjectId.isValid(id)))];
+    const periods = await this.pricePeriods.forProducts(ids);
+    const costs: Record<string, number> = {};
+    for (const id of ids) costs[id] = priceOn(periods, id, when);
+    return { date: dayKey(when), costs };
+  }
+
+  listPricePeriods() {
+    return this.pricePeriods.list();
   }
 
   /** A zero customer price on a factory sale becomes the factory cost plus that channel's percent. */
@@ -476,12 +499,14 @@ export class InvoicesService implements OnApplicationBootstrap {
     const missing = items.filter((it) => !(Number(it.unitPrice) > 0));
     if (!missing.length) return;
     const ids = [...new Set(items.map((it) => it.productId).filter((id) => Types.ObjectId.isValid(String(id))))];
-    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category sellPrice priceRetail priceSupermarket priceWholesale priceDistributor buyPrice agencyBasePrice agencyGap').lean() : [];
+    const products = ids.length ? await this.productModel.find({ _id: { $in: ids } }).select('category sellPrice priceRetail priceSupermarket priceWholesale priceDistributor agencyBasePrice agencyGap').lean() : [];
     const byId = new Map(products.map((p) => [String(p._id), p]));
+    const asOf = dto.invoiceDate ? this.invoiceInstant(dto.invoiceDate) : new Date();
+    const periods = await this.pricePeriods.forProducts(ids.map((id) => String(id)));
     let filled = false;
     for (const it of missing) {
       const product = byId.get(String(it.productId));
-      const cost = Math.round(Number(it.factoryUnitCost) || Number(product?.buyPrice) || 0);
+      const cost = Math.round(Number(it.factoryUnitCost) || priceOn(periods, String(it.productId), asOf) || 0);
       if (!(it.factoryUnitCost > 0) && cost > 0) it.factoryUnitCost = cost;
       const announced = Math.round(Number(product?.agencyBasePrice) || 0);
       const fromGap = cost > 0 ? cost + Math.round(Number(product?.agencyGap) || 0) : 0;
@@ -506,13 +531,11 @@ export class InvoicesService implements OnApplicationBootstrap {
    * and the customer invoice is what Ario sends. Stock is untouched on both sides.
    */
   private async attachFactoryPurchase(sale: InvoiceDocument, recordedByName: string) {
+    const periods = await this.pricePeriods.forProducts(this.productIdsOf(sale));
     const items = [];
     for (const it of sale.items || []) {
       let unitPrice = Math.max(0, Math.round(it.factoryUnitCost || 0));
-      if (!unitPrice && Types.ObjectId.isValid(String(it.productId))) {
-        const product = await this.productModel.findById(it.productId).select('buyPrice').lean();
-        unitPrice = Math.max(0, Math.round(Number(product?.buyPrice) || 0));
-      }
+      if (!unitPrice) unitPrice = priceOn(periods, String(it.productId || ''), sale.invoiceDate || new Date());
       items.push({
         productId: it.productId,
         productName: it.productName,
@@ -855,7 +878,10 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
     if (!isSale) {
       await this.suppliersService.sync(invoice.customerName);
-      if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
+      if (purchaseEntersShop(invoice)) {
+        await this.syncPricePeriods();
+        await this.restampSalesFrom(this.productIdsOf(invoice), invoice.invoiceDate);
+      }
       return this.withPurchasedProductIds(await this.findById(String(invoice._id)));
     }
     await this.stampSaleProfit(invoice);
@@ -919,6 +945,8 @@ export class InvoicesService implements OnApplicationBootstrap {
     }
 
     const previousSupplier = invoice.customerName;
+    const previousDate = invoice.invoiceDate;
+    const previousProductIds = this.productIdsOf(invoice);
     const invoiceDate = dto.invoiceDate ? this.invoiceInstant(dto.invoiceDate) : invoice.invoiceDate;
     const dueDays = credit > 0 ? Math.min(365, Math.max(0, Math.round(dto.dueDays ?? invoice.dueDays ?? 15))) : invoice.dueDays;
     invoice.set({
@@ -962,7 +990,11 @@ export class InvoicesService implements OnApplicationBootstrap {
       if (canonicalSupplier(previousSupplier) !== canonicalSupplier(invoice.customerName)) {
         await this.suppliersService.sync(previousSupplier);
       }
-      if (wasShopPurchase || willShopPurchase) await this.syncPricePeriods();
+      if (wasShopPurchase || willShopPurchase) {
+        await this.syncPricePeriods();
+        const from = [previousDate, invoiceDate].filter((d) => d && !Number.isNaN(+new Date(d))).sort((a, b) => +new Date(a) - +new Date(b))[0];
+        await this.restampSalesFrom([...previousProductIds, ...this.productIdsOf(invoice)], from);
+      }
       return this.withPurchasedProductIds(await this.findById(id));
     }
     if (credit > 0 && customer) {
@@ -980,6 +1012,8 @@ export class InvoicesService implements OnApplicationBootstrap {
     const isSale = invoice.type === 'sale';
     const fromFactory = invoice.fulfillment === 'factory';
     const shopPurchase = purchaseEntersShop(invoice);
+    const removedProductIds = this.productIdsOf(invoice);
+    const removedDate = invoice.invoiceDate;
 
     if (isSale && fromFactory) await this.detachFactoryPurchase(invoice);
     else if (!isSale && invoice.factorySaleId && Types.ObjectId.isValid(invoice.factorySaleId)) {
@@ -997,7 +1031,10 @@ export class InvoicesService implements OnApplicationBootstrap {
       if (invoice.customerId) await this.customersService.alignInvoiceDebts(String(invoice.customerId));
     } else {
       await this.suppliersService.sync(invoice.customerName);
-      if (shopPurchase) await this.syncPricePeriods();
+      if (shopPurchase) {
+        await this.syncPricePeriods();
+        await this.restampSalesFrom(removedProductIds, removedDate);
+      }
     }
     return { message: `فاکتور ${invoice.invoiceNumber} حذف شد` };
   }
@@ -1166,9 +1203,10 @@ export class InvoicesService implements OnApplicationBootstrap {
     return invoice;
   }
 
-  /** Changes the document date only. Lines, stock, and the product buy price stay put. */
+  /** Changes the document date. A sale's profit is recalculated from the buy price of that day. */
   async setInvoiceDate(id: string, invoiceDate: string): Promise<InvoiceDocument> {
     const invoice = await this.findById(id);
+    const previous = invoice.invoiceDate;
     const next = this.invoiceInstant(invoiceDate);
     if (Number.isNaN(+next)) throw new BadRequestException('تاریخ نامعتبر است');
     invoice.invoiceDate = next;
@@ -1176,8 +1214,13 @@ export class InvoicesService implements OnApplicationBootstrap {
       invoice.dueDate = new Date(next.getTime() + invoice.dueDays * 86400000);
     }
     await invoice.save();
+    if (invoice.type === 'sale') await this.stampSaleProfit(invoice);
     if (invoice.type === 'purchase') await this.suppliersService.sync(invoice.customerName);
-    if (purchaseEntersShop(invoice)) await this.syncPricePeriods();
+    if (purchaseEntersShop(invoice)) {
+      await this.syncPricePeriods();
+      const from = [previous, next].sort((a, b) => +new Date(a) - +new Date(b))[0];
+      await this.restampSalesFrom(this.productIdsOf(invoice), from);
+    }
     return this.findById(id);
   }
 
@@ -1195,6 +1238,7 @@ export class InvoicesService implements OnApplicationBootstrap {
     const paidAt = at(body.paidAt);
     const registeredAt = at(body.registeredAt);
     if (!proformaDate && !shippedAt && !paidAt && !registeredAt) throw new BadRequestException('تاریخی برای ذخیره نیست');
+    const previousDate = invoice.invoiceDate;
     if (proformaDate) {
       invoice.proformaDate = proformaDate;
       invoice.invoiceDate = proformaDate;
@@ -1212,6 +1256,12 @@ export class InvoicesService implements OnApplicationBootstrap {
       await this.customersService.movePaymentDate(String(invoice._id), paidAt);
     }
     await invoice.save();
+    if (proformaDate && invoice.type === 'sale') await this.stampSaleProfit(invoice);
+    if (proformaDate && purchaseEntersShop(invoice)) {
+      await this.syncPricePeriods();
+      const from = [previousDate, proformaDate].sort((a, b) => +new Date(a) - +new Date(b))[0];
+      await this.restampSalesFrom(this.productIdsOf(invoice), from);
+    }
     return this.findById(id);
   }
 

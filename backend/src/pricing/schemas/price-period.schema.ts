@@ -12,7 +12,7 @@ export class PricePeriod {
   @Prop({ trim: true, default: '' })
   productName: string;
 
-  /** Buy price per stock unit during this span. */
+  /** Landed buy price per stock unit during this span (invoice price after discount, plus freight). */
   @Prop({ required: true })
   unitPrice: number;
 

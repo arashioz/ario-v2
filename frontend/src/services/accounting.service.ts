@@ -5,6 +5,23 @@ export interface PeriodQuery {
   to?: string;
 }
 
+export interface HistoryRebuildRun {
+  phase: string;
+  busy: boolean;
+  purchases: number;
+  salesTotal: number;
+  salesSeen: number;
+  profitsUpdated: number;
+  profitsUnchanged: number;
+  unresolved: number;
+  periods: number;
+  pricesDone: boolean;
+  profitsDone: boolean;
+  performanceDone: boolean;
+  error: string;
+  reportNote?: string;
+}
+
 export interface SalesSummary {
   revenue: number;
   cost: number;
@@ -564,6 +581,24 @@ export const accountingService = {
   },
   async refreshPerformance(): Promise<PerformanceReport> {
     return (await api.post('/accounting/performance/refresh', null, { timeout: 60000 })).data;
+  },
+  async historyRebuildStatus(): Promise<HistoryRebuildRun> {
+    return (await api.get('/accounting/history-rebuild')).data;
+  },
+  async historyPreflight(): Promise<HistoryRebuildRun> {
+    return (await api.post('/accounting/history-rebuild/preflight', null, { timeout: 60000 })).data;
+  },
+  async historyPrices(): Promise<HistoryRebuildRun> {
+    return (await api.post('/accounting/history-rebuild/prices', null, { timeout: 180000 })).data;
+  },
+  async historyProfits(): Promise<HistoryRebuildRun> {
+    return (await api.post('/accounting/history-rebuild/profits', null, { timeout: 120000 })).data;
+  },
+  async historyPerformance(): Promise<HistoryRebuildRun> {
+    return (await api.post('/accounting/history-rebuild/performance', null, { timeout: 180000 })).data;
+  },
+  async historyRollback(): Promise<HistoryRebuildRun> {
+    return (await api.post('/accounting/history-rebuild/rollback', null, { timeout: 180000 })).data;
   },
   async applySuggestion(s: Pick<PriceSuggestion, 'productId' | 'suggested' | 'lastCostPerUnit' | 'baseCostPerKg'>, reason: string) {
     return (

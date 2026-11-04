@@ -106,6 +106,11 @@ export class AccountingService {
     return result;
   }
 
+  /** Drops the in-memory FIFO result so the next report reads invoices again. */
+  clearCache() {
+    this.cache = null;
+  }
+
   /** `from`/`to` are inclusive YYYY-MM-DD days on the Tehran calendar. */
   private inPeriod(date: Date, p: Period) {
     if (!p.from && !p.to) return true;

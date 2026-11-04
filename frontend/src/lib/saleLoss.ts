@@ -19,11 +19,11 @@ export function confirmSaleLoss(lines: SaleLossLine[], discount = 0, factory = f
   if (!losses.length) return true;
   const details = losses.slice(0, 5).map((line) => `• ${line.name}: ${formatToman(Math.round(line.loss))}`).join('\n');
   const more = losses.length > 5 ? `\nو ${num(losses.length - 5)} قلم دیگر` : '';
-  const basis = factory ? 'قیمت کارخانهٔ همین فاکتور' : 'بهای خرید فعلی محصولات';
+  const basis = factory ? 'قیمت کارخانهٔ همین فاکتور' : 'بهای خرید در تاریخ همین فاکتور';
   return window.confirm(
     `هشدار فروش با ضرر\nقیمت فروش بعضی اقلام پس از تخفیف، از ${basis} کمتر است.\n${details}${more}\n` +
     `جمع زیان احتمالی این اقلام: ${formatToman(Math.round(losses.reduce((sum, line) => sum + line.loss, 0)))}\n` +
-    (!factory ? 'برای فاکتورهای قدیمی، سود و زیان نهایی طبق سوابق خرید در تاریخ فاکتور محاسبه می‌شود.\n' : '') +
+    (!factory ? 'این مقایسه با قیمت خرید همان روز است، نه قیمت امروز.\n' : '') +
     `آیا ${proforma ? 'پیش‌فاکتور' : 'فاکتور'} با این قیمت‌ها و با احتمال ضرر ثبت شود؟`,
   );
 }

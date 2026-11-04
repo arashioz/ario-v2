@@ -378,6 +378,10 @@ export const SettingsPage: React.FC = () => {
                 ماژول انبار
                 <span className="block text-[11px] font-normal text-slate-500 mt-1">موجودی کالا، وزن و ارزش — همان انبار اصلی</span>
               </Link>
+              <Link to="/buy-prices" className="block rounded-2xl bg-white border border-slate-200 px-4 py-3 text-sm font-bold text-slate-800">
+                بازه قیمت خرید
+                <span className="block text-[11px] font-normal text-slate-500 mt-1">قیمت تمام‌شده هر کالا تا تاریخی که فاکتور خرید عوضش کرده. سود فاکتور قدیمی با همین بازه حساب می‌شود.</span>
+              </Link>
               <HomeWarehouseSettings />
             </>
           )}

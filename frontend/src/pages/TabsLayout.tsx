@@ -12,6 +12,7 @@ const MoreTab = lazy(() => import('./tabs/MoreTab').then((m) => ({ default: m.Mo
 const ProductsPage = lazy(() => import('./ProductsPage').then((m) => ({ default: m.ProductsPage })));
 const WorkshopPage = lazy(() => import('./WorkshopPage').then((m) => ({ default: m.WorkshopPage })));
 const CompanyPricesPage = lazy(() => import('./CompanyPricesPage').then((m) => ({ default: m.CompanyPricesPage })));
+const BuyPricesPage = lazy(() => import('./BuyPricesPage').then((m) => ({ default: m.BuyPricesPage })));
 const CatalogManagePage = lazy(() => import('./CatalogManagePage').then((m) => ({ default: m.CatalogManagePage })));
 const FactoryPricesPage = lazy(() => import('./FactoryPricesPage').then((m) => ({ default: m.FactoryPricesPage })));
 const CustomersMapPage = lazy(() => import('./CustomersMapPage').then((m) => ({ default: m.CustomersMapPage })));
@@ -127,6 +128,7 @@ export const TabsLayout: React.FC = () => {
           <Route path="/tabs/more" element={loadPage(<MoreTab />)} />
           <Route path="/products" element={loadPage(<ProductsPage />)} />
           <Route path="/prices" element={loadPage(<CompanyPricesPage />)} />
+          <Route path="/buy-prices" element={loadPage(<BuyPricesPage />)} />
           <Route path="/catalog-manage" element={loadPage(<CatalogManagePage />)} />
           <Route path="/factory-prices" element={loadPage(<FactoryPricesPage />)} />
           <Route path="/workshop" element={loadPage(<WorkshopPage />)} />

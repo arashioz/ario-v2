@@ -8,6 +8,8 @@ import { ReportHeader, Segments } from '../components/reports/ReportUI';
 import { PriceChart } from '../components/reports/PriceChart';
 import type { ChartSeries } from '../components/reports/PriceChart';
 import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../context/AuthContext';
+import { HistoricalRebuildPanel } from '../components/reports/HistoricalRebuildPanel';
 import { formatJalali, jalaliToYmd } from '../lib/jalali';
 import { formatToman, percent, profitCaption, profitColor, weight } from '../lib/format';
 
@@ -43,6 +45,7 @@ const Mini: React.FC<{ label: string; value: string; tone?: string }> = ({ label
 
 export const PerformancePage: React.FC = () => {
   const { showNotification } = useNotification();
+  const { user } = useAuth();
   const settings = useSettings();
   const [data, setData] = useState<PerformanceReport | null>(null);
   const [error, setError] = useState('');
@@ -146,6 +149,7 @@ export const PerformancePage: React.FC = () => {
           <IonRefresherContent />
         </IonRefresher>
         <div className="p-3 space-y-3 max-w-lg mx-auto pb-10">
+          {user?.role === 'admin' && <HistoricalRebuildPanel />}
           {error && <div className="text-xs text-rose-700 bg-rose-50 rounded-2xl p-3">{error}</div>}
 
           {data && !data.rebuilt && (

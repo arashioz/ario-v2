@@ -33,6 +33,6 @@ import { UsersModule } from '../users/users.module';
   ],
   controllers: [AccountingController],
   providers: [AccountingService, ProfitWatchService, PerformanceService],
-  exports: [AccountingService],
+  exports: [AccountingService, PerformanceService, ProfitWatchService],
 })
 export class AccountingModule {}

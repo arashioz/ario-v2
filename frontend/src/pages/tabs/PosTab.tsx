@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
-import { apiErrorMessage, type Invoice } from '../../services/invoices.service';
+import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
 import { enqueueOrder, sendOrder, ORDERS_SYNCED, reserveQueuedStock, pendingOrders } from '../../services/offlineOrders';
 import { proformasService, type Proforma } from '../../services/proformas.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
@@ -44,6 +44,7 @@ export const PosTab: React.FC = () => {
   const [manualTier, setManualTier] = useState<SaleType | null>(null);
   const hasInvoiceType = manualTier !== null;
   const [invoiceDate, setInvoiceDate] = useState<string>(todayYmd);
+  const [costOnDate, setCostOnDate] = useState<Record<string, number>>({});
   const [dateOpen, setDateOpen] = useState(false);
 
   const [lines, setLines] = useState<CartLine[]>([]);
@@ -194,6 +195,17 @@ export const PosTab: React.FC = () => {
     }
   };
 
+  const lineKey = lines.map((l) => l.product._id).sort().join(',');
+  useEffect(() => {
+    const ids = lineKey.split(',').filter(Boolean);
+    if (!ids.length) { setCostOnDate({}); return; }
+    let cancel = false;
+    invoicesService.costOnDate(invoiceDate, ids)
+      .then((costs) => { if (!cancel) setCostOnDate(costs); })
+      .catch(() => { if (!cancel) setCostOnDate({}); });
+    return () => { cancel = true; };
+  }, [invoiceDate, lineKey]);
+
   const submit = async ({ customer, terms, asProforma, fulfillment, factoryUnitCosts, factorySellPrices, branchName, customerName, customerPhone }: CheckoutResult) => {
     if (!hasInvoiceType || !lines.length || submittingRef.current) return;
     submittingRef.current = true;
@@ -230,7 +242,7 @@ export const PosTab: React.FC = () => {
     try {
       if (!confirmSaleLoss(items.map((item, index) => ({
         name: item.productName, quantity: item.quantity, unitPrice: item.unitPrice,
-        unitCost: fulfillment === 'factory' ? item.factoryUnitCost ?? 0 : lines[index].product.buyPrice || 0,
+        unitCost: fulfillment === 'factory' ? item.factoryUnitCost ?? 0 : (costOnDate[lines[index].product._id] ?? lines[index].product.buyPrice || 0),
       })), terms.discount, fulfillment === 'factory', asProforma)) return;
       setSubmitting(true);
       const order = enqueueOrder(asProforma ? 'proforma' : 'invoice', input);

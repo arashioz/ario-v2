@@ -64,6 +64,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
   const { showNotification } = useNotification();
   const [rows, setRows] = useState<Row[]>([]);
   const [date, setDate] = useState('');
+  const [costOnDate, setCostOnDate] = useState<Record<string, number>>({});
   const [discount, setDiscount] = useState(0);
   const [freight, setFreight] = useState(0);
   const [notes, setNotes] = useState('');
@@ -89,6 +90,17 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
     const share = totalW > 0 ? (freight * weightOf(r)) / totalW : 0;
     return Math.round((r.quantity * r.unitPrice * factor + share) / r.quantity);
   };
+
+  const rowKey = rows.map((row) => row.productId).sort().join(',');
+  useEffect(() => {
+    const ids = rowKey.split(',').filter(Boolean);
+    if (!date || !invoice || invoice.type !== 'sale' || fromCompany || !ids.length) return;
+    let cancel = false;
+    invoicesService.costOnDate(date, ids)
+      .then((costs) => { if (!cancel) setCostOnDate(costs); })
+      .catch(() => { if (!cancel) setCostOnDate({}); });
+    return () => { cancel = true; };
+  }, [date, rowKey, invoice, fromCompany]);
 
   useEffect(() => {
     if (!invoice) return;
@@ -282,7 +294,7 @@ export const EditInvoiceSheet: React.FC<Props> = ({ invoice, onClose, onSaved })
 
     if (isSale && !confirmSaleLoss(rows.map((row) => ({
       name: row.productName, quantity: row.quantity, unitPrice: row.unitPrice,
-      unitCost: fromCompany ? row.factoryUnitCost : products.find((p) => p._id === row.productId)?.buyPrice || 0,
+      unitCost: fromCompany ? row.factoryUnitCost : (costOnDate[row.productId] ?? products.find((p) => p._id === row.productId)?.buyPrice || 0),
     })), discount, fromCompany)) return;
 
     try {

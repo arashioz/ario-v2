@@ -79,6 +79,17 @@ export class InvoicesController {
     return this.invoicesService.priceBoard(company);
   }
 
+  @Get('cost-on-date')
+  costOnDate(@Query('date') date?: string, @Query('productIds') productIds?: string) {
+    const ids = (productIds || '').split(',').map((id) => id.trim()).filter(Boolean);
+    return this.invoicesService.costOnDate(date || '', ids);
+  }
+
+  @Get('price-periods')
+  pricePeriods() {
+    return this.invoicesService.listPricePeriods();
+  }
+
   @Get('last-purchase-prices')
   lastPurchasePrices(@Query('productIds') productIds?: string) {
     const ids = (productIds || '')
