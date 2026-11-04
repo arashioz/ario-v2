@@ -352,7 +352,7 @@ export class InvoicesService implements OnApplicationBootstrap {
   async priceBoard(company?: string) {
     const products = await this.productModel
       .find({ isActive: { $ne: false } })
-      .select('name category unit supplierName weightPerUnitKg hasDualUnit secondaryUnit unitRatio buyPrice sellPrice priceRetail priceSupermarket priceWholesale agencyBasePrice agencyGap commissionAmount commissionUnit priceCostBasisPerKg')
+      .select('name category unit supplierName weightPerUnitKg hasDualUnit secondaryUnit unitRatio buyPrice sellPrice priceRetail priceSupermarket priceWholesale agencyBasePrice agencyGap commissionAmount commissionUnit packageFee priceCostBasisPerKg')
       .sort({ name: 1 })
       .lean();
     const companyOf = (name?: string) => {
@@ -452,6 +452,7 @@ export class InvoicesService implements OnApplicationBootstrap {
           agencyGap: Math.round(p.agencyGap || 0),
           commissionAmount: Math.round(p.commissionAmount || 0),
           commissionUnit: p.commissionUnit === 'kg' ? 'kg' : 'unit',
+          packageFee: Math.round(p.packageFee || 0),
           basePerKg: Math.round(p.priceCostBasisPerKg || 0),
           retail,
           supermarket: Math.round(p.priceSupermarket || retail),

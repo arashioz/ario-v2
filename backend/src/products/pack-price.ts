@@ -6,10 +6,10 @@ export function feePerKg(fee: number, feeUnit: 'kg' | 'unit', kg: number) {
   return amount / kg;
 }
 
-/** Sell one pack from a per-kilo base, a pack or per-kilo fee, and a margin percent. */
-export function sellFromBase(input: { basePerKg: number; fee: number; feeUnit: 'kg' | 'unit'; percent: number; kg: number }) {
+/** Sell one pack from a per-kilo base, a per-kilo fee, a per-pack fee, and a margin percent. */
+export function sellFromBase(input: { basePerKg: number; fee?: number; feeUnit?: 'kg' | 'unit'; feePerKg?: number; feePerPack?: number; percent: number; kg: number }) {
   const kg = input.kg > 0 ? input.kg : 0;
-  const perKgFee = feePerKg(input.fee, input.feeUnit, kg);
+  const perKgFee = feePerKg(input.fee || 0, input.feeUnit || 'unit', kg) + (Number(input.feePerKg) || 0) + (kg > 0 ? (Number(input.feePerPack) || 0) / kg : Number(input.feePerPack) || 0);
   const sellPerKg = ((Number(input.basePerKg) || 0) + perKgFee) * (1 + (Number(input.percent) || 0) / 100);
   const pack = kg > 0 ? sellPerKg * kg : sellPerKg;
   return { feePerKg: perKgFee, sellPerKg, pack: Math.round(pack) };

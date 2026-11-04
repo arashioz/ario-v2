@@ -549,7 +549,7 @@ export class ProductsService implements OnModuleInit {
 
   /** Writes the three sale prices used by the catalog and the sale screen. */
   async applyChannelPrices(
-    items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number; commissionAmount?: number; commissionUnit?: string; basePerKg?: number }[],
+    items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number; commissionAmount?: number; commissionUnit?: string; packageFee?: number; basePerKg?: number }[],
     actor: string,
   ) {
     const clean = (items || []).filter((it) => it && Types.ObjectId.isValid(String(it.productId || '')));
@@ -577,7 +577,8 @@ export class ProductsService implements OnModuleInit {
           agencyBasePrice,
           agencyGap,
           commissionAmount: money(it.commissionAmount),
-          commissionUnit: it.commissionUnit === 'kg' ? 'kg' : 'unit',
+          commissionUnit: 'kg',
+          packageFee: money(it.packageFee),
           priceCostBasisPerKg: basePerKg,
           priceSetAt: new Date(),
           autoPricing: false,

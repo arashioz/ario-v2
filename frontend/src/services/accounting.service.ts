@@ -125,6 +125,15 @@ export interface LotRow {
   avgSellPerKg: number;
   profitPerKg: number;
   marginPercent: number;
+  /** Base price per kg now, against this lot's own buy price. */
+  basePerKg?: number;
+  sellPerKg?: number;
+  /** Rise from this lot's buy price to the current base, on the kilos still in stock. */
+  stockInflation?: number;
+  /** Current sell price minus the current base, on the kilos still in stock. */
+  stockReal?: number;
+  /** What the remaining kilos earn if sold at today's price. */
+  stockProfit?: number;
 }
 
 export interface SuspiciousLine {

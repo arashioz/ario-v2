@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { IonContent, IonPage, IonRefresher, IonRefresherContent } from '@ionic/react';
 import { useParams } from 'react-router-dom';
 import { accountingService } from '../services/accounting.service';
-import type { LotRow, SalesBoardProduct } from '../services/accounting.service';
+import type { LotRow, PriceSuggestion, SalesBoardProduct } from '../services/accounting.service';
+import { pricingQuery, usePricingOptions } from '../components/pricing/PriceSuggestion';
+import { usePriceApplier } from '../components/pricing/usePriceApplier';
 import { watchService } from '../services/watch.service';
 import type { PriceChartProduct } from '../services/watch.service';
 import { PeriodPicker, periodPresets, periodQuery } from '../components/ui/PeriodPicker';
@@ -40,6 +42,9 @@ export const SalesProductPage: React.FC = () => {
   const [range, setRange] = useState<Range>('all');
   const [unit, setUnit] = useState<ChartUnit>('kg');
   const [view, setView] = useState<ChartView>('months');
+  const [pricing] = usePricingOptions();
+  const [hint, setHint] = useState<PriceSuggestion | null>(null);
+  const { apply, applying, applied } = usePriceApplier();
 
   const load = async () => {
     try {
@@ -63,6 +68,27 @@ export const SalesProductPage: React.FC = () => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId, period]);
+
+  useEffect(() => {
+    accountingService
+      .priceSuggestions(pricingQuery(pricing))
+      .then((list) => setHint(list.find((item) => item.productId === productId) || null))
+      .catch(() => setHint(null));
+  }, [productId, pricing]);
+
+  const stockLeft = useMemo(
+    () =>
+      lots.reduce(
+        (sum, lot) => ({
+          kg: sum.kg + lot.kgLeft,
+          profit: sum.profit + (lot.stockProfit || 0),
+          inflation: sum.inflation + (lot.stockInflation || 0),
+          real: sum.real + (lot.stockReal || 0),
+        }),
+        { kg: 0, profit: 0, inflation: 0, real: 0 },
+      ),
+    [lots],
+  );
 
   const to = useMemo(() => Date.now() + DAY / 2, [chart]);
   const from = useMemo(() => {
@@ -110,6 +136,22 @@ export const SalesProductPage: React.FC = () => {
               ['sells', 'فروش‌ها'],
             ]}
           />
+          {hint?.needsUpdate && (
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3 space-y-2">
+              <p className="text-[12px] text-amber-950 leading-6">
+                از وقتی این قیمت را گذاشتید، خرید {percent(hint.costChangeSincePricePercent)} تغییر کرده.
+                الان هر کیلو را {formatToman(hint.current.perKg)} می‌فروشید. نسبت به همین تورم، فروش هر کیلو بهتر است {formatToman(hint.suggested.perKg)} باشد.
+              </p>
+              <button
+                type="button"
+                onClick={() => apply([hint])}
+                disabled={applying.has(hint.productId) || applied.has(hint.productId)}
+                className="w-full rounded-xl bg-emerald-600 py-2 text-[12px] font-bold text-white disabled:opacity-60"
+              >
+                {applied.has(hint.productId) ? 'قیمت اعمال شد' : applying.has(hint.productId) ? 'در حال اعمال' : 'اگر لازم است این قیمت را بزن'}
+              </button>
+            </div>
+          )}
           {error && <div className="text-xs text-rose-700 bg-rose-50 rounded-2xl p-3">{error}</div>}
           {loading && !row && !chart && <ListSkeleton />}
           {!loading && !row && !chart && !error && <Empty>این کالا پیدا نشد.</Empty>}
@@ -127,6 +169,13 @@ export const SalesProductPage: React.FC = () => {
                   tone={profitColor(row.profit)}
                 />
               </div>
+              {stockLeft.kg > 0 && (
+                <section className="bg-white rounded-2xl border border-emerald-100 p-3 text-[12px] text-slate-700 leading-6">
+                  از این کالا {weight(stockLeft.kg)} هنوز در انبار است. اگر امروز بفروشید {formatToman(stockLeft.profit)} سود دارد:
+                  {' '}{formatToman(stockLeft.inflation)} به‌خاطر بالا رفتن قیمت پایه از روزی که بار آمده، و {formatToman(stockLeft.real)} درصد روی قیمت پایهٔ الان.
+                  جزئیات هر بار در تب «سود بارها» است.
+                </section>
+              )}
               <section className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
                 <div className="px-3.5 py-3 flex items-center justify-between">
                   <span className="text-[13px] text-slate-500">میانگین خرید هر کیلو</span>
@@ -199,8 +248,21 @@ export const SalesProductPage: React.FC = () => {
                     <div className="grid grid-cols-3 gap-2 mt-2 text-[11px] text-slate-500 font-mono">
                       <span>خرید {weight(l.kgIn)}</span>
                       <span>فروش {weight(l.kgSold)}</span>
-                      <span>{l.unknownCost ? 'بها ثبت نشده' : formatToman(l.profit)}</span>
+                      <span>مانده {weight(l.kgLeft)}</span>
                     </div>
+                    <p className="text-[11px] text-slate-600 leading-5 mt-2">
+                      این بار کیلویی {formatToman(l.costPerKg)} به انبار آمده.
+                      {l.basePerKg ? ` قیمت پایهٔ الان ${formatToman(l.basePerKg)} است` : ''}
+                      {l.sellPerKg ? ` و فروش هر کیلو ${formatToman(l.sellPerKg)}.` : '.'}
+                      {l.kgSold > 0 && !l.unknownCost ? ` سودی که تا حالا از همین بار گرفته‌اید ${formatToman(l.profit)} است، یعنی هر کیلو ${formatToman(l.profitPerKg)} نسبت به قیمت همان روز.` : ''}
+                    </p>
+                    {l.kgLeft > 0 && typeof l.stockProfit === 'number' && (
+                      <p className="text-[11px] text-slate-700 leading-5 mt-1">
+                        اگر مانده را امروز بفروشید {formatToman(l.stockProfit)} سود دارد:
+                        {' '}{formatToman(l.stockInflation || 0)} به‌خاطر گران شدن قیمت پایه از روز ورود این بار،
+                        و {formatToman(l.stockReal || 0)} درصد و کارمزد روی قیمت پایهٔ الان.
+                      </p>
+                    )}
                   </div>
                 ))
               )}

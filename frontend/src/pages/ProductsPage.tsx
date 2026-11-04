@@ -447,7 +447,7 @@ export const ProductsPage: React.FC = () => {
                     </div>
 
                     {/* Action Buttons Footer */}
-                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-100">
+                    <div className="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-100">
                       <button
                         onClick={() => openEditModal(product)}
                         className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold active:scale-95 border border-slate-100"
@@ -461,6 +461,13 @@ export const ProductsPage: React.FC = () => {
                       >
                         <Boxes className="w-4 h-4 text-slate-500" />
                         انبارگردانی
+                      </button>
+                      <button
+                        onClick={() => navigate(`/sales/product/${product._id}`)}
+                        className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl bg-sky-50 text-sky-800 text-[11px] font-bold active:scale-95 border border-sky-100"
+                      >
+                        <TrendingUp className="w-4 h-4" />
+                        ریز گزارش
                       </button>
                     </div>
                   </div>

@@ -455,6 +455,8 @@ export class AccountingService {
    */
   async salesBoard(period: Period = {}) {
     const f = await this.fifo();
+    const priceRows = await this.productModel.find().select('sellPrice priceRetail priceCostBasisPerKg').lean();
+    const priceById = new Map(priceRows.map((p: any) => [String(p._id), p]));
     const companyOf = (pid: string, fallback = '') => {
       const name = (f.products.get(pid)?.supplierName || '').trim() || fallback.trim();
       return name;
@@ -529,6 +531,24 @@ export class AccountingService {
         avgSellPerKg: lot.kgSold ? r0(lot.revenue / lot.kgSold) : 0,
         profitPerKg: lot.kgSold && !lot.unknownCost ? r0(profit / lot.kgSold) : 0,
         marginPercent: lot.unknownCost ? 0 : pct(profit, lot.revenue),
+        ...(() => {
+          const product = f.products.get(lot.productId);
+          const priced = priceById.get(lot.productId);
+          const wpu = product?.weightPerUnitKg || (product?.unit === 'کیلوگرم' ? 1 : 0);
+          const retail = Math.round(priced?.priceRetail || priced?.sellPrice || 0);
+          const sellPerKg = wpu > 0 ? retail / wpu : retail;
+          const siblings = f.lotsByProduct.get(lot.productId) ?? [];
+          const latest = siblings.length ? siblings[siblings.length - 1].costPerKg : lot.costPerKg;
+          const basePerKg = priced?.priceCostBasisPerKg > 0 ? priced.priceCostBasisPerKg : latest;
+          const spread = lotSpread(lot.costPerKg, basePerKg, sellPerKg, lot.kgLeft);
+          return {
+            basePerKg: r0(basePerKg),
+            sellPerKg: r0(sellPerKg),
+            stockInflation: r0(spread.inflation),
+            stockReal: r0(spread.real),
+            stockProfit: r0(spread.profit),
+          };
+        })(),
       };
     };
 
@@ -715,7 +735,7 @@ export class AccountingService {
           .slice(0, 60);
       })(),
       lots: f.lots
-        .filter((lot) => (!period.from && !period.to) || this.inPeriod(lot.date, period) || (lot.firstSoldAt && this.inPeriod(lot.firstSoldAt, period)) || (lot.lastSoldAt && this.inPeriod(lot.lastSoldAt, period)))
+        .filter((lot) => lot.kgLeft > 1e-6 || (!period.from && !period.to) || this.inPeriod(lot.date, period) || (lot.firstSoldAt && this.inPeriod(lot.firstSoldAt, period)) || (lot.lastSoldAt && this.inPeriod(lot.lastSoldAt, period)))
         .map(packLot)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     };

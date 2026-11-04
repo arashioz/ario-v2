@@ -9,10 +9,9 @@ import { useNotification } from '../context/NotificationContext';
 import { apiErrorMessage } from '../services/invoices.service';
 import { formatToman, num } from '../lib/format';
 import { formatJalaliIso } from '../lib/jalali';
-import { feePerKg, sellFromBase } from '../lib/packPrice';
+import { sellFromBase } from '../lib/packPrice';
 
-type FeeUnit = 'kg' | 'unit';
-type Draft = { retail: number; supermarket: number; wholesale: number; agencyGap: number; agencyBase: number; fee: number; feeUnit: FeeUnit; kiloBase: number };
+type Draft = { retail: number; supermarket: number; wholesale: number; agencyGap: number; agencyBase: number; feePerKg: number; feePerPack: number; kiloBase: number };
 
 const field = 'w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold';
 const DEFAULT_GAP = 5000;
@@ -38,8 +37,8 @@ const rowOf = (p: PriceBoardProduct): Draft => ({
   wholesale: p.wholesale,
   agencyGap: p.agencyGap || 0,
   agencyBase: p.agencyBasePrice || 0,
-  fee: p.commissionAmount || 0,
-  feeUnit: p.commissionUnit === 'kg' ? 'kg' : 'unit',
+  feePerKg: p.commissionUnit === 'kg' ? p.commissionAmount || 0 : 0,
+  feePerPack: (p.packageFee || 0) + (p.commissionUnit === 'unit' ? p.commissionAmount || 0 : 0),
   kiloBase: p.basePerKg || 0,
 });
 
@@ -91,7 +90,7 @@ export const CompanyPricesPage: React.FC = () => {
     const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
     const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
     if (!(basePerKg > 0)) return current;
-    return roundMoney(sellFromBase({ basePerKg, fee: row.fee, feeUnit: row.feeUnit, percent: n, kg }).pack, roundStep, roundDir);
+    return roundMoney(sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: n, kg }).pack, roundStep, roundDir);
   };
 
   const applyPercents = () => {
@@ -150,7 +149,7 @@ export const CompanyPricesPage: React.FC = () => {
     setDraft((prev) => {
       const product = products.find((p) => p.productId === id);
       const buy = product ? baseOf(product) : 0;
-      const row = prev[id] || { retail: 0, supermarket: 0, wholesale: 0, agencyGap: 0, agencyBase: 0, fee: 0, feeUnit: 'unit' as FeeUnit, kiloBase: 0 };
+      const row = prev[id] || { retail: 0, supermarket: 0, wholesale: 0, agencyGap: 0, agencyBase: 0, feePerKg: 0, feePerPack: 0, kiloBase: 0 };
       if (key === 'agencyGap') return { ...prev, [id]: { ...row, agencyGap: n, agencyBase: buy > 0 ? buy + n : row.agencyBase } };
       if (key === 'agencyBase') return { ...prev, [id]: { ...row, agencyBase: n, agencyGap: buy > 0 ? Math.max(0, n - buy) : row.agencyGap } };
       return { ...prev, [id]: { ...row, [key]: n } };
@@ -169,8 +168,9 @@ export const CompanyPricesPage: React.FC = () => {
           wholesale: row.wholesale,
           agencyBasePrice: row.agencyBase,
           agencyGap: row.agencyGap,
-          commissionAmount: row.fee,
-          commissionUnit: row.feeUnit,
+          commissionAmount: row.feePerKg,
+          commissionUnit: 'kg',
+          packageFee: row.feePerPack,
           basePerKg: row.kiloBase || (kgOf(p) > 0 && baseOf(p) > 0 ? Math.round(baseOf(p) / kgOf(p)) : baseOf(p)),
         };
       });
@@ -270,7 +270,7 @@ export const CompanyPricesPage: React.FC = () => {
                 </div>
               </div>
               <button type="button" onClick={applyPercents} className="w-full rounded-xl bg-violet-600 py-2.5 text-xs font-bold text-white">اعمال درصد</button>
-              <p className="text-[10px] text-slate-400 leading-5">درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد همان کالا می‌نشیند. کارمزد بسته‌ای اول به هر کیلو تقسیم می‌شود. رند فقط روی قیمت نهایی بسته است.</p>
+              <p className="text-[10px] text-slate-400 leading-5">درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد می‌نشیند. کارمزد را می‌توانید کیلویی، بسته‌ای، یا هر دو بزنید. کارمزد بسته اول به هر کیلو تقسیم می‌شود.</p>
             </div>
           )}
 
@@ -285,9 +285,9 @@ export const CompanyPricesPage: React.FC = () => {
             const perKg = (amount: number) => (kg > 0 && amount > 0 ? Math.round(amount / kg) : 0);
             const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
             const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
-            const perKgFee = feePerKg(row.fee, row.feeUnit, kg);
+            const perKgFee = (row.feePerKg || 0) + (kg > 0 ? (row.feePerPack || 0) / kg : row.feePerPack || 0);
             const samplePct = retailPct.trim() === '' ? 0 : Number(retailPct);
-            const preview = basePerKg > 0 ? sellFromBase({ basePerKg, fee: row.fee, feeUnit: row.feeUnit, percent: Number.isFinite(samplePct) ? samplePct : 0, kg }) : null;
+            const preview = basePerKg > 0 ? sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: Number.isFinite(samplePct) ? samplePct : 0, kg }) : null;
             const spreadPerKg = preview && buyPerKg > 0 ? preview.sellPerKg - buyPerKg : 0;
             const inflationPerKg = basePerKg > 0 && buyPerKg > 0 ? basePerKg - buyPerKg : 0;
             const realPerKg = preview ? preview.sellPerKg - basePerKg : 0;
@@ -333,26 +333,27 @@ export const CompanyPricesPage: React.FC = () => {
                   )}
                 </div>
                 <div className="rounded-xl border border-slate-100 p-2 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-slate-700">کارمزد این کالا</span>
-                    <div className="flex rounded-lg border border-slate-200 overflow-hidden text-[10px] font-bold">
-                      {(['unit', 'kg'] as const).map((unit) => (
-                        <button key={unit} type="button" onClick={() => setDraft((prev) => ({ ...prev, [p.productId]: { ...(prev[p.productId] || row), feeUnit: unit } }))} className={`px-2 py-1 ${row.feeUnit === unit ? 'bg-slate-800 text-white' : 'bg-white text-slate-500'}`}>
-                          {unit === 'unit' ? `هر ${p.unit}` : 'هر کیلو'}
-                        </button>
-                      ))}
-                    </div>
+                  <span className="text-[11px] font-bold text-slate-700">کارمزد این کالا</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[10px] text-slate-500 space-y-1 block">
+                      <span>هر کیلو</span>
+                      <MoneyTextInput className={field} value={row.feePerKg} onChange={(v) => setPrice(p.productId, 'feePerKg', v)} />
+                    </label>
+                    <label className="text-[10px] text-slate-500 space-y-1 block">
+                      <span>هر {p.unit || 'بسته'}</span>
+                      <MoneyTextInput className={field} value={row.feePerPack} onChange={(v) => setPrice(p.productId, 'feePerPack', v)} />
+                    </label>
                   </div>
-                  <label className="text-[10px] text-slate-500 space-y-1 block">
-                    <span>مبلغ کارمزد</span>
-                    <MoneyTextInput className={field} value={row.fee} onChange={(v) => setPrice(p.productId, 'fee', v)} />
-                  </label>
                   <label className="text-[10px] text-slate-500 space-y-1 block">
                     <span>قیمت پایه هر کیلو</span>
                     <MoneyTextInput className={field} value={row.kiloBase || Math.round(buyPerKg)} onChange={(v) => setPrice(p.productId, 'kiloBase', v)} />
                   </label>
-                  {kg > 0 && row.fee > 0 && (
-                    <p className="text-[10px] text-slate-600">کارمزد هر کیلو {num(perKgFee, 2)} تومان. برای {num(kg, 2)} کیلو همان {formatToman(row.feeUnit === 'unit' ? row.fee : Math.round(row.fee * kg))} می‌شود.</p>
+                  {(row.feePerKg > 0 || row.feePerPack > 0) && (
+                    <p className="text-[10px] text-slate-600">
+                      {row.feePerKg > 0 ? `کارمزد کیلویی ${formatToman(row.feePerKg)}. ` : ''}
+                      {row.feePerPack > 0 && kg > 0 ? `کارمزد ${p.unit || 'بسته'} ${formatToman(row.feePerPack)} یعنی هر کیلو ${num(row.feePerPack / kg, 2)} تومان. ` : ''}
+                      جمع کارمزد هر کیلو {num(perKgFee, 2)} تومان است.
+                    </p>
                   )}
                   {preview && buyPerKg > 0 && (
                     <p className="text-[10px] text-slate-700 leading-5">

@@ -191,6 +191,7 @@ export interface PriceBoardProduct {
   agencyGap: number;
   commissionAmount: number;
   commissionUnit: 'kg' | 'unit';
+  packageFee: number;
   basePerKg: number;
   retail: number;
   supermarket: number;

@@ -170,7 +170,7 @@ export const productsService = {
   async setFactoryPrice(id: string, price: number | null): Promise<Product> {
     return (await api.patch(`/products/${id}/factory-price`, { price })).data;
   },
-  async applyChannelPrices(items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number; commissionAmount?: number; commissionUnit?: 'kg' | 'unit'; basePerKg?: number }[]) {
+  async applyChannelPrices(items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number; commissionAmount?: number; commissionUnit?: 'kg' | 'unit'; packageFee?: number; basePerKg?: number }[]) {
     return (await api.post<{ modified: number }>('/products/channel-prices', { items })).data;
   },
   async saveCategoryPrice(rule: { category: string; amount: number; unit: 'kg' | 'unit'; retailPercent?: number; supermarketPercent?: number; wholesalePercent?: number; distributorPercent?: number }) {

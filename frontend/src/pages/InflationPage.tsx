@@ -515,10 +515,31 @@ export const InflationPage: React.FC = () => {
             <AvgSellReport products={data?.products ?? []} window={avgWindow} onWindow={setAvgWindow} periodLabel={period.label} />
           ) : !data ? null : view === 'product' ? (
             <div className="space-y-2.5">
+              {s && (
+                <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-slate-800">همه کالاها با هم</h3>
+                    <span className="text-[10px] text-slate-400">{num(data.products.length)} کالا</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Mini label="سود واقعی" value={formatToman(s.tradingProfit)} valueClass={profitColor(s.tradingProfit)} />
+                    <Mini label="سود انبار قدیمی" value={formatToman(s.inflationProfit)} valueClass={profitColor(s.inflationProfit)} />
+                    <Mini label="تورم خرید جدید" value={formatToman(s.newPurchaseInflation || 0)} />
+                    <Mini label="ارزش تورمی مانده انبار" value={formatToman(data.products.reduce((sum, p) => sum + (p.unrealizedGain || 0), 0))} />
+                  </div>
+                  {(suggestions ?? []).some((x) => x.needsUpdate) && (
+                    <button type="button" onClick={() => setView('prices')} className="w-full rounded-xl bg-emerald-600 py-2 text-[11px] font-bold text-white">
+                      قیمت {num((suggestions ?? []).filter((x) => x.needsUpdate).length)} کالا از تورم خرید عقب است. پیشنهاد را ببین
+                    </button>
+                  )}
+                </div>
+              )}
               {data.products.length === 0 ? (
                 <Empty>فروشی در این بازه نیست.</Empty>
               ) : (
-                data.products.map((p) => (
+                data.products.map((p) => {
+                  const hint = (suggestions ?? []).find((x) => x.productId === p.productId);
+                  return (
                   <div key={p.productId} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -580,8 +601,25 @@ export const InflationPage: React.FC = () => {
                         تغییر کرد.
                       </p>
                     )}
+                    {hint?.needsUpdate && (
+                      <div className="mt-2 rounded-xl bg-amber-50 border border-amber-100 p-2 space-y-1.5">
+                        <p className="text-[11px] text-amber-950 leading-5">
+                          از وقتی قیمت را گذاشتید خرید {signedPct(hint.costChangeSincePricePercent)} تغییر کرده.
+                          فروش هر کیلو الان {formatToman(hint.current.perKg)} است و نسبت به همین تورم بهتر است {formatToman(hint.suggested.perKg)} باشد.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => apply([hint])}
+                          disabled={applying.has(hint.productId) || applied.has(hint.productId)}
+                          className="w-full rounded-lg bg-emerald-600 py-1.5 text-[11px] font-bold text-white disabled:opacity-60"
+                        >
+                          {applied.has(hint.productId) ? 'اعمال شد' : applying.has(hint.productId) ? 'در حال اعمال' : 'اگر لازم است این قیمت را بزن'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           ) : view === 'changes' ? (

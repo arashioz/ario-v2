@@ -7,6 +7,12 @@ describe('pack price', () => {
     expect(priced.pack).toBe(980);
   });
 
+  it('adds a per-kilo fee and a per-pack fee together', () => {
+    const priced = sellFromBase({ basePerKg: 160, feePerKg: 10, feePerPack: 500, percent: 0, kg: 3 });
+    expect(priced.feePerKg).toBeCloseTo(10 + 500 / 3);
+    expect(priced.pack).toBe(1010);
+  });
+
   it('applies the percent on the per-kilo base', () => {
     const priced = sellFromBase({ basePerKg: 160, fee: 0, feeUnit: 'unit', percent: 3.125, kg: 3 });
     expect(priced.sellPerKg).toBeCloseTo(165);
