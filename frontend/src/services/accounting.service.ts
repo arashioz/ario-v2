@@ -577,10 +577,10 @@ export const accountingService = {
     return (await api.get('/accounting/performance', { timeout: 60000 })).data;
   },
   async rebuildPerformance(): Promise<PerformanceReport> {
-    return (await api.post('/accounting/performance/rebuild', null, { timeout: 180000 })).data;
+    return (await api.post('/accounting/performance/rebuild', {}, { timeout: 180000 })).data;
   },
   async refreshPerformance(): Promise<PerformanceReport> {
-    return (await api.post('/accounting/performance/refresh', null, { timeout: 60000 })).data;
+    return (await api.post('/accounting/performance/refresh', {}, { timeout: 60000 })).data;
   },
   async historyRebuildStatus(): Promise<HistoryRebuildRun> {
     return (await api.get('/accounting/history-rebuild')).data;

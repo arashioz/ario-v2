@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { IonContent, IonPage, IonRefresher, IonRefresherContent } from '@ionic/react';
 import { RefreshCw } from 'lucide-react';
 import { accountingService } from '../services/accounting.service';
+import { apiErrorMessage } from '../services/invoices.service';
 import type { PerformanceReport, PerformanceSnapshot } from '../services/accounting.service';
 import { settingsService, useSettings } from '../services/settings.service';
 import { ReportHeader, Segments } from '../components/reports/ReportUI';
@@ -70,8 +71,8 @@ export const PerformancePage: React.FC = () => {
     try {
       setData(await accountingService.rebuildPerformance());
       showNotification({ title: 'عملکرد حساب شد', message: 'تاریخچه ذخیره شد. از این به بعد فقط همان روز، سر ساعت تنظیم‌شده به‌روز می‌شود.', type: 'success' });
-    } catch {
-      showNotification({ title: 'حساب نشد', message: 'محاسبه از روی فاکتورها انجام نشد.', type: 'error' });
+    } catch (error) {
+      showNotification({ title: 'حساب نشد', message: apiErrorMessage(error, 'محاسبه از روی فاکتورها انجام نشد.'), type: 'error' });
     } finally {
       setRebuilding(false);
     }
