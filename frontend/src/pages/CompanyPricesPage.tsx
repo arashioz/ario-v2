@@ -169,7 +169,7 @@ export const CompanyPricesPage: React.FC = () => {
           agencyBasePrice: row.agencyBase,
           agencyGap: row.agencyGap,
           commissionAmount: row.feePerKg,
-          commissionUnit: 'kg',
+          commissionUnit: 'kg' as const,
           packageFee: row.feePerPack,
           basePerKg: row.kiloBase || (kgOf(p) > 0 && baseOf(p) > 0 ? Math.round(baseOf(p) / kgOf(p)) : baseOf(p)),
         };
