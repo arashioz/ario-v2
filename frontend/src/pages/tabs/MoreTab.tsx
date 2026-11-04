@@ -76,7 +76,7 @@ const REPORTS: Item[] = [
   {
     path: '/performance',
     title: 'عملکرد',
-    desc: 'چارت روزانه، ماهانه و سالانه خرید، فروش، پرداخت، رشد و ضرر',
+    desc: 'چارت روزانه، ماهانه و سالانه خرید، فروش، پرداخت',
     icon: Activity,
     tone: 'bg-emerald-100 text-emerald-800',
   },
