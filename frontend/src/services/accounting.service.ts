@@ -586,19 +586,19 @@ export const accountingService = {
     return (await api.get('/accounting/history-rebuild')).data;
   },
   async historyPreflight(): Promise<HistoryRebuildRun> {
-    return (await api.post('/accounting/history-rebuild/preflight', null, { timeout: 60000 })).data;
+    return (await api.post('/accounting/history-rebuild/preflight', {}, { timeout: 60000 })).data;
   },
   async historyPrices(): Promise<HistoryRebuildRun> {
-    return (await api.post('/accounting/history-rebuild/prices', null, { timeout: 180000 })).data;
+    return (await api.post('/accounting/history-rebuild/prices', {}, { timeout: 180000 })).data;
   },
   async historyProfits(): Promise<HistoryRebuildRun> {
-    return (await api.post('/accounting/history-rebuild/profits', null, { timeout: 120000 })).data;
+    return (await api.post('/accounting/history-rebuild/profits', {}, { timeout: 120000 })).data;
   },
   async historyPerformance(): Promise<HistoryRebuildRun> {
-    return (await api.post('/accounting/history-rebuild/performance', null, { timeout: 180000 })).data;
+    return (await api.post('/accounting/history-rebuild/performance', {}, { timeout: 180000 })).data;
   },
   async historyRollback(): Promise<HistoryRebuildRun> {
-    return (await api.post('/accounting/history-rebuild/rollback', null, { timeout: 180000 })).data;
+    return (await api.post('/accounting/history-rebuild/rollback', {}, { timeout: 180000 })).data;
   },
   async applySuggestion(s: Pick<PriceSuggestion, 'productId' | 'suggested' | 'lastCostPerUnit' | 'baseCostPerKg'>, reason: string) {
     return (
