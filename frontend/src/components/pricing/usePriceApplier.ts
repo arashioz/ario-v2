@@ -5,6 +5,8 @@ import { apiErrorMessage } from '../../services/invoices.service';
 import { useNotification } from '../../context/NotificationContext';
 import { suggestionReason } from './PriceSuggestion';
 
+export const PRICES_APPLIED = 'ario-prices-applied';
+
 /** Applies suggested prices to products and tracks which ones are in flight / done. */
 export function usePriceApplier(onApplied?: () => void) {
   const { showNotification } = useNotification();
@@ -39,9 +41,10 @@ export function usePriceApplier(onApplied?: () => void) {
     if (ok) {
       showNotification({
         title: 'قیمت‌ها به‌روز شد',
-        message: `قیمت فروش ${ok.toLocaleString('fa-IR')} کالا (تکی، سوپرمارکت و عمده) تغییر کرد.`,
+        message: `قیمت هر کیلو و قیمت بسته ${ok.toLocaleString('fa-IR')} کالا در لیست کالا و فروشگاه نشست.`,
         type: 'success',
       });
+      window.dispatchEvent(new Event(PRICES_APPLIED));
       onApplied?.();
     }
   };

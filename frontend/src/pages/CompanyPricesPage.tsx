@@ -7,13 +7,30 @@ import { productsService } from '../services/products.service';
 import { MoneyTextInput } from '../components/ui/AmountInput';
 import { useNotification } from '../context/NotificationContext';
 import { apiErrorMessage } from '../services/invoices.service';
-import { formatToman } from '../lib/format';
+import { formatToman, num } from '../lib/format';
 import { formatJalaliIso } from '../lib/jalali';
+import { feePerKg, sellFromBase } from '../lib/packPrice';
 
-type Draft = { retail: number; supermarket: number; wholesale: number; agencyGap: number; agencyBase: number };
+type FeeUnit = 'kg' | 'unit';
+type Draft = { retail: number; supermarket: number; wholesale: number; agencyGap: number; agencyBase: number; fee: number; feeUnit: FeeUnit; kiloBase: number };
 
 const field = 'w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-bold';
 const DEFAULT_GAP = 5000;
+type RoundDir = 'near' | 'up' | 'down';
+
+const roundMoney = (n: number, step: number, dir: RoundDir) => {
+  if (!(n > 0)) return 0;
+  if (!(step > 1)) return Math.round(n);
+  const q = n / step;
+  const k = dir === 'up' ? Math.ceil(q - 1e-9) : dir === 'down' ? Math.floor(q + 1e-9) : Math.round(q);
+  return Math.max(0, k * step);
+};
+
+const riseOf = (price: number, base: number) => {
+  if (!(base > 0) || !(price > 0)) return '';
+  const pct = Math.round(((price - base) / base) * 1000) / 10;
+  return `${pct > 0 ? '+' : ''}${num(pct, 1)}٪`;
+};
 
 const rowOf = (p: PriceBoardProduct): Draft => ({
   retail: p.retail,
@@ -21,6 +38,9 @@ const rowOf = (p: PriceBoardProduct): Draft => ({
   wholesale: p.wholesale,
   agencyGap: p.agencyGap || 0,
   agencyBase: p.agencyBasePrice || 0,
+  fee: p.commissionAmount || 0,
+  feeUnit: p.commissionUnit === 'kg' ? 'kg' : 'unit',
+  kiloBase: p.basePerKg || 0,
 });
 
 export const CompanyPricesPage: React.FC = () => {
@@ -36,6 +56,8 @@ export const CompanyPricesPage: React.FC = () => {
   const [superPct, setSuperPct] = useState('');
   const [wholePct, setWholePct] = useState('');
   const [gapPlain, setGapPlain] = useState(String(DEFAULT_GAP));
+  const [roundStep, setRoundStep] = useState(1000);
+  const [roundDir, setRoundDir] = useState<RoundDir>('near');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -59,27 +81,49 @@ export const CompanyPricesPage: React.FC = () => {
   const pick = (name: string) => navigate(name ? `/prices?company=${encodeURIComponent(name)}` : '/prices');
 
   const baseOf = (p: PriceBoardProduct) => p.lastPurchase?.price || p.buyPrice || 0;
-  const withPercent = (base: number, pct: string, current: number) => {
-    if (pct.trim() === '' || !(base > 0)) return current;
+  const kgOf = (p: PriceBoardProduct) => p.weightPerUnitKg || (p.unit === 'کیلوگرم' ? 1 : 0);
+  const quotePack = (p: PriceBoardProduct, row: Draft, pct: string, current: number) => {
+    if (pct.trim() === '') return current;
     const n = Number(pct);
     if (!Number.isFinite(n)) return current;
-    return Math.max(0, Math.round(base * (1 + n / 100)));
+    const kg = kgOf(p);
+    const buy = baseOf(p);
+    const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
+    const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
+    if (!(basePerKg > 0)) return current;
+    return roundMoney(sellFromBase({ basePerKg, fee: row.fee, feeUnit: row.feeUnit, percent: n, kg }).pack, roundStep, roundDir);
   };
 
   const applyPercents = () => {
     setDraft((prev) => {
       const next = { ...prev };
       for (const p of products) {
-        const base = baseOf(p);
         const row = next[p.productId] || rowOf(p);
         next[p.productId] = {
           ...row,
-          retail: withPercent(base, retailPct, row.retail),
-          supermarket: withPercent(base, superPct, row.supermarket),
-          wholesale: withPercent(base, wholePct, row.wholesale),
+          retail: quotePack(p, row, retailPct, row.retail),
+          supermarket: quotePack(p, row, superPct, row.supermarket),
+          wholesale: quotePack(p, row, wholePct, row.wholesale),
         };
       }
       return next;
+    });
+  };
+
+  const applyOne = (productId: string) => {
+    const product = products.find((item) => item.productId === productId);
+    if (!product) return;
+    setDraft((prev) => {
+      const row = prev[productId] || rowOf(product);
+      return {
+        ...prev,
+        [productId]: {
+          ...row,
+          retail: quotePack(product, row, retailPct, row.retail),
+          supermarket: quotePack(product, row, superPct, row.supermarket),
+          wholesale: quotePack(product, row, wholePct, row.wholesale),
+        },
+      };
     });
   };
 
@@ -90,10 +134,11 @@ export const CompanyPricesPage: React.FC = () => {
       for (const p of products) {
         const buy = baseOf(p);
         const row = next[p.productId] || rowOf(p);
+        const agencyBase = buy > 0 ? roundMoney(buy + gap, roundStep, roundDir) : row.agencyBase;
         next[p.productId] = {
           ...row,
-          agencyGap: gap,
-          agencyBase: buy > 0 ? buy + gap : row.agencyBase,
+          agencyGap: buy > 0 ? Math.max(0, agencyBase - buy) : gap,
+          agencyBase,
         };
       }
       return next;
@@ -105,7 +150,7 @@ export const CompanyPricesPage: React.FC = () => {
     setDraft((prev) => {
       const product = products.find((p) => p.productId === id);
       const buy = product ? baseOf(product) : 0;
-      const row = prev[id] || { retail: 0, supermarket: 0, wholesale: 0, agencyGap: 0, agencyBase: 0 };
+      const row = prev[id] || { retail: 0, supermarket: 0, wholesale: 0, agencyGap: 0, agencyBase: 0, fee: 0, feeUnit: 'unit' as FeeUnit, kiloBase: 0 };
       if (key === 'agencyGap') return { ...prev, [id]: { ...row, agencyGap: n, agencyBase: buy > 0 ? buy + n : row.agencyBase } };
       if (key === 'agencyBase') return { ...prev, [id]: { ...row, agencyBase: n, agencyGap: buy > 0 ? Math.max(0, n - buy) : row.agencyGap } };
       return { ...prev, [id]: { ...row, [key]: n } };
@@ -124,10 +169,14 @@ export const CompanyPricesPage: React.FC = () => {
           wholesale: row.wholesale,
           agencyBasePrice: row.agencyBase,
           agencyGap: row.agencyGap,
+          commissionAmount: row.fee,
+          commissionUnit: row.feeUnit,
+          basePerKg: row.kiloBase || (kgOf(p) > 0 && baseOf(p) > 0 ? Math.round(baseOf(p) / kgOf(p)) : baseOf(p)),
         };
       });
       const result = await productsService.applyChannelPrices(items);
-      showNotification({ title: 'قیمت فروش ثبت شد', message: `${result.modified.toLocaleString('fa-IR')} کالا در کاتالوگ و ارسال از کارخانه به‌روز شد.`, type: 'success' });
+      showNotification({ title: 'قیمت فروش ثبت شد', message: `${result.modified.toLocaleString('fa-IR')} کالا در لیست کالا، فروشگاه و ارسال از کارخانه به‌روز شد.`, type: 'success' });
+      window.dispatchEvent(new Event('ario-prices-applied'));
       await load();
     } catch (error) {
       showNotification({ title: 'ثبت نشد', message: apiErrorMessage(error, 'قیمت‌ها ذخیره نشد'), type: 'error' });
@@ -191,25 +240,73 @@ export const CompanyPricesPage: React.FC = () => {
                 <label className="text-[10px] text-slate-500 space-y-1"><span>سوپرمارکت ٪</span><input className={field} inputMode="decimal" value={superPct} onChange={(e) => setSuperPct(e.target.value)} /></label>
                 <label className="text-[10px] text-slate-500 space-y-1"><span>عمده ٪</span><input className={field} inputMode="decimal" value={wholePct} onChange={(e) => setWholePct(e.target.value)} /></label>
               </div>
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-600">رند کردن روی اعمال</p>
+                <div className="grid grid-cols-3 gap-1">
+                  {(
+                    [
+                      [1, 'بدون رند'],
+                      [500, '۵۰۰ تومانی'],
+                      [1000, '۱۰۰۰ تومانی'],
+                    ] as const
+                  ).map(([step, label]) => (
+                    <button key={step} type="button" onClick={() => setRoundStep(step)} className={`py-2 rounded-xl text-[10px] font-bold border ${roundStep === step ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {(
+                    [
+                      ['down', 'رند پایین'],
+                      ['near', 'نزدیک'],
+                      ['up', 'رند بالا'],
+                    ] as const
+                  ).map(([dir, label]) => (
+                    <button key={dir} type="button" onClick={() => setRoundDir(dir)} className={`py-2 rounded-xl text-[10px] font-bold border ${roundDir === dir ? 'bg-violet-700 text-white border-violet-700' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button type="button" onClick={applyPercents} className="w-full rounded-xl bg-violet-600 py-2.5 text-xs font-bold text-white">اعمال درصد</button>
-              <p className="text-[10px] text-slate-400 leading-5">این درصدها قیمت تکی، سوپر و عمده فروشگاه را می‌سازند، نه قیمت پایه کارخانه.</p>
+              <p className="text-[10px] text-slate-400 leading-5">درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد همان کالا می‌نشیند. کارمزد بسته‌ای اول به هر کیلو تقسیم می‌شود. رند فقط روی قیمت نهایی بسته است.</p>
             </div>
+          )}
+
+          {company && !loading && products.length === 0 && (
+            <p className="text-xs text-slate-500 leading-6">برای این شرکت کالایی پیدا نشد. کالا یا از نام شرکت روی خودش می‌آید، یا از آخرین فاکتور خرید همان شرکت.</p>
           )}
 
           {products.map((p) => {
             const row = draft[p.productId] || rowOf(p);
             const buy = baseOf(p);
+            const kg = kgOf(p);
+            const perKg = (amount: number) => (kg > 0 && amount > 0 ? Math.round(amount / kg) : 0);
+            const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
+            const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
+            const perKgFee = feePerKg(row.fee, row.feeUnit, kg);
+            const samplePct = retailPct.trim() === '' ? 0 : Number(retailPct);
+            const preview = basePerKg > 0 ? sellFromBase({ basePerKg, fee: row.fee, feeUnit: row.feeUnit, percent: Number.isFinite(samplePct) ? samplePct : 0, kg }) : null;
+            const spreadPerKg = preview && buyPerKg > 0 ? preview.sellPerKg - buyPerKg : 0;
+            const inflationPerKg = basePerKg > 0 && buyPerKg > 0 ? basePerKg - buyPerKg : 0;
+            const realPerKg = preview ? preview.sellPerKg - basePerKg : 0;
             const profit = row.agencyBase > 0 && buy > 0 ? row.agencyBase - buy : 0;
+            const kiloLine = (amount: number) => (perKg(amount) > 0 ? `هر کیلو ${formatToman(perKg(amount))}` : kg > 0 ? '' : 'وزن هر واحد نیست');
             return (
               <article key={p.productId} className="rounded-2xl bg-white border border-slate-200 p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h2 className="text-sm font-bold text-slate-800">{p.name}</h2>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{p.category} · هر {p.unit}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {p.category} · هر {p.unit}
+                      {kg > 0 ? ` · ${num(kg, 2)} کیلو` : ''}
+                    </p>
                   </div>
                   <div className="text-left">
                     <p className="text-[10px] text-slate-400">آخرین خرید</p>
                     <p className="text-xs font-bold text-slate-800">{buy > 0 ? formatToman(buy) : 'ندارد'}</p>
+                    {buy > 0 && <p className="text-[10px] text-slate-500">{kiloLine(buy)}</p>}
                   </div>
                 </div>
                 {p.lastPurchase ? (
@@ -222,16 +319,66 @@ export const CompanyPricesPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 rounded-xl bg-amber-50/80 p-2">
                   <label className="text-[10px] text-slate-500 space-y-1"><span>اختلاف</span><MoneyTextInput className={field} value={row.agencyGap} onChange={(v) => setPrice(p.productId, 'agencyGap', v)} /></label>
                   <label className="text-[10px] text-slate-500 space-y-1"><span>قیمت پایه</span><MoneyTextInput className={field} value={row.agencyBase} onChange={(v) => setPrice(p.productId, 'agencyBase', v)} /></label>
+                  {row.agencyBase > 0 && (
+                    <p className="col-span-2 text-[10px] text-slate-600">
+                      {kiloLine(row.agencyBase)}
+                      {buy > 0 ? ` · افزایش ${riseOf(row.agencyBase, buy) || '۰٪'}` : ''}
+                    </p>
+                  )}
                   {row.agencyBase > 0 && buy > 0 && (
                     <p className={`col-span-2 text-[10px] font-bold ${profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                       سود ارسال از کارخانه {formatToman(profit)} در هر {p.unit}
+                      {perKg(profit) > 0 ? ` · هر کیلو ${formatToman(perKg(Math.abs(profit)))}` : ''}
                     </p>
                   )}
                 </div>
+                <div className="rounded-xl border border-slate-100 p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-slate-700">کارمزد این کالا</span>
+                    <div className="flex rounded-lg border border-slate-200 overflow-hidden text-[10px] font-bold">
+                      {(['unit', 'kg'] as const).map((unit) => (
+                        <button key={unit} type="button" onClick={() => setDraft((prev) => ({ ...prev, [p.productId]: { ...(prev[p.productId] || row), feeUnit: unit } }))} className={`px-2 py-1 ${row.feeUnit === unit ? 'bg-slate-800 text-white' : 'bg-white text-slate-500'}`}>
+                          {unit === 'unit' ? `هر ${p.unit}` : 'هر کیلو'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="text-[10px] text-slate-500 space-y-1 block">
+                    <span>مبلغ کارمزد</span>
+                    <MoneyTextInput className={field} value={row.fee} onChange={(v) => setPrice(p.productId, 'fee', v)} />
+                  </label>
+                  <label className="text-[10px] text-slate-500 space-y-1 block">
+                    <span>قیمت پایه هر کیلو</span>
+                    <MoneyTextInput className={field} value={row.kiloBase || Math.round(buyPerKg)} onChange={(v) => setPrice(p.productId, 'kiloBase', v)} />
+                  </label>
+                  {kg > 0 && row.fee > 0 && (
+                    <p className="text-[10px] text-slate-600">کارمزد هر کیلو {num(perKgFee, 2)} تومان. برای {num(kg, 2)} کیلو همان {formatToman(row.feeUnit === 'unit' ? row.fee : Math.round(row.fee * kg))} می‌شود.</p>
+                  )}
+                  {preview && buyPerKg > 0 && (
+                    <p className="text-[10px] text-slate-700 leading-5">
+                      این بار کیلویی {formatToman(Math.round(buyPerKg))} خریده شده. قیمت پایه {formatToman(Math.round(basePerKg))}
+                      {Number.isFinite(samplePct) && samplePct !== 0 ? ` با درصد ${num(samplePct, 2)} می‌شود ${formatToman(Math.round(preview.sellPerKg))}` : ` و فروش هر کیلو ${formatToman(Math.round(preview.sellPerKg))}`}.
+                      مابه‌التفاوت هر کیلو {formatToman(Math.round(spreadPerKg))} است: {formatToman(Math.round(inflationPerKg))} اثر گران شدن تا قیمت پایه، و {formatToman(Math.round(realPerKg))} درصد و کارمزد.
+                    </p>
+                  )}
+                  <button type="button" onClick={() => applyOne(p.productId)} className="w-full rounded-xl bg-slate-800 py-2 text-[11px] font-bold text-white">محاسبه کارمزد و درصد این کالا</button>
+                </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <label className="text-[10px] text-slate-500 space-y-1"><span>تکی</span><MoneyTextInput className={field} value={row.retail} onChange={(v) => setPrice(p.productId, 'retail', v)} /></label>
-                  <label className="text-[10px] text-slate-500 space-y-1"><span>سوپرمارکت</span><MoneyTextInput className={field} value={row.supermarket} onChange={(v) => setPrice(p.productId, 'supermarket', v)} /></label>
-                  <label className="text-[10px] text-slate-500 space-y-1"><span>عمده</span><MoneyTextInput className={field} value={row.wholesale} onChange={(v) => setPrice(p.productId, 'wholesale', v)} /></label>
+                  <label className="text-[10px] text-slate-500 space-y-1">
+                    <span>تکی {buy > 0 ? riseOf(row.retail, buy) : ''}</span>
+                    <MoneyTextInput className={field} value={row.retail} onChange={(v) => setPrice(p.productId, 'retail', v)} />
+                    <span className="block text-slate-400">{kiloLine(row.retail)}</span>
+                  </label>
+                  <label className="text-[10px] text-slate-500 space-y-1">
+                    <span>سوپرمارکت {buy > 0 ? riseOf(row.supermarket, buy) : ''}</span>
+                    <MoneyTextInput className={field} value={row.supermarket} onChange={(v) => setPrice(p.productId, 'supermarket', v)} />
+                    <span className="block text-slate-400">{kiloLine(row.supermarket)}</span>
+                  </label>
+                  <label className="text-[10px] text-slate-500 space-y-1">
+                    <span>عمده {buy > 0 ? riseOf(row.wholesale, buy) : ''}</span>
+                    <MoneyTextInput className={field} value={row.wholesale} onChange={(v) => setPrice(p.productId, 'wholesale', v)} />
+                    <span className="block text-slate-400">{kiloLine(row.wholesale)}</span>
+                  </label>
                 </div>
               </article>
             );

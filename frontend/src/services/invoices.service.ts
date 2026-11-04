@@ -189,6 +189,9 @@ export interface PriceBoardProduct {
   lastPurchase: { price: number; invoiceId: string; invoiceNumber: string; invoiceDate: string } | null;
   agencyBasePrice: number;
   agencyGap: number;
+  commissionAmount: number;
+  commissionUnit: 'kg' | 'unit';
+  basePerKg: number;
   retail: number;
   supermarket: number;
   wholesale: number;

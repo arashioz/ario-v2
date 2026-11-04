@@ -521,7 +521,13 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
                   </div>
                   <div className="text-left">
                     <div className="font-mono font-bold text-slate-800">{weight(l.kgLeft)}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">خرید کیلویی {formatToman(l.costPerKg)}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">خرید این فاکتور {formatToman(l.costPerKg)}</div>
+                    {l.basePerKg ? <div className="text-[10px] text-slate-500 font-mono">قیمت پایه {formatToman(l.basePerKg)} · فروش {formatToman(l.sellPerKg || 0)}</div> : null}
+                    {typeof l.profit === 'number' && (
+                      <div className="text-[10px] text-slate-600 font-mono">
+                        سود {formatToman(l.profit)} · تورم {formatToman(l.inflation || 0)} · درصد {formatToman(l.realProfit || 0)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

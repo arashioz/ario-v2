@@ -352,28 +352,28 @@ export class InvoicesService implements OnApplicationBootstrap {
   async priceBoard(company?: string) {
     const products = await this.productModel
       .find({ isActive: { $ne: false } })
-      .select('name category unit supplierName weightPerUnitKg buyPrice sellPrice priceRetail priceSupermarket priceWholesale agencyBasePrice agencyGap')
+      .select('name category unit supplierName weightPerUnitKg hasDualUnit secondaryUnit unitRatio buyPrice sellPrice priceRetail priceSupermarket priceWholesale agencyBasePrice agencyGap commissionAmount commissionUnit priceCostBasisPerKg')
       .sort({ name: 1 })
       .lean();
     const companyOf = (name?: string) => {
       const raw = String(name || '').trim();
-      return raw ? canonicalSupplier(raw) : 'سایر کالاها';
+      return raw ? canonicalSupplier(raw) : '';
     };
-    const companies = [...new Set(products.map((p) => companyOf(p.supplierName)))].sort((a, b) => a.localeCompare(b, 'fa'));
-    const selected = String(company || '').trim();
-    if (!selected) return { companies, company: '', products: [] as unknown[] };
-    const wanted = canonicalSupplier(selected);
-    const list = products.filter((p) => companyOf(p.supplierName) === wanted || companyOf(p.supplierName) === selected);
-    const ids = list.map((p) => String(p._id));
+    const kgOf = (p: { weightPerUnitKg?: number; hasDualUnit?: boolean; secondaryUnit?: string; unitRatio?: number; unit?: string }) =>
+      p.weightPerUnitKg || (p.hasDualUnit && p.secondaryUnit === 'کیلوگرم' ? p.unitRatio || 0 : 0) || (p.unit === 'کیلوگرم' ? 1 : 0);
+    const ids = products.map((p) => String(p._id));
+    const idSet = new Set(ids);
     const latest = new Map<string, { price: number; invoiceId: string; invoiceNumber: string; invoiceDate: Date }>();
+    const shopPrice = new Set<string>();
+    const boughtFrom = new Map<string, Set<string>>();
     if (ids.length) {
       const purchases = await this.invoiceModel
-        .find({ type: 'purchase', fulfillment: { $ne: 'factory' }, 'items.productId': { $in: ids } })
-        .select('invoiceNumber invoiceDate shippingPayer shippingCost totalAmount discount items createdAt')
+        .find({ type: 'purchase', 'items.productId': { $in: ids } })
+        .select('invoiceNumber invoiceDate fulfillment shippingPayer shippingCost totalAmount discount customerName items createdAt')
         .sort({ invoiceDate: -1, createdAt: -1, _id: -1 })
         .lean();
-      const need = new Set(ids);
       for (const inv of purchases) {
+        const buyer = companyOf(inv.customerName);
         const prices = landedUnitPrices({
           type: 'purchase',
           shippingPayer: inv.shippingPayer,
@@ -382,23 +382,61 @@ export class InvoicesService implements OnApplicationBootstrap {
           discount: inv.discount,
           items: inv.items || [],
         });
+        const shop = inv.fulfillment !== 'factory';
         (inv.items || []).forEach((it, i) => {
           const pid = String(it.productId || '');
-          if (!need.has(pid) || !(prices[i] > 0)) return;
+          if (!idSet.has(pid)) return;
+          if (buyer) {
+            const seen = boughtFrom.get(pid) || new Set<string>();
+            seen.add(buyer);
+            boughtFrom.set(pid, seen);
+          }
+          if (!(prices[i] > 0) || shopPrice.has(pid)) return;
+          if (!shop && latest.has(pid)) return;
           latest.set(pid, {
             price: prices[i],
             invoiceId: String(inv._id),
             invoiceNumber: inv.invoiceNumber,
             invoiceDate: inv.invoiceDate,
           });
-          need.delete(pid);
+          if (shop) shopPrice.add(pid);
         });
-        if (!need.size) break;
       }
     }
+    const names = new Set(await this.suppliersService.companyNames());
+    for (const p of products) {
+      const named = companyOf(p.supplierName);
+      if (named) names.add(named);
+      for (const buyer of boughtFrom.get(String(p._id)) || []) names.add(buyer);
+    }
+    const bare = (name: string) => name.replace(/^شرکت\s+/, '').trim();
+    const official = new Map<string, string>();
+    for (const name of names) {
+      const key = bare(name);
+      if (!key) continue;
+      const prev = official.get(key);
+      if (!prev || (name.startsWith('شرکت ') && !prev.startsWith('شرکت '))) official.set(key, name);
+    }
+    const fold = (name: string) => official.get(bare(name)) || name;
+    const homeOf = (p: { _id: unknown; supplierName?: string }) => {
+      const named = companyOf(p.supplierName);
+      if (named) return fold(named);
+      const buyers = [...(boughtFrom.get(String(p._id)) || [])];
+      return buyers.length ? fold(buyers[0]) : 'سایر کالاها';
+    };
+    const companies = [...new Set([...names].filter(Boolean).map(fold))].sort((a, b) => a.localeCompare(b, 'fa'));
+    const selected = String(company || '').trim();
+    if (!selected) return { companies, company: '', products: [] as unknown[] };
+    const wanted = fold(canonicalSupplier(selected));
+    const list = products.filter((p) => {
+      const id = String(p._id);
+      if (homeOf(p) === wanted) return true;
+      for (const buyer of boughtFrom.get(id) || []) if (fold(buyer) === wanted) return true;
+      return false;
+    });
     return {
       companies,
-      company: list.length ? companyOf(list[0].supplierName) : selected,
+      company: wanted || selected,
       products: list.map((p) => {
         const id = String(p._id);
         const retail = Math.round(p.priceRetail || p.sellPrice || 0);
@@ -407,11 +445,14 @@ export class InvoicesService implements OnApplicationBootstrap {
           name: p.name,
           category: p.category || '',
           unit: p.unit,
-          weightPerUnitKg: p.weightPerUnitKg || 0,
+          weightPerUnitKg: kgOf(p),
           buyPrice: Math.round(p.buyPrice || 0),
           lastPurchase: latest.get(id) || null,
           agencyBasePrice: Math.round(p.agencyBasePrice || 0),
           agencyGap: Math.round(p.agencyGap || 0),
+          commissionAmount: Math.round(p.commissionAmount || 0),
+          commissionUnit: p.commissionUnit === 'kg' ? 'kg' : 'unit',
+          basePerKg: Math.round(p.priceCostBasisPerKg || 0),
           retail,
           supermarket: Math.round(p.priceSupermarket || retail),
           wholesale: Math.round(p.priceWholesale || retail),
@@ -1183,11 +1224,40 @@ export class InvoicesService implements OnApplicationBootstrap {
     });
     if (later) return;
     const landed = Math.round(unitPrice);
-    const product = await this.productModel.findById(id).select('agencyGap').lean();
+    const product = await this.productModel.findById(id).select('buyPrice sellPrice priceRetail priceSupermarket priceWholesale priceDistributor agencyGap').lean();
+    const prev = Math.round(Number(product?.buyPrice) || 0);
     const gap = Math.round(Number(product?.agencyGap) || 0);
+    const set: Record<string, number | Date> = { buyPrice: landed };
+    if (gap > 0) set.agencyBasePrice = landed + gap;
+    const history: { oldPrice: number; newPrice: number; reason: string; changedByName: string; date: Date }[] = [];
+    if (prev > 0 && landed > prev) {
+      const lift = (n: number) => {
+        const raw = (Number(n) || 0) * (landed / prev);
+        if (!(raw > 0)) return 0;
+        if (raw < 500) return Math.round(raw);
+        return Math.round(raw / 500) * 500;
+      };
+      const oldRetail = Math.round(Number(product?.priceRetail) || Number(product?.sellPrice) || 0);
+      const retail = lift(oldRetail);
+      if (retail > 0) {
+        set.sellPrice = retail;
+        set.priceRetail = retail;
+        set.priceSupermarket = lift(product?.priceSupermarket || oldRetail);
+        set.priceWholesale = lift(product?.priceWholesale || oldRetail);
+        set.priceDistributor = lift(product?.priceDistributor || product?.priceWholesale || oldRetail);
+        set.priceSetAt = new Date();
+        history.push({
+          oldPrice: oldRetail,
+          newPrice: retail,
+          reason: 'خرید گران‌تر شد و همان درصد سود روی قیمت جدید نشست',
+          changedByName: 'سیستم',
+          date: new Date(),
+        });
+      }
+    }
     await this.productModel.updateOne(
       { _id: id },
-      { $set: { buyPrice: landed, ...(gap > 0 ? { agencyBasePrice: landed + gap } : {}) } },
+      { $set: set, ...(history.length ? { $push: { priceHistory: { $each: history, $position: 0, $slice: 40 } } } : {}) },
     ).exec();
   }
 

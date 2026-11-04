@@ -29,6 +29,15 @@ export interface OpenLot {
   supplier?: string;
   kgLeft: number;
   costPerKg: number;
+  /** Latest buy, or the per-kilo base saved from تعیین قیمت. */
+  basePerKg?: number;
+  sellPerKg?: number;
+  /** Rise from this invoice's price to the base, on the kilos still in stock. */
+  inflation?: number;
+  /** Sell price minus the base: the percent and the fee. */
+  realProfit?: number;
+  /** Sell price minus this invoice's buy price. */
+  profit?: number;
 }
 
 export type PriceTierKey = 'retail' | 'supermarket' | 'wholesale';
@@ -153,6 +162,10 @@ export interface ProfitReport {
 }
 
 export interface InvoiceProfit extends SalesSummary {
+  /** Sale minus the buy price in force that day. */
+  tradingProfit?: number;
+  /** Extra profit because the goods sold came from older, cheaper stock. */
+  inflationProfit?: number;
   estimated: boolean;
   storedKg?: number;
   issues?: { rule: string; detail: string }[];
@@ -306,6 +319,8 @@ export interface InflationReport {
     invoices: number;
     holdingGain: number;
     priceChanges: number;
+  /** Extra paid on new purchases versus the previous buy price, in toman. */
+  newPurchaseInflation?: number;
   costInflationPercent: number;
   sellChangePercent: number;
   generalInflationAnnual: number;

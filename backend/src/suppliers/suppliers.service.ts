@@ -405,6 +405,17 @@ export class SuppliersService implements OnApplicationBootstrap {
     setRegisteredSuppliers(names as string[]);
   }
 
+  /** Registered companies plus every company named on a purchase invoice. */
+  async companyNames(): Promise<string[]> {
+    await this.refreshRegistered();
+    const names = new Set<string>([PARENT_COMPANY]);
+    for (const n of await this.companyModel.distinct('name')) names.add(canonicalSupplier(String(n || '')));
+    for (const n of await this.invoiceModel.distinct('customerName', { type: 'purchase' })) {
+      if (n) names.add(canonicalSupplier(String(n)));
+    }
+    return [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fa'));
+  }
+
   /** The parent company always exists; its accounts start from where old payments were sent. */
   private async ensureParentCompany() {
     if (await this.companyModel.exists({ name: PARENT_COMPANY })) return;

@@ -101,9 +101,13 @@ export const PosTab: React.FC = () => {
   useEffect(() => {
     const refresh = () => { void loadData(true); void loadPending(); };
     window.addEventListener(ORDERS_SYNCED, refresh);
+    window.addEventListener('ario-prices-applied', refresh);
     // Keep the customer picker usable on the next offline visit.
     if (navigator.onLine) void customersService.getAll().then(setCustomers).catch(() => undefined);
-    return () => window.removeEventListener(ORDERS_SYNCED, refresh);
+    return () => {
+      window.removeEventListener(ORDERS_SYNCED, refresh);
+      window.removeEventListener('ario-prices-applied', refresh);
+    };
   }, [loadData, loadPending]);
   useIonViewWillEnter(() => { void loadData(); void loadPending(); });
 

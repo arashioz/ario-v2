@@ -316,7 +316,7 @@ export const InflationPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-2 mt-3 text-[11px]">
               <div>
                 <div className="flex items-center gap-1.5 text-orange-100">
-                  <span className="w-2 h-2 rounded-full bg-white" /> سود تجاری ({percent(s?.tradingShare)})
+                  <span className="w-2 h-2 rounded-full bg-white" /> سود واقعی ({percent(s?.tradingShare)})
                 </div>
                 <div className="font-bold text-sm mt-0.5">
                   <Toman value={s?.tradingProfit} unitClassName="text-[10px] font-normal text-orange-100" />
@@ -325,7 +325,7 @@ export const InflationPage: React.FC = () => {
               </div>
               <div className="text-left">
                 <div className="flex items-center gap-1.5 justify-end text-orange-100">
-                  <span className="w-2 h-2 rounded-full bg-amber-300" /> سود تورمی ({percent(s?.inflationShare)})
+                  <span className="w-2 h-2 rounded-full bg-amber-300" /> سود انبار قدیمی ({percent(s?.inflationShare)})
                 </div>
                 <div className="font-bold text-sm mt-0.5">
                   <Toman value={s?.inflationProfit} unitClassName="text-[10px] font-normal text-orange-100" />
@@ -338,8 +338,8 @@ export const InflationPage: React.FC = () => {
           <div className="flex gap-2.5 bg-sky-50 border border-sky-100 rounded-2xl p-3 text-[11px] text-sky-900 leading-6">
             <Info className="w-4 h-4 shrink-0 mt-1 text-sky-600" />
             <div>
-              <b>سود تجاری</b> = قیمت فروش − آخرین بهای تمام‌شده خرید در روز فروش (بهای جایگزینی). <b>سود تورمی</b> = بهای جایگزینی − بهایی که واقعاً برای همان بار
-              داده‌اید. بهای تمام‌شده = قیمت فاکتور پس از تخفیف + سهم کرایه حمل و تخلیه هر کیلو.
+              <b>سود واقعی</b> = قیمت فروش − آخرین بهای خرید در روز فروش. <b>سود انبار قدیمی</b> = همان فروش، منهای بهای باری که واقعاً از انبار برداشته شده؛ اگر انبار قدیمی ارزان‌تر باشد این سود بیشتر است.
+              تورم خرید جدید یعنی پولی که به‌خاطر گران‌تر شدن خود فاکتور خرید نسبت به خرید قبلی پرداخته‌اید.
               <br />
               مثال: ۵ تن ۱۳۳ خریدید، ۳ تن ۱۵۵ فروختید (سود تجاری ۶۶ میلیون)، بعد ۲ تن ۱۴۲ خریدید و ۲ تن باقی‌مانده را ۱۵۵ فروختید؛ این ۲ تن در واقع ۱۳۳ خریده شده
               بود، پس ۲۶ میلیون سود تجاری و ۱۸ میلیون سود تورمی است.
@@ -449,9 +449,34 @@ export const InflationPage: React.FC = () => {
             ]}
           />
 
+          {s && (
+            <div className="rounded-2xl bg-white border border-orange-100 p-3 text-[12px] text-slate-700 leading-6">
+              هر فاکتور خرید انبار خودش است. تورم خرید جدید در این بازه <b className="font-mono text-rose-700">{formatToman(s.newPurchaseInflation || 0)}</b> بوده
+              {s.costInflationPercent ? ` (${percent(s.costInflationPercent)} نسبت به خرید قبلی)` : ''}.
+              سود واقعی فروش <b className={`font-mono ${profitColor(s.tradingProfit)}`}>{formatToman(s.tradingProfit)}</b> بوده
+              {s.inflationProfit ? (
+                <>
+                  {' '}و <b className={`font-mono ${profitColor(s.inflationProfit)}`}>{formatToman(s.inflationProfit)}</b> هم از انبار قدیمی آمده که ارزان‌تر خریده شده بود.
+                </>
+              ) : (
+                '.'
+              )}
+            </div>
+          )}
+
           {view === 'prices' ? (
             <div className="space-y-3">
               <PricingOptionsPanel value={pricing} onChange={setPricing} />
+              {toApply.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => apply(toApply)}
+                  disabled={applying.size > 0}
+                  className="w-full py-3 rounded-2xl bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
+                >
+                  اعمال قیمت هر کیلو روی لیست کالا و فروشگاه ({num(toApply.length)})
+                </button>
+              )}
               <div className="flex items-center justify-between px-1">
                 <label className="flex items-center gap-2 text-[11px] text-slate-600">
                   <input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} className="accent-emerald-600" />
@@ -528,8 +553,8 @@ export const InflationPage: React.FC = () => {
                       </p>
                     )}
                     <div className="grid grid-cols-2 gap-1.5 mt-1.5">
-                      <Mini label="سود تجاری" value={formatToman(p.tradingProfit)} sub={`کیلویی ${formatToman(p.tradingPerKg)}`} valueClass={profitColor(p.tradingProfit)} />
-                      <Mini label="سود تورمی" value={formatToman(p.inflationProfit)} sub={`کیلویی ${formatToman(p.inflationPerKg)}`} valueClass={profitColor(p.inflationProfit)} />
+                      <Mini label="سود واقعی" value={formatToman(p.tradingProfit)} sub={`کیلویی ${formatToman(p.tradingPerKg)}`} valueClass={profitColor(p.tradingProfit)} />
+                      <Mini label="سود انبار قدیمی" value={formatToman(p.inflationProfit)} sub={`کیلویی ${formatToman(p.inflationPerKg)}`} valueClass={profitColor(p.inflationProfit)} />
                     </div>
                     <div className="grid grid-cols-3 gap-1.5 mt-1.5">
                       <Mini
@@ -615,10 +640,10 @@ export const InflationPage: React.FC = () => {
                       </div>
                       <div className="flex justify-between mt-1.5 text-[10px]">
                         <span className="text-emerald-700">
-                          تجاری <b className="font-mono">{formatToman(m.trading)}</b>
+                          سود واقعی <b className="font-mono">{formatToman(m.trading)}</b>
                         </span>
                         <span className="text-amber-700">
-                          تورمی <b className="font-mono">{formatToman(m.inflation)}</b>
+                          انبار قدیمی <b className="font-mono">{formatToman(m.inflation)}</b>
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1">فروش {weight(m.kg)}</div>

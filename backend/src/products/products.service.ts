@@ -549,7 +549,7 @@ export class ProductsService implements OnModuleInit {
 
   /** Writes the three sale prices used by the catalog and the sale screen. */
   async applyChannelPrices(
-    items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number }[],
+    items: { productId: string; retail: number; supermarket: number; wholesale: number; agencyBasePrice?: number; agencyGap?: number; commissionAmount?: number; commissionUnit?: string; basePerKg?: number }[],
     actor: string,
   ) {
     const clean = (items || []).filter((it) => it && Types.ObjectId.isValid(String(it.productId || '')));
@@ -569,16 +569,19 @@ export class ProductsService implements OnModuleInit {
       const wholesale = money(it.wholesale) || retail;
       const agencyBasePrice = money(it.agencyBasePrice);
       const agencyGap = money(it.agencyGap);
+      const basePerKg = money(it.basePerKg);
       if (!(retail > 0) && !(agencyBasePrice > 0)) throw new BadRequestException(`قیمت تکی یا قیمت پایه «${product.name}» را وارد کنید`);
       return [{ updateOne: { filter: { _id: product._id }, update: {
         $set: {
           ...(retail > 0 ? { sellPrice: retail, priceRetail: retail, priceSupermarket: supermarket, priceWholesale: wholesale, priceDistributor: wholesale } : {}),
           agencyBasePrice,
           agencyGap,
+          commissionAmount: money(it.commissionAmount),
+          commissionUnit: it.commissionUnit === 'kg' ? 'kg' : 'unit',
+          priceCostBasisPerKg: basePerKg,
           priceSetAt: new Date(),
           autoPricing: false,
         },
-        $unset: { priceCostBasisPerKg: 1 },
         $push: { priceHistory: { $each: [{ oldPrice: product.sellPrice, newPrice: retail, reason: 'تعیین قیمت فروش', changedByName: actor, date: new Date() }], $position: 0, $slice: 40 } },
       } } }];
     });
@@ -649,6 +652,7 @@ export class ProductsService implements OnModuleInit {
     product.priceRetail = dto.newSellPrice;
     if (dto.priceSupermarket !== undefined) product.priceSupermarket = dto.priceSupermarket;
     if (dto.priceWholesale !== undefined) product.priceWholesale = dto.priceWholesale;
+    if (dto.priceWholesale !== undefined) product.priceDistributor = dto.priceWholesale;
     product.priceSetAt = new Date();
     product.priceCostBasisPerKg = dto.costBasisPerKg && dto.costBasisPerKg > 0 ? dto.costBasisPerKg : undefined;
 

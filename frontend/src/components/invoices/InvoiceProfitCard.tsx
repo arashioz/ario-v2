@@ -43,6 +43,13 @@ export const InvoiceProfitCard: React.FC<{ invoiceId: string; version: string }>
           <div className="font-mono">
             {percent(data.marginPercent)} · کیلویی {formatToman(data.profitPerKg)}
           </div>
+          <div className="font-mono text-slate-700">
+            سود واقعی {formatToman(data.tradingProfit || 0)}
+            {(data.inflationProfit || 0) !== 0 ? ` · انبار قدیمی ${formatToman(data.inflationProfit || 0)}` : ''}
+          </div>
+          {(data.inflationProfit || 0) > 0 && (
+            <p>بخشی از این سود به‌خاطر انبار قدیمی است که ارزان‌تر از خرید همان روز خریده شده بود.</p>
+          )}
           {data.kg > 0 && (
             <div className="font-mono">
               تناژ محاسبه‌شده {weight(data.kg)}

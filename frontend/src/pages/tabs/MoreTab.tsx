@@ -35,6 +35,7 @@ import {
   Target,
   Binoculars,
   Activity,
+  LineChart,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
@@ -65,6 +66,13 @@ const ACCOUNTS: Item[] = [
 ];
 
 const REPORTS: Item[] = [
+  {
+    path: '/price-chart',
+    title: 'چارت تغییر قیمت',
+    desc: 'تغییر قیمت خرید و فروش همه کالاها، هر کدام جدا',
+    icon: LineChart,
+    tone: 'bg-rose-100 text-rose-700',
+  },
   {
     path: '/performance',
     title: 'عملکرد',

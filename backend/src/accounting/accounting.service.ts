@@ -16,6 +16,7 @@ import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schem
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
+import { lotSpread } from '../products/pack-price';
 
 export interface Period {
   from?: string;
@@ -349,7 +350,7 @@ export class AccountingService {
     }
 
     const prices = new Map(
-      (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale').lean()).map((p: any) => [String(p._id), p]),
+      (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale priceCostBasisPerKg').lean()).map((p: any) => [String(p._id), p]),
     );
     const tierPrice = (p: any, tier: PriceTier) => {
       const v = tier === 'wholesale' ? p?.priceWholesale : tier === 'supermarket' ? p?.priceSupermarket : p?.priceRetail;
@@ -367,6 +368,22 @@ export class AccountingService {
         // On-hand weight is the packages still unsold × the weight of one package.
         // That is the same tonnage as the purchase invoices of each company, minus shop sales.
         const wpu = (r.weightPerUnitKg || 0) > 0 ? r.weightPerUnitKg : r.unit === 'کیلوگرم' ? 1 : 0;
+        const series = f.lotsByProduct.get(r.productId) ?? [];
+        const latestPerKg = series.length ? series[series.length - 1].costPerKg : 0;
+        const basePerKg = p?.priceCostBasisPerKg > 0 ? p.priceCostBasisPerKg : latestPerKg;
+        const sellUnit = tierPrice(p, 'retail');
+        const sellPerKg = wpu > 0 ? sellUnit / wpu : sellUnit;
+        r.openLots = r.openLots.map((lot: { costPerKg: number; kgLeft: number }) => {
+          const spread = lotSpread(lot.costPerKg, basePerKg, sellPerKg, lot.kgLeft);
+          return {
+            ...lot,
+            basePerKg: r0(basePerKg),
+            sellPerKg: r0(sellPerKg),
+            inflation: r0(spread.inflation),
+            realProfit: r0(spread.real),
+            profit: r0(spread.profit),
+          };
+        });
         const onHandKg = r.fifoRemainingKg;
         const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits);
         return {
@@ -867,8 +884,12 @@ export class AccountingService {
       }
     }
     const storedKg = inv ? inv.items.reduce((s, it) => s + (Number(it.weightKg) || 0), 0) : 0;
+    const tradingProfit = r0(lines.reduce((s, l) => s + l.tradingProfit, 0));
+    const inflationProfit = r0(lines.reduce((s, l) => s + l.inflationProfit, 0));
     return {
       ...this.summarize(lines),
+      tradingProfit,
+      inflationProfit,
       estimated: ip.estimated,
       storedKg: Math.round(storedKg * 10) / 10,
       issues,
@@ -1210,6 +1231,10 @@ export class AccountingService {
         purchasedAmount: r0(purchasedAmount),
         avgBuyPerKg: purchasedKg > 0 ? r0(purchasedAmount / purchasedKg) : 0,
         priceChanges: changes.length,
+        newPurchaseInflation: r0(changes.reduce((sum, c) => {
+          const lot = (f.lotsByProduct.get(c.productId) ?? []).find((row) => row.invoiceId === c.invoiceId);
+          return sum + (lot?.kgIn || 0) * (c.newCost - c.oldCost);
+        }, 0)),
         costInflationPercent: Math.round(costInflation * 100) / 100,
         sellChangePercent: Math.round(sellChange * 100) / 100,
         generalInflationAnnual,

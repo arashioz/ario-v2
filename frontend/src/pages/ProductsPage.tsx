@@ -102,6 +102,11 @@ export const ProductsPage: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  useEffect(() => {
+    const refresh = () => { void loadData(); };
+    window.addEventListener('ario-prices-applied', refresh);
+    return () => window.removeEventListener('ario-prices-applied', refresh);
+  }, [loadData]);
   useIonViewWillEnter(() => {
     loadData();
   });
