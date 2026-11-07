@@ -8,9 +8,10 @@ import {
   CustomerTransactionDocument,
 } from '../customers/schemas/customer-transaction.schema';
 import { AuditService } from '../audit/audit.service';
-import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg, goodsAmount } from './fifo';
+import { runFifo, dayKey, purchaseFreight, kgPerStock, lineKg, goodsAmount, unitsLeft } from './fifo';
 import { ymdToJalali } from '../common/jalali';
-import { purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
+import { canonicalSupplier, PARENT_COMPANY, purchaseEntersShop, stockEntersShop } from '../suppliers/supplier-names';
+import { SuppliersService } from '../suppliers/suppliers.service';
 import { PricePeriodService } from '../pricing/price-period.service';
 import { WorkshopBatch, WorkshopBatchDocument } from '../workshop/workshop.schema';
 import type { FifoInvoice, FifoProduct, FifoResult, SaleLine } from './fifo';
@@ -78,6 +79,7 @@ export class AccountingService {
     private readonly pricePeriods: PricePeriodService,
     private readonly users: UsersService,
     private readonly settings: SettingsService,
+    private readonly suppliers: SuppliersService,
   ) {}
 
   /** FIFO over all invoices, cached until any invoice or product changes. */

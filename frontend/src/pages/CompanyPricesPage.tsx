@@ -7,7 +7,7 @@ import { productsService } from '../services/products.service';
 import { MoneyTextInput } from '../components/ui/AmountInput';
 import { useNotification } from '../context/NotificationContext';
 import { apiErrorMessage } from '../services/invoices.service';
-import { formatToman, num } from '../lib/format';
+import { formatToman, num, parseDecimal } from '../lib/format';
 import { formatJalaliIso } from '../lib/jalali';
 import { sellFromBase } from '../lib/packPrice';
 
@@ -83,8 +83,7 @@ export const CompanyPricesPage: React.FC = () => {
   const kgOf = (p: PriceBoardProduct) => p.weightPerUnitKg || (p.unit === 'کیلوگرم' ? 1 : 0);
   const quotePack = (p: PriceBoardProduct, row: Draft, pct: string, current: number) => {
     if (pct.trim() === '') return current;
-    const n = Number(pct);
-    if (!Number.isFinite(n)) return current;
+    const n = parseDecimal(pct);
     const kg = kgOf(p);
     const buy = baseOf(p);
     const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
@@ -286,12 +285,22 @@ export const CompanyPricesPage: React.FC = () => {
             const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
             const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
             const perKgFee = (row.feePerKg || 0) + (kg > 0 ? (row.feePerPack || 0) / kg : row.feePerPack || 0);
-            const samplePct = retailPct.trim() === '' ? 0 : Number(retailPct);
+            const samplePct = retailPct.trim() === '' ? 0 : parseDecimal(retailPct);
             const preview = basePerKg > 0 ? sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: Number.isFinite(samplePct) ? samplePct : 0, kg }) : null;
             const spreadPerKg = preview && buyPerKg > 0 ? preview.sellPerKg - buyPerKg : 0;
             const inflationPerKg = basePerKg > 0 && buyPerKg > 0 ? basePerKg - buyPerKg : 0;
             const realPerKg = preview ? preview.sellPerKg - basePerKg : 0;
             const profit = row.agencyBase > 0 && buy > 0 ? row.agencyBase - buy : 0;
+            const tierProfit = (v: number) => (buy > 0 && v > 0 ? v - buy : null);
+            const tierProfitText = (label: string, v: number) => {
+              const t = tierProfit(v);
+              if (t === null) return null;
+              return (
+                <span key={label} className={`font-bold ${t >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {label} {t >= 0 ? '+' : '−'}{formatToman(Math.abs(t))}
+                </span>
+              );
+            };
             const kiloLine = (amount: number) => (perKg(amount) > 0 ? `هر کیلو ${formatToman(perKg(amount))}` : kg > 0 ? '' : 'وزن هر واحد نیست');
             return (
               <article key={p.productId} className="rounded-2xl bg-white border border-slate-200 p-3 space-y-2">
@@ -381,6 +390,17 @@ export const CompanyPricesPage: React.FC = () => {
                     <span className="block text-slate-400">{kiloLine(row.wholesale)}</span>
                   </label>
                 </div>
+                {buy > 0 && (
+                  <p className="text-[10px] leading-5 flex flex-wrap gap-x-3 gap-y-0.5 rounded-xl bg-slate-50 px-2 py-1.5">
+                    <span className="text-slate-500">سود نسبت به آخرین خرید:</span>
+                    {tierProfitText('تکی', row.retail)}
+                    {tierProfitText('سوپرمارکت', row.supermarket)}
+                    {tierProfitText('عمده', row.wholesale)}
+                    <span className="text-violet-700 font-bold">
+                      رند: {roundStep > 1 ? `${num(roundStep)} تومانی` : 'بدون رند'} · {roundDir === 'up' ? 'بالا' : roundDir === 'down' ? 'پایین' : 'نزدیک'}
+                    </span>
+                  </p>
+                )}
               </article>
             );
           })}

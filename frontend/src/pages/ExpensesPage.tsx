@@ -179,11 +179,8 @@ export const ExpensesPage: React.FC = () => {
   const depositRows = expenses.filter((e) => e.type === 'deposit');
   const money = (rows: ExpenseItem[]) => rows.reduce((sum, e) => sum + (e.amount || 0), 0);
   const openEntry = (kind: 'store' | 'withdrawal' | 'deposit') => {
-    if (kind !== 'store' && !isUnlocked) {
-      setAsking(true);
-      return;
-    }
-    setEntryKind(kind);
+    // قفل نباشد: ثبت برداشت/واریز مدیر بدون رمز، به‌صورت هزینه عادی باز می‌شود
+    setEntryKind(kind !== 'store' && !isUnlocked ? 'store' : kind);
     setIsNewModalOpen(true);
   };
 

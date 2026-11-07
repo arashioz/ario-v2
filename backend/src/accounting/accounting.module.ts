@@ -16,12 +16,14 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { PricingModule } from '../pricing/pricing.module';
 import { WorkshopBatch, WorkshopBatchSchema } from '../workshop/workshop.schema';
 import { UsersModule } from '../users/users.module';
+import { SuppliersModule } from '../suppliers/suppliers.module';
 
 @Module({
   imports: [
     InvoicesModule,
     PricingModule,
     UsersModule,
+    SuppliersModule,
     MongooseModule.forFeature([
       { name: Invoice.name, schema: InvoiceSchema },
       { name: Product.name, schema: ProductSchema },

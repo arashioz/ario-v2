@@ -85,6 +85,8 @@ export interface Lot {
   productName: string;
   kgIn: number;
   kgLeft: number;
+  /** Quantity written on the purchase invoice, in the product's own unit (a carton, not a kilo). */
+  quantityIn: number;
   /** Landed cost: invoicePricePerKg + freightPerKg. */
   costPerKg: number;
   invoicePricePerKg: number;
@@ -106,6 +108,8 @@ export interface Consumption {
   lotDate: Date | null;
   kg: number;
   costPerKg: number;
+  /** Company warehouse this sale took the goods from. */
+  warehouse?: string;
 }
 
 /**
@@ -187,6 +191,20 @@ const takeFromLot = (lot: Lot, take: number, revenueShare: number, date: Date) =
   lot.lastSoldAt = date;
   return piece;
 };
+
+/**
+ * Invoice units still sitting in a lot.
+ * A sale removes kilograms; the carton count shrinks by the same share,
+ * so the warehouse shows the quantity written on the purchase invoice.
+ */
+export function unitsLeft(quantityIn: number, kgIn: number, kgLeft: number): number {
+  const qty = Number(quantityIn) || 0;
+  if (qty <= 0) return 0;
+  const received = Number(kgIn) || 0;
+  const left = Math.max(0, Number(kgLeft) || 0);
+  if (received <= 0) return left > 0 ? qty : 0;
+  return qty * (left / received);
+}
 
 /** Kilograms in one stock unit (a 10kg rice bag is 10, not 1). */
 export const kgPerStock = (product?: Pick<FifoProduct, 'unit' | 'weightPerUnitKg'> | null) => {
@@ -427,7 +445,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
         id: `workshop:${batch._id}`, invoiceId: batch._id, invoiceNumber: `تولید ${batch._id.slice(-6)}`,
         supplier: 'کارگاه', date: batch.date, createdAt: batch.date,
         productId: output.productId, productName: output.productName,
-        kgIn: kg, kgLeft: kg, costPerKg: cost / kg, invoicePricePerKg: cost / kg,
+        kgIn: kg, kgLeft: kg, quantityIn: Number(output.quantity) || 0, costPerKg: cost / kg, invoicePricePerKg: cost / kg,
         freightPerKg: 0, kgSold: 0, revenue: 0, cost: 0, fulfillment: 'shop',
       };
       lots.push(lot);
@@ -476,6 +494,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
           productName: it.productName,
           kgIn: kg,
           kgLeft: kg,
+          quantityIn: Number(it.quantity) || 0,
           costPerKg: newCost,
           invoicePricePerKg,
           freightPerKg,
@@ -544,6 +563,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
             productName: it.productName,
             kgIn,
             kgLeft: kgIn,
+            quantityIn: Number(it.quantity) || 0,
             costPerKg: perKg,
             invoicePricePerKg: perKg,
             freightPerKg: 0,
@@ -587,7 +607,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
           fulfillment: 'factory',
           unknownCost,
           estimatedKg,
-          consumptions: [{ lotId: lot.id, lotInvoiceNumber: lot.invoiceNumber, lotDate: lot.date, kg, costPerKg: perKg }],
+          consumptions: [{ lotId: lot.id, lotInvoiceNumber: lot.invoiceNumber, lotDate: lot.date, kg, costPerKg: perKg, warehouse: lot.supplier }],
           replacementCostPerKg: perKg,
           tradingProfit: profit,
           inflationProfit: 0,
@@ -609,7 +629,7 @@ export function runFifo(invoices: FifoInvoice[], productList: FifoProduct[], wor
         const take = Math.min(lot.kgLeft, need);
         const share = kg > 0 ? (revenue * take) / kg : 0;
         cost += takeFromLot(lot, take, share, inv.invoiceDate);
-        consumptions.push({ lotId: lot.id, lotInvoiceNumber: lot.invoiceNumber, lotDate: lot.date, kg: take, costPerKg: lot.costPerKg });
+        consumptions.push({ lotId: lot.id, lotInvoiceNumber: lot.invoiceNumber, lotDate: lot.date, kg: take, costPerKg: lot.costPerKg, warehouse: lot.supplier });
         need -= take;
         if (lot.kgLeft <= EPS) {
           lot.kgLeft = 0;
