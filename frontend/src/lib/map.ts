@@ -67,12 +67,12 @@ export const lastKnownPosition = (): GeoResult | null => {
 };
 
 export const geoErrorMessage = (err: unknown) => {
-  if (err instanceof Error && err.message && err.message !== 'unsupported') return err.message;
   const code = (err as GeolocationPositionError | undefined)?.code;
   if (code === 1) {
     return 'اجازه موقعیت داده نشد. دوباره روی موقعیت بزنید و در پیام گوشی Allow را انتخاب کنید.';
   }
   if (code === 3) return 'دریافت موقعیت طول کشید. GPS را روشن کنید و دوباره بزنید.';
+  if (err instanceof Error && err.message && err.message !== 'unsupported' && err.message !== 'timeout') return err.message;
   if (!navigator.geolocation) return 'این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.';
   return 'موقعیت پیدا نشد. GPS را روشن کنید، اجازه بدهید، یا پین را روی نقشه بگذارید.';
 };

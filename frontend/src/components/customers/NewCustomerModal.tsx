@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonContent } from '@ionic/react';
-import { X, UserPlus, Phone, MapPin, FileText, CheckCircle2, Loader2, AlertCircle, RefreshCw, Navigation } from 'lucide-react';
+import { X, UserPlus, Phone, MapPin, CheckCircle2, Loader2, AlertCircle, RefreshCw, Navigation } from 'lucide-react';
 import { getCurrentPosition, geoErrorMessage } from '../../lib/map';
 import { customersService } from '../../services/customers.service';
 import type { Customer } from '../../services/customers.service';
@@ -26,12 +26,10 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
 
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [phoneSecondary, setPhoneSecondary] = useState('');
   const [customerType, setCustomerType] = useState<'supermarket' | 'wholesale'>('supermarket');
   const [address, setAddress] = useState('');
   const [initialDebt, setInitialDebt] = useState<string>('');
   const [creditLimit, setCreditLimit] = useState<string>('');
-  const [notes, setNotes] = useState('');
 
   // Map Coordinates
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
@@ -73,12 +71,10 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
   const resetForm = () => {
     setName('');
     setPhoneNumber('');
-    setPhoneSecondary('');
     setCustomerType('supermarket');
     setAddress('');
     setInitialDebt('');
     setCreditLimit('');
-    setNotes('');
     setLatitude(undefined);
     setLongitude(undefined);
     setGeoError(null);
@@ -142,14 +138,12 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
       const created = await customersService.create({
         name: name.trim(),
         phoneNumber: phoneNumber.trim(),
-        phoneSecondary: phoneSecondary.trim() || undefined,
         customerType,
         address: address.trim() || undefined,
         latitude,
         longitude,
         initialDebt: initialDebt ? Number(initialDebt) : 0,
         creditLimit: creditLimit ? Number(creditLimit) : 0,
-        notes: notes.trim() || undefined,
       });
 
       showNotification({
@@ -261,20 +255,6 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1 text-right">
-                <label className="text-xs font-medium text-slate-700 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>تلفن ثابت / دوم</span>
-                </label>
-                <input
-                  type="tel"
-                  dir="ltr"
-                  value={phoneSecondary}
-                  onChange={(e) => setPhoneSecondary(e.target.value)}
-                  placeholder="02188888888"
-                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 font-mono text-left"
-                />
-              </div>
             </div>
 
             {/* Address & Map Picker */}
@@ -381,21 +361,6 @@ export const NewCustomerModal: React.FC<NewCustomerModalProps> = ({
                   <span className="absolute left-2.5 top-2 text-[10px] text-slate-400">تومان</span>
                 </div>
               </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1 text-right">
-              <label className="text-xs font-medium text-slate-700 flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5 text-slate-400" />
-                <span>یادداشت یا توضیحات</span>
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="توضیحات تکمیلی، نحوه تسویه یا شرایط خاص مشتری..."
-                className="w-full px-3.5 py-2 text-xs rounded-2xl bg-white border border-sky-100 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 outline-none transition text-slate-800 resize-none"
-              />
             </div>
 
             {/* Submit Button */}
