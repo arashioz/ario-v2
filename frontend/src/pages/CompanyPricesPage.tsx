@@ -54,6 +54,7 @@ export const CompanyPricesPage: React.FC = () => {
   const [retailPct, setRetailPct] = useState('');
   const [superPct, setSuperPct] = useState('');
   const [wholePct, setWholePct] = useState('');
+  const [marginPlain, setMarginPlain] = useState('');
   const [gapPlain, setGapPlain] = useState(String(DEFAULT_GAP));
   const [roundStep, setRoundStep] = useState(1000);
   const [roundDir, setRoundDir] = useState<RoundDir>('near');
@@ -89,7 +90,8 @@ export const CompanyPricesPage: React.FC = () => {
     const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
     const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
     if (!(basePerKg > 0)) return current;
-    return roundMoney(sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: n, kg }).pack, roundStep, roundDir);
+    const margin = Math.max(0, Math.round(parseDecimal(marginPlain) || 0));
+    return roundMoney(sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: n, kg, marginPerPack: margin }).pack, roundStep, roundDir);
   };
 
   const applyPercents = () => {
@@ -268,6 +270,10 @@ export const CompanyPricesPage: React.FC = () => {
                   ))}
                 </div>
               </div>
+              <label className="text-[10px] text-slate-500 space-y-1 block">
+                <span>سود ثابت هر بسته (تومان، اختیاری)</span>
+                <MoneyTextInput className={field} value={Number(marginPlain) || 0} onChange={setMarginPlain} />
+              </label>
               <button type="button" onClick={applyPercents} className="w-full rounded-xl bg-violet-600 py-2.5 text-xs font-bold text-white">اعمال درصد</button>
               <p className="text-[10px] text-slate-400 leading-5">درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد می‌نشیند. کارمزد را می‌توانید کیلویی، بسته‌ای، یا هر دو بزنید. کارمزد بسته اول به هر کیلو تقسیم می‌شود.</p>
             </div>
