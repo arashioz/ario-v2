@@ -8,10 +8,10 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM node:22-slim AS backend
-# bcrypt falls back to compiling from source when its prebuilt binary can't be downloaded.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
+# # bcrypt falls back to compiling from source when its prebuilt binary can't be downloaded.
+# RUN apt-get update \
+#   && apt-get install -y --no-install-recommends python3 make g++ \
+#   && rm -rf /var/lib/apt/lists/*
 WORKDIR /build/backend
 COPY backend/package*.json ./
 RUN npm ci
