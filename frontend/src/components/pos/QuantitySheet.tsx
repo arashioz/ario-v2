@@ -44,8 +44,34 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
     const list = existing?.unitPrice ?? tierPrice(product, saleType);
     setPrice(lockAlt ? Math.round(list / ratio) : list);
     setOverride(!!existing?.priceOverride);
-    setTimeout(() => inputRef.current?.select(), 80);
   }, [product, existing, saleType, lockAlt, altRatio, perUnit]);
+
+  // Focus the amount once when the sheet opens (keyboard appears once), not on every re-render.
+  const focusedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!product) {
+      focusedFor.current = null;
+      return;
+    }
+    if (focusedFor.current === product._id) return;
+    focusedFor.current = product._id;
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 80);
+    return () => clearTimeout(t);
+  }, [product]);
+
+  // Tapping anywhere outside the amount field closes the keyboard; tapping the field opens it again.
+  useEffect(() => {
+    if (!product) return;
+    const onDown = (e: PointerEvent) => {
+      const input = inputRef.current;
+      if (input && e.target !== input && document.activeElement === input) input.blur();
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [product]);
 
   if (!product) return null;
 
