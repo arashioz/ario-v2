@@ -243,6 +243,8 @@ export interface AppSettings {
   proformaForBulk: boolean;
   /** Direct factory shipments: no Ario stock change, hidden profit from the company price. */
   factorySalesEnabled: boolean;
+  /** Show the invoice details popup after each sale (off: notification only). */
+  showInvoiceAfterSale: boolean;
   salesView: SalesView;
   posView: PosView;
   /** Category heading order on the sales screen. */
@@ -286,6 +288,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSaleType: true,
   proformaForBulk: true,
   factorySalesEnabled: false,
+  showInvoiceAfterSale: true,
   salesView: { layout: 'cards', groupByDay: true, showWeight: true, showPayment: true, showItems: false, showSaleType: true },
   posView: { layout: 'grid', size: 'sm', showImages: true, showPerKg: true, showStock: true, cartPopupBeforeInvoice: false },
   categoryOrder: [],

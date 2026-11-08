@@ -159,6 +159,10 @@ export class AppSettings {
   @Prop({ default: true })
   proformaForBulk: boolean;
 
+  /** Show the invoice details popup after each sale. When off, only a notification is shown. */
+  @Prop({ default: true })
+  showInvoiceAfterSale: boolean;
+
   /**
    * Sales shipped straight from the parent company.
    * They do not touch Ario stock; a hidden factory cost is kept for profit.

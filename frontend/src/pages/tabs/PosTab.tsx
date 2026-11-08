@@ -279,12 +279,11 @@ export const PosTab: React.FC = () => {
               : `فاکتور ${inv.invoiceNumber} به مبلغ ${formatToman(inv.finalAmount)} ثبت شد.`,
           type: 'success',
         });
-        setCreatedInvoice(inv);
+        if (settings.showInvoiceAfterSale) setCreatedInvoice(inv);
         void loadData(true);
       }
       setLines([]);
       setCheckoutOpen(false);
-      setTierMode('manual');
       setManualTier(null);
     } catch (err) {
       showNotification({ title: 'ثبت انجام نشد', message: apiErrorMessage(err, 'خطا در صدور فاکتور'), type: 'error' });

@@ -153,7 +153,7 @@ export const QuantitySheet: React.FC<Props> = ({ product, saleType, existing, on
         </div>
         <div className="flex gap-1.5 mt-2">
           {chips.map((c) => (
-            <button key={c} onClick={() => setText(faNum(c))} className="flex-1 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono font-bold text-slate-600 active:scale-95">
+            <button key={c} onClick={() => bump(c)} className="flex-1 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono font-bold text-slate-600 active:scale-95">
               {num(c)}
             </button>
           ))}
