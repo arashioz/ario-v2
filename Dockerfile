@@ -19,7 +19,9 @@ RUN npm ci
 COPY --from=frontend /build/frontend/dist /build/frontend-dist
 
 COPY backend/ ./
-RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build && npm prune --omit=dev
+# 1536 MB, not 2048: on a 2 GB Docker VM a 2 GB heap lets V8 skip collection until the
+# cgroup runs out and the OOM killer takes the build down with exit code 137.
+RUN NODE_OPTIONS=--max-old-space-size=1536 npm run build && npm prune --omit=dev
 
 FROM node:22-slim
 ENV NODE_ENV=production \
