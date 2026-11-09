@@ -21,6 +21,9 @@ interface AmountInputProps {
   suffix?: string;
   autoFocus?: boolean;
   className?: string;
+  inputRef?: React.Ref<HTMLInputElement>;
+  enterKeyHint?: 'enter' | 'done' | 'next' | 'previous' | 'search' | 'send';
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export const AmountInput: React.FC<AmountInputProps> = ({
@@ -30,16 +33,23 @@ export const AmountInput: React.FC<AmountInputProps> = ({
   suffix = 'تومان',
   autoFocus,
   className = '',
+  inputRef,
+  enterKeyHint = 'done',
+  onKeyDown,
 }) => (
   <div className={`relative ${className}`}>
     <input
+      ref={inputRef}
       type="text"
       inputMode="numeric"
       autoFocus={autoFocus}
+      enterKeyHint={enterKeyHint}
+      onFocus={(e) => e.target.select()}
+      onKeyDown={onKeyDown}
       value={value ? value.toLocaleString('fa-IR') : ''}
       onChange={(e) => onChange(parseInt(toLatinDigits(e.target.value).replace(/[^0-9]/g, ''), 10) || 0)}
       placeholder={placeholder}
-      className="w-full pl-14 pr-4 py-3 rounded-2xl border border-slate-200 font-mono text-base font-bold text-slate-800 focus:outline-none focus:border-sky-500"
+      className="w-full pl-14 pr-4 py-2.5 rounded-xl border border-slate-200 font-mono text-base font-bold text-slate-800 focus:outline-none focus:border-sky-500"
     />
     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-slate-400">{suffix}</span>
   </div>
