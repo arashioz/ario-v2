@@ -39,7 +39,7 @@ import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customer
 import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
 import { copyText, requestCopyPermission } from '../../lib/permissions';
 import { formatToman, num, tons } from '../../lib/format';
-import { dateToYmd, formatJalali } from '../../lib/jalali';
+import { dateToYmd, formatClock, formatJalali } from '../../lib/jalali';
 import { JalaliDateSheet } from '../ui/JalaliDatePicker';
 
 const personOf = (invoice: Invoice) => {
@@ -383,7 +383,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 </button>
                 <button type="button" onClick={() => setDateKind('registered')} className="rounded-xl bg-slate-50 px-2 py-1.5">
                   <span className="text-[10px] text-slate-400">ثبت</span>
-                  <span className="font-medium text-slate-700 block text-[12px]">{formatJalali(dateToYmd(new Date(invoice.registeredAt || invoice.createdAt)))}</span>
+                  <span className="font-medium text-slate-700 block text-[12px]">
+                    {formatJalali(dateToYmd(new Date(invoice.registeredAt || invoice.createdAt)))}
+                    <span className="text-slate-400 font-mono"> {formatClock(invoice.registeredAt || invoice.createdAt)}</span>
+                  </span>
                 </button>
                 <button type="button" onClick={() => setDateKind('ship')} className="rounded-xl bg-slate-50 px-2 py-1.5">
                   <span className="text-[10px] text-slate-400">ارسال</span>

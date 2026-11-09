@@ -159,9 +159,9 @@ export class AppSettings {
   @Prop({ default: true })
   proformaForBulk: boolean;
 
-  /** Show the invoice details popup after each sale. When off, only a notification is shown. */
-  @Prop({ default: true })
-  showInvoiceAfterSale: boolean;
+  /** Show the invoice details popup after saving a sale or a pre-invoice. Off: only a notification. */
+  @Prop({ default: false })
+  openDetailAfterSave: boolean;
 
   /**
    * Sales shipped straight from the parent company.

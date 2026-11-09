@@ -52,6 +52,22 @@ export class InvoicesService implements OnApplicationBootstrap {
     await this.syncPricePeriods().catch(() => undefined);
     await this.rebuildStock().catch(() => undefined);
     await this.repairLandedBuyPrices().catch(() => undefined);
+    await this.backfillRegisteredAt().catch(() => undefined);
+  }
+
+  /**
+   * Older invoices have no registration stamp. Their creation time is the moment they were written,
+   * so the list can order every invoice by registration without special cases.
+   */
+  private async backfillRegisteredAt() {
+    await this.invoiceModel
+      .updateMany({ registeredAt: { $exists: false } }, [
+        { $set: { registeredAt: { $ifNull: ['$createdAt', '$invoiceDate'] } } },
+      ])
+      .exec();
+    await this.invoiceModel
+      .updateMany({ registeredAt: null }, [{ $set: { registeredAt: { $ifNull: ['$createdAt', '$invoiceDate'] } } }])
+      .exec();
   }
 
   // ---------------------------------------------------------------------------
@@ -175,12 +191,7 @@ export class InvoicesService implements OnApplicationBootstrap {
         prepared.push({ ...item, weightKg: Math.round(weight * 10) / 10, received: item.received !== false });
         continue;
       }
-      if (isSale && product.stock < item.quantity) {
-        throw new BadRequestException(
-          `موجودی «${product.name}» کافی نیست (موجودی: ${product.stock} ${product.unit}، درخواستی: ${item.quantity})`,
-        );
-      }
-
+      // Sales may take stock below zero (the shortfall is recorded, not rejected).
       const weight = lineKg(
         {
           productId: String(item.productId || ''),
@@ -1321,7 +1332,19 @@ export class InvoicesService implements OnApplicationBootstrap {
       }
     }
     if (shippedAt) invoice.shippedAt = shippedAt;
-    if (registeredAt) invoice.registeredAt = registeredAt;
+    if (registeredAt) {
+      // A day-only edit must not erase the moment of registration — the list is ordered by it.
+      const dayOnly = typeof body.registeredAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.registeredAt);
+      const keep = invoice.registeredAt || invoice.createdAt;
+      if (dayOnly && keep) {
+        const at = new Date(registeredAt);
+        const kept = new Date(keep);
+        at.setHours(kept.getHours(), kept.getMinutes(), kept.getSeconds(), kept.getMilliseconds());
+        invoice.registeredAt = at;
+      } else {
+        invoice.registeredAt = registeredAt;
+      }
+    }
     if (paidAt) {
       invoice.paidAt = paidAt;
       await this.customersService.movePaymentDate(String(invoice._id), paidAt);
@@ -1363,7 +1386,8 @@ export class InvoicesService implements OnApplicationBootstrap {
       ];
     }
 
-    return this.invoiceModel.find(filter).sort({ invoiceDate: -1, createdAt: -1 }).exec();
+    // Newest registration first. The invoice date can be backdated on purpose, so it must not drive the order.
+    return this.invoiceModel.find(filter).sort({ registeredAt: -1, createdAt: -1, _id: -1 }).exec();
   }
 
   async findById(id: string): Promise<InvoiceDocument> {

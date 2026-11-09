@@ -146,6 +146,14 @@ export function formatJalaliIso(iso: string | Date | undefined | null, opts: { y
   return formatJalali(dateToYmd(new Date(iso)), opts);
 }
 
+/** "۱۴:۳۲" — the local clock time of a timestamp, used next to the registration day. */
+export function formatClock(iso: string | Date | undefined | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(+d)) return '';
+  return faNum(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+}
+
 /** "۱۴۰۵/۰۷/۰۵" */
 export function formatJalaliNumeric(ymd: string | undefined | null) {
   if (!ymd) return '';

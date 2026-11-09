@@ -688,7 +688,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="divide-y divide-slate-100 border-t border-slate-100">
                   <Toggle label="انتخاب خودکار با وزن" checked={settings.autoSaleType} disabled={!isAdmin} onChange={(v) => save({ autoSaleType: v }, true)} />
                   <Toggle label="عمده و سوپرمارکت اول پیش‌فاکتور" checked={settings.proformaForBulk} disabled={!isAdmin} onChange={(v) => save({ proformaForBulk: v }, true)} />
-                  <Toggle label="بعد از ثبت فاکتور، ریز فاکتور نمایش داده شود" checked={settings.showInvoiceAfterSale} disabled={!isAdmin} onChange={(v) => save({ showInvoiceAfterSale: v }, true)} />
+                  <Toggle label="بعد از ثبت، ریز فاکتور باز شود" checked={settings.openDetailAfterSave} disabled={!isAdmin} onChange={(v) => save({ openDetailAfterSave: v }, true)} />
                 </div>
                 {isAdmin && (
                   <SaveButton

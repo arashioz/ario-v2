@@ -4,7 +4,7 @@ import type { RefresherEventDetail } from '@ionic/react';
 import { ClipboardList, Truck } from 'lucide-react';
 import { proformasService, PROFORMA_STATUS_LABELS, type Proforma, type ProformaStatus } from '../services/proformas.service';
 import { SHIPPING_PAYER_LABELS, type Invoice } from '../services/invoices.service';
-import { SALE_TYPE_LABELS, SALE_TYPE_TONE } from '../services/settings.service';
+import { SALE_TYPE_LABELS, SALE_TYPE_TONE, useSettings } from '../services/settings.service';
 import { Empty, ReportHeader, Segments } from '../components/reports/ReportUI';
 import { ProformaSheet } from '../components/proformas/ProformaSheet';
 import { InvoiceDetailModal } from '../components/invoices/InvoiceDetailModal';
@@ -18,6 +18,7 @@ export const ProformasPage: React.FC = () => {
   const [selected, setSelected] = useState<Proforma | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState('');
+  const settings = useSettings();
 
   const load = useCallback(async () => {
     try {
@@ -101,7 +102,8 @@ export const ProformasPage: React.FC = () => {
                 </div>
                 <div className="text-left shrink-0">
                   <div className="text-[13px] font-mono font-extrabold text-slate-800">{formatToman(p.finalAmount)}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{formatJalaliIso(p.orderDate)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">ثبت {formatJalaliIso(p.createdAt)}</div>
+                  <div className="text-[10px] text-slate-400">سفارش {formatJalaliIso(p.orderDate)}</div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-1.5 text-[10px]">
@@ -144,7 +146,7 @@ export const ProformasPage: React.FC = () => {
           }}
           onShipped={(inv) => {
             setSelected(null);
-            setInvoice(inv);
+            if (settings.openDetailAfterSave) setInvoice(inv);
             load();
           }}
         />

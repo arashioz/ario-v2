@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { CheckCircle2, Clock, Factory, FileText, Truck } from 'lucide-react';
 import { isOverdue, type Invoice } from '../../services/invoices.service';
 import type { SalesView } from '../../services/settings.service';
-import { dateToYmd, formatJalali } from '../../lib/jalali';
+import { dateToYmd, formatClock, formatJalali } from '../../lib/jalali';
 import { formatToman, num, weight } from '../../lib/format';
 
 const PAY_LABEL: Record<string, string> = {
@@ -26,7 +26,24 @@ const typeTone = (inv: Invoice) =>
     ? 'bg-sky-100 text-sky-800'
     : 'bg-slate-100 text-slate-600';
 
+/**
+ * The business day of an invoice (the order day). Day groups and the period filter follow this,
+ * so a backdated invoice stays in the books of the day it belongs to.
+ */
 const dayOf = (inv: Invoice) => dateToYmd(new Date(inv.proformaDate || inv.invoiceDate || inv.createdAt));
+/** When the document was actually written — the order of the list follows this. */
+const clockOf = (inv: Invoice) => formatClock(inv.registeredAt || inv.createdAt);
+/**
+ * The registration moment for the list meta: just the clock when the document was written on its own
+ * business day, otherwise the full day too (an invoice entered today for last week).
+ */
+const registeredStamp = (inv: Invoice) => {
+  const iso = inv.registeredAt || inv.createdAt;
+  const clock = clockOf(inv);
+  if (!clock) return '';
+  const regDay = dateToYmd(new Date(iso));
+  return regDay === dayOf(inv) ? clock : `${formatJalali(regDay, { year: false })} ${clock}`;
+};
 const personName = (inv: Invoice) => {
   if (inv.type !== 'purchase' || inv.fulfillment !== 'factory') return inv.customerName;
   if (inv.endCustomerName) return inv.endCustomerName;
@@ -76,7 +93,12 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
       </div>
       <div className="text-left shrink-0">
         <div className="text-sm font-bold font-mono text-slate-800">{formatToman(inv.finalAmount)}</div>
-        {showDate && <div className="text-[10px] text-slate-400 mt-0.5">{formatJalali(dayOf(inv), { year: false })}</div>}
+        {showDate && (
+          <div className="text-[10px] text-slate-400 mt-0.5">
+            {formatJalali(dayOf(inv), { year: false })}
+            {clockOf(inv) && <span className="font-mono"> · {registeredStamp(inv)}</span>}
+          </div>
+        )}
       </div>
     </div>
     {v.showItems && (
@@ -108,7 +130,7 @@ const Compact: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDa
         <span dir="ltr" className="font-mono">
           {inv.invoiceNumber}
         </span>
-        {showDate && ` · ${formatJalali(dayOf(inv), { year: false })}`}
+        {showDate && ` · ${formatJalali(dayOf(inv), { year: false })}${registeredStamp(inv) ? ` ${registeredStamp(inv)}` : ''}`}
         {v.showWeight && ` · ${weight(inv.totalWeightKg)}`}
         {v.showPayment && ` · ${PAY_LABEL[inv.paymentMethod] ?? ''}`}
       </div>
@@ -138,7 +160,12 @@ const Table: React.FC<{ list: Invoice[]; v: SalesView; onOpen: (i: Invoice) => v
         {list.map((inv) => (
           <tr key={inv._id} onClick={() => onOpen(inv)} className="active:bg-sky-50 cursor-pointer">
             <td className="px-2 py-2 font-bold text-slate-800 max-w-[110px] truncate">{personName(inv)}</td>
-            {showDate && <td className="px-2 py-2 text-slate-500 whitespace-nowrap">{formatJalali(dayOf(inv), { year: false })}</td>}
+            {showDate && (
+              <td className="px-2 py-2 text-slate-500 whitespace-nowrap">
+                {formatJalali(dayOf(inv), { year: false })}
+                {registeredStamp(inv) && <span className="text-slate-400 font-mono"> {registeredStamp(inv)}</span>}
+              </td>
+            )}
             {v.showSaleType && <td className="px-2 py-2 text-slate-500">{typeLabel(inv)}</td>}
             {v.showWeight && <td className="px-2 py-2 font-mono text-slate-500 whitespace-nowrap">{num(inv.totalWeightKg)}</td>}
             <td className="px-2 py-2 font-mono font-bold text-left whitespace-nowrap">{num(inv.finalAmount)}</td>
@@ -164,7 +191,14 @@ export const InvoiceList: React.FC<{ invoices: Invoice[]; view: SalesView; onOpe
       if (!m.has(d)) m.set(d, []);
       m.get(d)!.push(inv);
     }
-    return [...m.entries()].map(([day, list]) => ({ day, list }));
+    // Groups follow the same rule as the rows: the day holding the newest registration comes first,
+    // so a backdated invoice never drags its whole day to the wrong end of the list.
+    const stamp = (list: Invoice[]) =>
+      Math.max(...list.map((inv) => +new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate)));
+    return [...m.entries()]
+      .map(([day, list]) => ({ day, list, at: stamp(list) }))
+      .sort((a, b) => b.at - a.at)
+      .map(({ day, list }) => ({ day, list }));
   }, [invoices, view.groupByDay]);
 
   const showDate = !view.groupByDay;

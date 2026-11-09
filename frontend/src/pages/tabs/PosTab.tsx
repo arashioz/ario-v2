@@ -175,10 +175,6 @@ export const PosTab: React.FC = () => {
   const step = (l: CartLine, delta: number) => {
     const q = r3(l.quantity + delta);
     if (q <= 0) return remove(l.product._id);
-    if (!fromFactory && q > (l.product.stock ?? 0)) {
-      showNotification({ title: 'موجودی کافی نیست', message: `موجودی ${l.product.name}: ${num(l.product.stock)} ${l.product.unit}`, type: 'error' });
-      return;
-    }
     upsert({ ...l, quantity: q });
   };
 
@@ -215,8 +211,9 @@ export const PosTab: React.FC = () => {
     submittingRef.current = true;
     const items = lines.map((l) => {
       const base = toInvoiceItem(l);
+      // A price quoted in the checkout sheet wins over the cart line — for a factory sale and for a pre-invoice alike.
       const quoted = factorySellPrices?.[l.product._id];
-      const unitPrice = Math.round(fulfillment === 'factory' && quoted != null ? quoted : base.unitPrice);
+      const unitPrice = Math.round(quoted != null && quoted > 0 ? quoted : base.unitPrice);
       return {
         ...base,
         unitPrice,
@@ -265,7 +262,7 @@ export const PosTab: React.FC = () => {
               : `${p.number} تا زمان ارسال بار در «پیش‌فاکتورها» می‌ماند و از انبار کسر نمی‌شود.`,
           type: 'success',
         });
-        setCreatedProforma(p);
+        if (settings.openDetailAfterSave) setCreatedProforma(p);
         loadPending();
       } else {
         const inv = saved as Invoice;
@@ -279,7 +276,7 @@ export const PosTab: React.FC = () => {
               : `فاکتور ${inv.invoiceNumber} به مبلغ ${formatToman(inv.finalAmount)} ثبت شد.`,
           type: 'success',
         });
-        if (settings.showInvoiceAfterSale) setCreatedInvoice(inv);
+        if (settings.openDetailAfterSave) setCreatedInvoice(inv);
         void loadData(true);
       }
       setLines([]);
@@ -558,7 +555,7 @@ export const PosTab: React.FC = () => {
           }}
           onShipped={(inv) => {
             setCreatedProforma(null);
-            setCreatedInvoice(inv);
+            if (settings.openDetailAfterSave) setCreatedInvoice(inv);
             void loadData(true);
             loadPending();
           }}

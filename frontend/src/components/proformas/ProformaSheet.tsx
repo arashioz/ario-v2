@@ -6,7 +6,7 @@ import { proformasService, PROFORMA_STATUS_LABELS, type Proforma } from '../../s
 import { apiErrorMessage, SHIPPING_PAYER_LABELS, type Invoice } from '../../services/invoices.service';
 import { SALE_TYPE_LABELS } from '../../services/settings.service';
 import { useNotification } from '../../context/NotificationContext';
-import { formatJalaliIso as formatJalali } from '../../lib/jalali';
+import { formatClock, formatJalaliIso as formatJalali } from '../../lib/jalali';
 import { formatToman, num, weight } from '../../lib/format';
 import {
   PaymentTermsForm,
@@ -138,7 +138,7 @@ export const ProformaSheet: React.FC<Props> = ({ proforma, onClose, onChanged, o
       open
       onClose={onClose}
       title={`پیش‌فاکتور ${proforma.number}`}
-      subtitle={`${proforma.customerName} · ${SALE_TYPE_LABELS[proforma.saleType]} · ${formatJalali(proforma.orderDate)}`}
+      subtitle={`${proforma.customerName} · ${SALE_TYPE_LABELS[proforma.saleType]} · سفارش ${formatJalali(proforma.orderDate)} · ثبت ${formatJalali(proforma.createdAt)} ${formatClock(proforma.createdAt)}`}
       footer={
         pending ? (
           <div className="space-y-2">

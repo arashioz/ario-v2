@@ -127,6 +127,7 @@ export const CheckoutSheet: React.FC<Props> = ({
     setFactoryCosts({});
     editedCosts.current.clear();
     setSellPrices(Object.fromEntries(factoryLines.map((l) => {
+      if (!fromFactory) return [l.productId, l.sellPrice || 0];
       const cost = l.buyPrice || 0;
       const announced = l.agencyBasePrice || (cost > 0 ? cost + (l.agencyGap || 0) : 0);
       return [l.productId, announced || l.sellPrice || 0];
@@ -187,8 +188,9 @@ export const CheckoutSheet: React.FC<Props> = ({
   const goodsTotal = useMemo(() => {
     if (pricingFactory && useBasePrice) return factoryLines.reduce((sum, line) => sum + Math.round(line.quantity * pricedUnit(line)), 0);
     if (!editingPrices) return subtotal;
-    return factoryLines.reduce((s, l) => s + Math.round(l.quantity * (sellPrices[l.productId] ?? l.sellPrice)), 0);
-  }, [pricingFactory, useBasePrice, editingPrices, factoryLines, sellPrices, subtotal, factoryCosts]);
+    // Same function that fills the saved lines, so the total on screen is the total that gets stored.
+    return factoryLines.reduce((s, l) => s + Math.round(l.quantity * pricedUnit(l)), 0);
+  }, [pricingFactory, useBasePrice, editingPrices, factoryLines, subtotal, factoryCosts]);
 
   if (!open) return null;
 
@@ -265,9 +267,12 @@ export const CheckoutSheet: React.FC<Props> = ({
       fulfillment: fromFactory ? 'factory' : 'shop',
       branchName: branches.includes(branch) ? branch : undefined,
       factoryUnitCosts: fromFactory ? factoryCosts : undefined,
+      // Whatever price the customer was shown must be the price the saved document carries.
       factorySellPrices: fromFactory
         ? Object.fromEntries(factoryLines.map((line) => [line.productId, pricedUnit(line)]))
-        : bulk && asProforma ? sellPrices : undefined,
+        : bulk && asProforma
+          ? Object.fromEntries(factoryLines.map((line) => [line.productId, pricedUnit(line)]))
+          : undefined,
     });
   };
 

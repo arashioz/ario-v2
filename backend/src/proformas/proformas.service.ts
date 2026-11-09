@@ -109,7 +109,8 @@ export class ProformasService {
   findAll(status?: string) {
     const filter: any = {};
     if (status && status !== 'all') filter.status = status;
-    return this.model.find(filter).sort({ status: 1, orderDate: -1, createdAt: -1 }).limit(300).exec();
+    // Newest registration first; the order date can be backdated and must not drive the list.
+    return this.model.find(filter).sort({ status: 1, createdAt: -1, _id: -1 }).limit(300).exec();
   }
 
   async summary() {

@@ -84,7 +84,8 @@ export function applyInvoiceFilters(list: Invoice[], f: InvoiceFilters): Invoice
     if (f.max && (inv.finalAmount || 0) > f.max) return false;
     return true;
   });
-  const time = (inv: Invoice) => new Date(inv.invoiceDate || inv.createdAt).getTime();
+  // Newest registration first — the invoice date can be backdated on purpose.
+  const time = (inv: Invoice) => new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate).getTime();
   if (f.sort === 'old') out.sort((a, b) => time(a) - time(b));
   else if (f.sort === 'amount') out.sort((a, b) => (b.finalAmount || 0) - (a.finalAmount || 0));
   else out.sort((a, b) => time(b) - time(a));

@@ -282,3 +282,5 @@ export class Invoice {
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 InvoiceSchema.index({ invoiceNumber: 'text', customerName: 'text' });
 InvoiceSchema.index({ invoiceDate: -1, createdAt: -1 });
+/** The invoices list is ordered by registration time, never by the (backdatable) invoice date. */
+InvoiceSchema.index({ registeredAt: -1, createdAt: -1 });

@@ -290,7 +290,7 @@ export const invoicesService = {
     return response.data;
   },
 
-  setDates: async (id: string, dates: { proformaDate?: string; shippedAt?: string; paidAt?: string }): Promise<Invoice> => {
+  setDates: async (id: string, dates: { proformaDate?: string; shippedAt?: string; paidAt?: string; registeredAt?: string }): Promise<Invoice> => {
     const response = await api.patch<Invoice>(`/invoices/${id}/dates`, dates);
     return response.data;
   },

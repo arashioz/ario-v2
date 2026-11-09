@@ -76,7 +76,7 @@ const SCALARS = [
   'autoSaleType',
   'proformaForBulk',
   'factorySalesEnabled',
-  'showInvoiceAfterSale',
+  'openDetailAfterSave',
   'performanceRunAt',
 ] as const;
 
@@ -110,7 +110,7 @@ export class SettingsService {
         const v = Number(body[k]);
         if (!Number.isFinite(v) || v < 0) throw new BadRequestException('حد وزن نامعتبر است');
         set[k] = v;
-      } else if (k === 'autoSaleType' || k === 'proformaForBulk' || k === 'factorySalesEnabled' || k === 'showInvoiceAfterSale') {
+      } else if (k === 'autoSaleType' || k === 'proformaForBulk' || k === 'factorySalesEnabled' || k === 'openDetailAfterSave') {
         set[k] = !!body[k];
       } else if (k === 'performanceRunAt') {
         const t = String(body[k] || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
