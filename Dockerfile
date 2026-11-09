@@ -15,6 +15,9 @@ FROM node:22-slim AS backend
 WORKDIR /build/backend
 COPY backend/package*.json ./
 RUN npm ci
+# Make BuildKit finish the frontend build before starting the memory-intensive backend build.
+COPY --from=frontend /build/frontend/dist /build/frontend-dist
+
 COPY backend/ ./
 RUN NODE_OPTIONS=--max-old-space-size=2048 npm run build && npm prune --omit=dev
 
