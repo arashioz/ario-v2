@@ -32,7 +32,6 @@ import { useNotification } from '../../context/NotificationContext';
 import { EditInvoiceSheet } from './EditInvoiceSheet';
 import { DeleteInvoiceSheet } from './DeleteInvoiceSheet';
 import { InvoicePaymentSheet } from './InvoicePaymentSheet';
-import { InvoiceProfitCard } from './InvoiceProfitCard';
 import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
@@ -298,11 +297,10 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 print:hidden">
+          <div className="grid grid-cols-3 gap-2 print:hidden">
             {[
               { label: 'ویرایش', icon: Pencil, onClick: () => setSheet('edit'), cls: 'text-sky-700' },
               { label: 'پیامک', icon: MessageSquare, onClick: handleCopyAndSms, cls: 'text-slate-700' },
-              { label: 'چاپ', icon: Printer, onClick: handlePrint, cls: 'text-slate-700' },
               { label: 'حذف', icon: Trash2, onClick: () => setSheet('delete'), cls: 'text-rose-600' },
             ].map((a) => (
               <button
@@ -512,12 +510,6 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <span>مبلغ نهایی فاکتور:</span>
                 <span className="font-mono text-sky-700">{formatToman(invoice.finalAmount)}</span>
               </div>
-              {isSale && typeof invoice.profitAmount === 'number' && (
-                <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
-                  <span>سود این فاکتور:</span>
-                  <span className="font-mono">{formatToman(invoice.profitAmount)}</span>
-                </div>
-              )}
 
               {invoice.shippingPayer === 'me' && invoice.shippingCost ? (
                 <div className="flex items-center justify-between text-[11px] text-slate-500 print:hidden">
@@ -580,11 +572,15 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             {invoice.notes && (
               <p className="text-[11px] text-slate-400 italic">یادداشت: {invoice.notes}</p>
             )}
+            {isSale && (
+              <p className="text-[10px] text-slate-500 text-center border-t border-dashed border-slate-200 pt-3">
+                فاکتور فوق تا زمان تسویه کامل نزد مشتری امانت میباشد
+              </p>
+            )}
             {isSale && settings.invoiceFooter && (
-              <p className="text-[11px] text-slate-500 text-center border-t border-dashed border-slate-200 pt-3">{settings.invoiceFooter}</p>
+              <p className="text-[11px] text-slate-500 text-center pt-2">{settings.invoiceFooter}</p>
             )}
           </div>
-          {isSale && <InvoiceProfitCard invoiceId={invoice._id} version={invoice.updatedAt} />}
           {invoice.type === 'purchase' && (
             <button
               onClick={() => setSheet('price')}
@@ -599,6 +595,24 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               </div>
             </button>
           )}
+          
+          {/* WhatsApp and Print Buttons at Bottom */}
+          <div className="grid grid-cols-2 gap-3 print:hidden mt-3">
+            <button
+              onClick={handleWhatsApp}
+              className="py-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 active:scale-95 transition"
+            >
+              <MessageCircle className="w-4 h-4" />
+              ارسال در واتس‌اپ
+            </button>
+            <button
+              onClick={handlePrint}
+              className="py-3 rounded-2xl bg-white border border-slate-200 flex items-center justify-center gap-2 text-sm font-bold text-slate-700 active:scale-95 transition"
+            >
+              <Printer className="w-4 h-4" />
+              چاپ فاکتور
+            </button>
+          </div>
         </div>
       </IonContent>
 
