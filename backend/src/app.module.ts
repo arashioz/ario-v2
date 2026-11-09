@@ -23,6 +23,7 @@ import { BackupModule } from './backup/backup.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { OrderRequestsModule } from './orders/order-requests.module';
 import { WatchModule } from './watch/watch.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { WatchModule } from './watch/watch.module';
     SharesModule,
     BackupModule,
     WatchModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

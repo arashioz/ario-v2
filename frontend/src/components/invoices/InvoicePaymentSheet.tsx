@@ -9,6 +9,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { useSettings } from '../../services/settings.service';
 import { AccountPicker, defaultAccountId } from '../ui/AccountPicker';
 import { formatToman } from '../../lib/format';
+import { paymentsService, openMellatPage, type MellatCapabilities } from '../../services/payments.service';
 
 interface Props {
   invoice: Invoice | null;
@@ -23,7 +24,13 @@ export const InvoicePaymentSheet: React.FC<Props> = ({ invoice, onClose, onPaid 
   const [note, setNote] = useState('');
   const [accountId, setAccountId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [gateway, setGateway] = useState<MellatCapabilities | null>(null);
+  const [launching, setLaunching] = useState(false);
   const { bankCards } = useSettings();
+
+  useEffect(() => {
+    void paymentsService.capabilities().then(setGateway);
+  }, []);
 
   useEffect(() => {
     if (invoice) {
@@ -38,6 +45,25 @@ export const InvoicePaymentSheet: React.FC<Props> = ({ invoice, onClose, onPaid 
 
   const isCard = method === 'transfer';
   const needsAccount = isCard && bankCards.length > 0 && !accountId;
+  const onlineAllowed = Boolean(gateway?.enabled) && invoice.type === 'sale';
+
+  /** Step 1 runs server side, then the browser is POSTed to the bank page. */
+  const payOnline = async () => {
+    if (launching || amount <= 0 || amount > invoice.remainingDebt) return;
+    try {
+      setLaunching(true);
+      const launch = await paymentsService.launch(invoice._id, {
+        amount,
+        mobileNo: invoice.customerPhone || undefined,
+        description: note || undefined,
+      });
+      // From here the bank owns the screen; it posts back to /api/payments/mellat/callback.
+      openMellatPage(launch);
+    } catch (err) {
+      showNotification({ title: 'درگاه بانک ملت', message: apiErrorMessage(err, 'درگاه پاسخ نداد'), type: 'error' });
+      setLaunching(false);
+    }
+  };
 
   const submit = async () => {
     if (amount <= 0 || amount > invoice.remainingDebt || needsAccount) return;
@@ -118,6 +144,27 @@ export const InvoicePaymentSheet: React.FC<Props> = ({ invoice, onClose, onPaid 
       </div>
 
       {isCard && <AccountPicker value={accountId} onChange={setAccountId} />}
+
+      {onlineAllowed && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-bold text-emerald-900">پرداخت آنلاین — درگاه بانک ملت</p>
+              <p className="text-[10px] text-emerald-700 mt-0.5 leading-5">
+                مشتری روی صفحه بانک کارت می‌کشد؛ با تأیید بانک، فاکتور خودکار تسویه می‌شود.
+              </p>
+            </div>
+            <span className="shrink-0 text-[10px] font-mono text-emerald-700">پایانه {gateway?.terminalId}</span>
+          </div>
+          <button
+            onClick={payOnline}
+            disabled={launching || amount <= 0 || amount > invoice.remainingDebt}
+            className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold disabled:opacity-40 active:scale-[0.98] transition"
+          >
+            {launching ? 'در حال اتصال به درگاه…' : `ورود به درگاه · ${formatToman(amount)}`}
+          </button>
+        </div>
+      )}
 
       <input
         value={note}

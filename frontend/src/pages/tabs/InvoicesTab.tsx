@@ -21,6 +21,7 @@ import { PendingProformasBanner } from '../../components/proformas/PendingProfor
 import { useSettings } from '../../services/settings.service';
 import { useNavigate } from 'react-router-dom';
 import { invoicesService } from '../../services/invoices.service';
+import { readMellatReturn } from '../../services/payments.service';
 import type { Invoice } from '../../services/invoices.service';
 import { useNotification } from '../../context/NotificationContext';
 import { InvoiceDetailModal } from '../../components/invoices/InvoiceDetailModal';
@@ -89,6 +90,18 @@ export const InvoicesTab: React.FC = () => {
 
   useEffect(() => {
     loadInvoices();
+  }, []);
+
+  /** The bank drops the customer back here with ?mellat=ok|fail after the callback. */
+  useEffect(() => {
+    const result = readMellatReturn();
+    if (!result) return;
+    showNotification({
+      title: result.ok ? 'پرداخت اینترنتی تأیید شد' : 'پرداخت اینترنتی انجام نشد',
+      message: result.orderId ? `${result.message} (کد درخواست ${result.orderId})` : result.message,
+      type: result.ok ? 'success' : 'error',
+    });
+    void loadInvoices();
   }, []);
 
   const handleRefresh = async (event: CustomEvent) => {
