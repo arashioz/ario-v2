@@ -9,10 +9,12 @@ interface SheetProps {
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Opt-in: fill most of the screen height (used by the quantity sheet). */
+  tall?: boolean;
 }
 
 /** Plain bottom sheet (centered dialog on wide screens). */
-export const Sheet: React.FC<SheetProps> = ({ open, title, subtitle, onClose, children, footer }) => {
+export const Sheet: React.FC<SheetProps> = ({ open, title, subtitle, onClose, children, footer, tall = false }) => {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -38,7 +40,7 @@ export const Sheet: React.FC<SheetProps> = ({ open, title, subtitle, onClose, ch
     <div className="fixed inset-0 z-[40000] flex items-end sm:items-center justify-center" dir="rtl">
       <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
       <div
-        className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col animate-slide-up"
+        className={`relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl flex flex-col animate-slide-up ${tall ? 'h-[92vh] sm:h-auto sm:max-h-[92vh]' : 'max-h-[92vh]'}`}
         style={{ paddingBottom: 'var(--tabbar-offset)' }}
       >
         <div className="flex items-center justify-between px-4 pt-3 pb-2.5 border-b border-slate-100">

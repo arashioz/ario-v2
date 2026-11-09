@@ -75,7 +75,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [txKind, setTxKind] = useState<'payment' | 'debt' | null>(null);
-  const [activeTab, setActiveTab] = useState<'invoices' | 'transactions' | 'followups'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'performance' | 'transactions' | 'followups'>('invoices');
   const [followUps, setFollowUps] = useState<FollowUpLog[]>([]);
   const [followUpTarget, setFollowUpTarget] = useState<FollowUpTarget | null>(null);
   const [loading, setLoading] = useState(false);
@@ -482,6 +482,74 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </div>
               )}
 
+
+              {/* Action Buttons Grid */}
+              <div className="grid grid-cols-4 gap-1.5 pt-2.5 border-t border-slate-100">
+                <button
+                  onClick={() => setTxKind('payment')}
+                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-emerald-600 active:scale-95 text-white transition"
+                >
+                  <Wallet className="w-4 h-4 mb-1" />
+                  <span className="text-[11px] font-bold">دریافت وجه</span>
+                </button>
+
+                <button
+                  onClick={() => setTxKind('debt')}
+                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-rose-50 active:scale-95 text-rose-700 border border-rose-200/70 transition"
+                >
+                  <PlusCircle className="w-4 h-4 mb-1" />
+                  <span className="text-[11px] font-bold">بدهی دستی</span>
+                </button>
+
+                <button
+                  onClick={handleSendSms}
+                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 active:scale-95 text-slate-700 border border-slate-200 transition"
+                >
+                  <Send className="w-4 h-4 mb-1" />
+                  <span className="text-[11px] font-bold">گزارش پیامکی</span>
+                </button>
+
+                <a
+                  href={`tel:${customer.phoneNumber}`}
+                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 active:scale-95 text-slate-700 border border-slate-200 transition"
+                >
+                  <Phone className="w-4 h-4 mb-1" />
+                  <span className="text-[11px] font-bold">تماس</span>
+                </a>
+              </div>
+            </div>
+
+            {customer.kind !== 'walkin' && <CustomerResumeCard customerId={customer._id} refreshKey={refreshTrigger} />}
+
+            <div className="flex bg-slate-200/70 p-1 rounded-2xl gap-1">
+              {([
+                ['invoices', 'فاکتورها', invoices.length, FileText],
+                ['performance', 'عملکرد', null, Scale],
+                ['transactions', 'گردش حساب', transactions.length, Clock],
+                ['followups', 'پیگیری', followUps.length, PhoneCall],
+              ] as const).map(([key, label, count, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveTab(key)}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+                    activeTab === key ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {count === null ? (
+                    label
+                  ) : (
+                    <>
+                      {label} (<span className="font-mono">{count.toLocaleString('fa-IR')}</span>)
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'performance' && (
+              <div className="space-y-3">
               <div className="rounded-xl bg-slate-50 border border-slate-100 px-2.5 py-2">
                 <span className="text-[10px] font-bold text-slate-500">فروش شش ماه اخیر</span>
                 <div className="mt-2 flex items-end gap-1 h-14">
@@ -527,66 +595,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                 )}
               </div>
-
-              {/* Action Buttons Grid */}
-              <div className="grid grid-cols-4 gap-1.5 pt-2.5 border-t border-slate-100">
-                <button
-                  onClick={() => setTxKind('payment')}
-                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-emerald-600 active:scale-95 text-white transition"
-                >
-                  <Wallet className="w-4 h-4 mb-1" />
-                  <span className="text-[11px] font-bold">دریافت وجه</span>
-                </button>
-
-                <button
-                  onClick={() => setTxKind('debt')}
-                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-rose-50 active:scale-95 text-rose-700 border border-rose-200/70 transition"
-                >
-                  <PlusCircle className="w-4 h-4 mb-1" />
-                  <span className="text-[11px] font-bold">بدهی دستی</span>
-                </button>
-
-                <button
-                  onClick={handleSendSms}
-                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 active:scale-95 text-slate-700 border border-slate-200 transition"
-                >
-                  <Send className="w-4 h-4 mb-1" />
-                  <span className="text-[11px] font-bold">گزارش پیامکی</span>
-                </button>
-
-                <a
-                  href={`tel:${customer.phoneNumber}`}
-                  className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50 active:scale-95 text-slate-700 border border-slate-200 transition"
-                >
-                  <Phone className="w-4 h-4 mb-1" />
-                  <span className="text-[11px] font-bold">تماس</span>
-                </a>
               </div>
-            </div>
-
-            {customer.kind !== 'walkin' && <CustomerResumeCard customerId={customer._id} refreshKey={refreshTrigger} />}
-
-            <div className="flex bg-slate-200/70 p-1 rounded-2xl gap-1">
-              {([
-                ['invoices', 'فاکتورها', invoices.length, FileText],
-                ['transactions', 'گردش حساب', transactions.length, Clock],
-                ['followups', 'پیگیری', followUps.length, PhoneCall],
-              ] as const).map(([key, label, count, Icon]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveTab(key)}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 ${
-                    activeTab === key ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-500'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>
-                    {label} (<span className="font-mono">{count.toLocaleString('fa-IR')}</span>)
-                  </span>
-                </button>
-              ))}
-            </div>
+            )}
 
             {activeTab === 'followups' && (
               <div className="space-y-2.5">

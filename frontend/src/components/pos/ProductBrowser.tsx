@@ -143,7 +143,6 @@ const ProductCard = React.memo(function ProductCard({
     return (
       <button
         onClick={() => onPick(p)}
-        disabled={out}
         className={`${frame} w-full rounded-xl px-2.5 py-2 flex items-center gap-2`}
       >
         {view.showImages && <Thumb p={p} className={z.img} />}
@@ -164,7 +163,6 @@ const ProductCard = React.memo(function ProductCard({
     return (
       <button
         onClick={() => onPick(p)}
-        disabled={out}
         className={`${frame} rounded-xl p-1.5 flex flex-col gap-0.5`}
       >
         {view.showImages && <Thumb p={p} className="w-full h-14" />}
@@ -180,7 +178,6 @@ const ProductCard = React.memo(function ProductCard({
   return (
     <button
       onClick={() => onPick(p)}
-      disabled={out}
       className={`${frame} rounded-2xl p-2 flex gap-2`}
     >
       {view.showImages && <Thumb p={p} className={z.img} />}
