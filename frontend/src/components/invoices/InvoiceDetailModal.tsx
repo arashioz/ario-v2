@@ -211,9 +211,9 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 <FileText className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-800">ریز فاکتور {isSale ? 'فروش' : 'خرید'}</h2>
+                <h2 className="text-sm font-semibold text-slate-800">{personOf(invoice)}</h2>
                 <span className="text-[10px] text-slate-400 font-mono block" dir="ltr">
-                  {invoice.invoiceNumber}
+                  ریز فاکتور {isSale ? 'فروش' : 'خرید'} · {invoice.invoiceNumber}
                 </span>
               </div>
             </div>
@@ -280,28 +280,11 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
             </button>
           )}
 
-          <div className="grid grid-cols-2 gap-2 print:hidden">
-            <button
-              onClick={handleCopyText}
-              className="py-2.5 rounded-2xl bg-white border border-slate-200 flex items-center justify-center gap-2 text-[11px] font-bold text-sky-700 active:scale-95 transition"
-            >
-              <Copy className="w-4 h-4" />
-              کپی فاکتور
-            </button>
-            <button
-              onClick={handleWhatsApp}
-              className="py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 text-[11px] font-bold text-emerald-700 active:scale-95 transition"
-            >
-              <MessageCircle className="w-4 h-4" />
-              ارسال در واتساپ
-            </button>
-          </div>
-
           <div className="grid grid-cols-3 gap-2 print:hidden">
             {[
               { label: 'ویرایش', icon: Pencil, onClick: () => setSheet('edit'), cls: 'text-sky-700' },
               { label: 'پیامک', icon: MessageSquare, onClick: handleCopyAndSms, cls: 'text-slate-700' },
-              { label: 'حذف', icon: Trash2, onClick: () => setSheet('delete'), cls: 'text-rose-600' },
+              { label: 'کپی', icon: Copy, onClick: handleCopyText, cls: 'text-sky-700' },
             ].map((a) => (
               <button
                 key={a.label}
@@ -374,23 +357,23 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                 {isSale && invoice.customerId && <span className="block text-[10px] text-sky-600">مشاهده حساب مشتری ←</span>}
               </button>
 
-              <div className="grid grid-cols-2 gap-2 text-left">
-                <button type="button" onClick={() => setDateKind('proforma')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+              <div className="col-span-2 flex flex-nowrap gap-1 text-right overflow-x-auto">
+                <button type="button" onClick={() => setDateKind('proforma')} className="flex-1 rounded-xl bg-slate-50 px-1.5 py-1.5">
                   <span className="flex items-center justify-end gap-1 text-slate-400 text-[10px]"><Calendar className="w-3 h-3" />پیش‌فاکتور</span>
                   <span className="font-medium text-slate-700 block text-[12px]">{invoice.proformaDate ? formatJalali(dateToYmd(new Date(invoice.proformaDate))) : invoiceDateString}</span>
                 </button>
-                <button type="button" onClick={() => setDateKind('registered')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                <button type="button" onClick={() => setDateKind('registered')} className="flex-1 rounded-xl bg-slate-50 px-1.5 py-1.5">
                   <span className="text-[10px] text-slate-400">ثبت</span>
                   <span className="font-medium text-slate-700 block text-[12px]">
                     {formatJalali(dateToYmd(new Date(invoice.registeredAt || invoice.createdAt)))}
                     <span className="text-slate-400 font-mono"> {formatClock(invoice.registeredAt || invoice.createdAt)}</span>
                   </span>
                 </button>
-                <button type="button" onClick={() => setDateKind('ship')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                <button type="button" onClick={() => setDateKind('ship')} className="flex-1 rounded-xl bg-slate-50 px-1.5 py-1.5">
                   <span className="text-[10px] text-slate-400">ارسال</span>
                   <span className="font-medium text-slate-700 block text-[12px]">{invoice.shippedAt ? formatJalali(dateToYmd(new Date(invoice.shippedAt))) : '—'}</span>
                 </button>
-                <button type="button" onClick={() => setDateKind('paid')} className="rounded-xl bg-slate-50 px-2 py-1.5">
+                <button type="button" onClick={() => setDateKind('paid')} className="flex-1 rounded-xl bg-slate-50 px-1.5 py-1.5">
                   <span className="text-[10px] text-slate-400">پرداخت</span>
                   <span className="font-medium text-slate-700 block text-[12px]">{invoice.paidAt ? formatJalali(dateToYmd(new Date(invoice.paidAt))) : payments[0] ? formatJalali(dateToYmd(new Date(payments[0].date))) : '—'}</span>
                 </button>
@@ -416,7 +399,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
             {/* Line Items Table (ریز اقلام) */}
             <div className="space-y-2">
-              <span className="text-xs font-medium text-slate-700 block">ریز اقلام فاکتور:</span>
+              <span className="text-[10px] font-medium text-slate-500 block">ریز اقلام فاکتور:</span>
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="invoice-print-table w-full text-[11px]">
                   <thead className="bg-slate-50 text-slate-500">
@@ -597,13 +580,20 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
           )}
           
           {/* WhatsApp and Print Buttons at Bottom */}
-          <div className="grid grid-cols-2 gap-3 print:hidden mt-3">
+          <div className="grid grid-cols-3 gap-2 print:hidden mt-3">
+            <button
+              onClick={() => setSheet('delete')}
+              className="py-3 rounded-2xl bg-white border border-rose-200 flex items-center justify-center gap-2 text-sm font-bold text-rose-600 active:scale-95 transition"
+            >
+              <Trash2 className="w-4 h-4" />
+              حذف
+            </button>
             <button
               onClick={handleWhatsApp}
               className="py-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 active:scale-95 transition"
             >
               <MessageCircle className="w-4 h-4" />
-              ارسال در واتس‌اپ
+              واتس‌اپ
             </button>
             <button
               onClick={handlePrint}
