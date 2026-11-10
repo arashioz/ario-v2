@@ -27,17 +27,6 @@ setupIonicReact({
   animated: false,
 });
 
-if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-    });
-  } else {
-    // A cache-first worker would serve stale modules to the Vite dev server.
-    navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
-  }
-}
-
 const container = document.getElementById('root');
 const root = createRoot(container!);
 root.render(

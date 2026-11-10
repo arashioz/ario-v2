@@ -1,30 +1,20 @@
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
+
 /**
- * Location and clipboard prompts only appear if the call happens in the same
- * turn as the tap. Do not await anything before these.
+ * Native permission prompts (Android/iOS via Capacitor) must be triggered in the
+ * same tap, before any `await`. Web clipboard does not need a prompt.
  */
 
-type PermissionRequest = Permissions & {
-  request?: (desc: PermissionDescriptor) => Promise<PermissionStatus>;
-};
-
-function requestNamed(name: PermissionName) {
-  try {
-    const permissions = navigator.permissions as PermissionRequest | undefined;
-    void permissions?.request?.({ name } as PermissionDescriptor);
-  } catch {
-    /* this browser shows Allow from the API call itself */
-  }
-}
-
-/** Ask the system for clipboard access. Call at the start of the copy tap. */
+/** Clipboard needs no runtime permission in the native shell or the browser tap. */
 export function requestCopyPermission() {
-  requestNamed('clipboard-write' as PermissionName);
-  requestNamed('clipboard-read' as PermissionName);
+  /* no-op: copy runs inside the user tap */
 }
 
-/** Ask the system for location. Call at the start of the location tap. */
-export function requestLocationPermission() {
-  requestNamed('geolocation');
+/** Ask the OS for location. Call synchronously at the start of the location tap. */
+export function requestLocationPermission(): Promise<void> | void {
+  if (!Capacitor.isNativePlatform()) return;
+  return Geolocation.requestPermissions().then(() => undefined, () => undefined);
 }
 
 function legacyCopy(text: string) {

@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { requestLocationPermission } from './permissions';
@@ -126,11 +128,8 @@ const watchOnce = (ms = 8000) =>
   });
 
 const readCapacitor = async (): Promise<GeoResult | null> => {
-  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Geolocation?: { getCurrentPosition: (opts: object) => Promise<{ coords: { latitude: number; longitude: number } }> } } } }).Capacitor;
-  if (!cap?.isNativePlatform?.()) return null;
-  const geo = cap.Plugins?.Geolocation;
-  if (!geo) return null;
-  const pos = await geo.getCurrentPosition({ enableHighAccuracy: true, timeout: 20000 });
+  if (!Capacitor.isNativePlatform()) return null;
+  const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 20000 });
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 };
 
