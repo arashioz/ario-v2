@@ -322,3 +322,6 @@ export const apiErrorMessage = (err: unknown, fallback: string): string => {
   if (data.code === 'ECONNABORTED') return 'ارتباط با سرور طول کشید. یک بار دیگر ذخیره کنید.';
   return fallback;
 };
+
+/** Window event fired right after a sale invoice is saved, so the invoice list can show it at once. */
+export const INVOICE_SAVED = 'ario-invoice-saved';

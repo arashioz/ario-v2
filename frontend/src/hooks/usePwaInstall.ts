@@ -1,45 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  canPromptInstall,
+  isInstalled,
+  isIosDevice,
+  isStandalone,
+  promptInstall,
+  subscribeInstall,
+  type InstallResult,
+} from '../services/pwa';
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+export interface UsePWAInstallResult {
+  /** A saved browser prompt can be shown right now (Chromium Android / desktop). */
+  canPrompt: boolean;
+  /** The app is already installed or running standalone. */
+  installed: boolean;
+  /** Current device is iOS Safari, which needs manual instructions. */
+  ios: boolean;
+  /** Call from a click handler. */
+  install: () => Promise<InstallResult>;
 }
 
-let deferredPrompt: BeforeInstallPromptEvent | null = null;
-const listeners = new Set<() => void>();
+/** Install availability, synced with the global `beforeinstallprompt` capture. */
+export function usePwaInstall(): UsePWAInstallResult {
+  const [canPrompt, setCanPrompt] = useState(canPromptInstall);
 
-// Captured at module load: the event may fire before any component mounts.
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e as BeforeInstallPromptEvent;
-  listeners.forEach((l) => l());
-});
+  useEffect(() => subscribeInstall(() => setCanPrompt(canPromptInstall())), []);
 
-export const isStandalone = () =>
-  window.matchMedia('(display-mode: standalone)').matches ||
-  (navigator as unknown as { standalone?: boolean }).standalone === true;
-
-export const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
-
-export function usePwaInstall() {
-  const [canPrompt, setCanPrompt] = useState(!!deferredPrompt);
-
-  useEffect(() => {
-    const update = () => setCanPrompt(!!deferredPrompt);
-    listeners.add(update);
-    return () => {
-      listeners.delete(update);
-    };
+  const install = useCallback(async () => {
+    const result = await promptInstall();
+    setCanPrompt(canPromptInstall());
+    return result;
   }, []);
 
-  const install = async (): Promise<boolean> => {
-    if (!deferredPrompt) return false;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    setCanPrompt(false);
-    return outcome === 'accepted';
-  };
-
-  return { canPrompt, install, installed: isStandalone(), ios: isIos() };
+  return { canPrompt, installed: isInstalled(), ios: isIosDevice(), install };
 }
+
+export { isStandalone };
+

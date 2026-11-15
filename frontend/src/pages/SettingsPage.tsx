@@ -19,8 +19,12 @@ import {
   Store,
   Tags,
   Factory,
+  Smartphone,
+  ShieldCheck,
 } from 'lucide-react';
 import { ReportHeader } from '../components/reports/ReportUI';
+import { PermissionStatus } from '../components/device/PermissionStatus';
+import { DeviceCapabilities } from '../components/device/DeviceCapabilities';
 import { ProductBrowser } from '../components/pos/ProductBrowser';
 import { productsService, type Product } from '../services/products.service';
 import { num } from '../lib/format';
@@ -800,6 +804,15 @@ export const SettingsPage: React.FC = () => {
               <BackupSettings prefs={settings.backup} isAdmin={isAdmin} />
             </Row>
           </Group>}
+
+          <Group title="دستگاه">
+            <Row id="permissions" title="دسترسی‌ها" hint="موقعیت، اعلان، دوربین" icon={ShieldCheck} tone="sky" {...row}>
+              <PermissionStatus />
+            </Row>
+            <Row id="capabilities" title="قابلیت‌های دستگاه" hint="چه چیزی روی این گوشی کار می‌کند" icon={Smartphone} tone="sky" {...row}>
+              <DeviceCapabilities />
+            </Row>
+          </Group>
         </div>
       </IonContent>
     </IonPage>

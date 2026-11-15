@@ -1,8 +1,7 @@
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { requestLocationPermission } from './permissions';
+import { getCurrentLocation, LocationError } from '../services/location';
 
 export type MapStyle = 'street' | 'satellite';
 
@@ -69,97 +68,37 @@ export const lastKnownPosition = (): GeoResult | null => {
 };
 
 export const geoErrorMessage = (err: unknown) => {
-  const code = (err as GeolocationPositionError | undefined)?.code;
-  if (code === 1) {
-    return 'اجازه موقعیت داده نشد. دوباره روی موقعیت بزنید و در پیام گوشی Allow را انتخاب کنید.';
+  if (err instanceof LocationError) {
+    if (err.code === 'denied') {
+      return 'اجازه موقعیت داده نشد. دوباره روی موقعیت بزنید و در پیام گوشی Allow را انتخاب کنید.';
+    }
+    if (err.code === 'timeout') return 'دریافت موقعیت طول کشید. GPS را روشن کنید و دوباره بزنید.';
+    return err.message;
   }
-  if (code === 3) return 'دریافت موقعیت طول کشید. GPS را روشن کنید و دوباره بزنید.';
-  if (err instanceof Error && err.message && err.message !== 'unsupported' && err.message !== 'timeout') return err.message;
-  if (!navigator.geolocation) return 'این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.';
+  if (err instanceof Error && err.message) return err.message;
   return 'موقعیت پیدا نشد. GPS را روشن کنید، اجازه بدهید، یا پین را روی نقشه بگذارید.';
 };
 
-const fromCoords = (pos: GeolocationPosition): GeoResult => ({
-  lat: pos.coords.latitude,
-  lng: pos.coords.longitude,
-});
+/** Keeps `getCurrentPosition`'s rejection type compatible with the map screens. */
+const toGeoError = (error: unknown): Error => new Error(geoErrorMessage(error));
 
-const readBrowser = (high: boolean) =>
-  new Promise<GeoResult>((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve(fromCoords(pos)),
-      reject,
-      { enableHighAccuracy: high, timeout: high ? 25000 : 12000, maximumAge: high ? 0 : 60000 },
-    );
-  });
-
-const watchOnce = (ms = 8000) =>
-  new Promise<GeoResult>((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('این دستگاه موقعیت‌یابی ندارد. پین را روی نقشه بگذارید.'));
-      return;
-    }
-    let done = false;
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (done) return;
-        done = true;
-        navigator.geolocation.clearWatch(id);
-        resolve(fromCoords(pos));
-      },
-      (err) => {
-        if (done) return;
-        done = true;
-        navigator.geolocation.clearWatch(id);
-        reject(err);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: ms },
-    );
-    window.setTimeout(() => {
-      if (done) return;
-      done = true;
-      navigator.geolocation.clearWatch(id);
-      reject(Object.assign(new Error('timeout'), { code: 3 }));
-    }, ms);
-  });
-
-const readCapacitor = async (): Promise<GeoResult | null> => {
-  if (!Capacitor.isNativePlatform()) return null;
-  const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 20000 });
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-};
-
-/** Must be called directly from a tap so the browser shows the permission dialog. */
+/**
+ * Reads a fix through `services/location`, which owns the Capacitor/browser split and
+ * the permission prompt. Kept here so the map screens keep their existing calls.
+ */
 export const getCurrentPosition = async (): Promise<GeoResult> => {
-  // Both calls stay in the tap, before any await, so the phone can show Allow.
-  requestLocationPermission();
-  const firstFix = readBrowser(true);
+  // Start the prompt synchronously in the tap; the fix itself may take a while.
+  void requestLocationPermission();
   try {
-    const native = await readCapacitor();
-    if (native) {
-      remember(native);
-      return native;
-    }
-  } catch {
-    /* fall through to the browser GPS */
+    const point = await getCurrentLocation({ enableHighAccuracy: true });
+    const result: GeoResult = { lat: point.lat, lng: point.lng };
+    remember(result);
+    return result;
+  } catch (error) {
+    throw toGeoError(error);
   }
-  const errors: unknown[] = [];
-  for (const step of [() => firstFix, () => readBrowser(false), () => watchOnce()]) {
-    try {
-      const point = await step();
-      remember(point);
-      return point;
-    } catch (err) {
-      errors.push(err);
-      if ((err as GeolocationPositionError | undefined)?.code === 1) throw err;
-    }
-  }
-  throw errors[0];
 };
+
 
 export const directionsUrl = (lat: number, lng: number) =>
   `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;

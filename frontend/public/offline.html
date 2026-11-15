@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>آریو — آفلاین</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        background: #e6f2ff; color: #174993;
+        font-family: "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+        text-align: center; padding: 24px;
+      }
+      .card {
+        background: #fff; border-radius: 24px; padding: 32px 24px;
+        box-shadow: 0 8px 32px rgba(23, 73, 147, .12); max-width: 340px;
+      }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      p { font-size: 13px; line-height: 1.9; color: #476b96; margin: 0 0 20px; }
+      button {
+        font-family: inherit; font-size: 13px; font-weight: 700; color: #fff;
+        background: #287ac4; border: 0; border-radius: 14px; padding: 12px 24px;
+        cursor: pointer; width: 100%;
+      }
+      .ring {
+        width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%;
+        border: 2px solid #abcdee; border-top-color: #287ac4; animation: spin 1s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="ring" aria-hidden="true"></div>
+      <h1>اتصال اینترنت قطع است</h1>
+      <p>آریو برای این صفحه به اینترنت نیاز دارد. بعد از وصل شدن دوباره تلاش کنید.</p>
+      <button type="button" onclick="location.reload()">تلاش دوباره</button>
+    </div>
+  </body>
+</html>

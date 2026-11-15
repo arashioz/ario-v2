@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { setupIonicReact } from '@ionic/react';
 import App from './App';
+import { registerServiceWorker } from './services/pwa';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/react/css/core.css';
@@ -34,3 +35,6 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Production web only: the Android/iOS shell loads assets from the bundle.
+void registerServiceWorker();

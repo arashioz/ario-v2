@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, ClipboardList, Factory, FileCheck2, Minus, Plus, ShoppingCart, Sparkles, Trash2 } from 'lucide-react';
 import { productsService, type Product } from '../../services/products.service';
 import { customersService, type Customer } from '../../services/customers.service';
-import { apiErrorMessage, invoicesService, type Invoice } from '../../services/invoices.service';
+import { apiErrorMessage, invoicesService, INVOICE_SAVED, type Invoice } from '../../services/invoices.service';
 import { enqueueOrder, sendOrder, ORDERS_SYNCED, reserveQueuedStock, pendingOrders } from '../../services/offlineOrders';
 import { proformasService, type Proforma } from '../../services/proformas.service';
 import { SALE_TYPE_LABELS, SALE_TYPE_TONE, saleTypeForKg, useSettings, type SaleType } from '../../services/settings.service';
@@ -277,6 +277,7 @@ export const PosTab: React.FC = () => {
           type: 'success',
         });
         if (settings.openDetailAfterSave) setCreatedInvoice(inv);
+        window.dispatchEvent(new CustomEvent<Invoice>(INVOICE_SAVED, { detail: inv }));
         void loadData(true);
       }
       setLines([]);

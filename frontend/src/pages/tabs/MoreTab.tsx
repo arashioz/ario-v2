@@ -316,18 +316,12 @@ export const MoreTab: React.FC = () => {
   const isAdmin = user?.role === 'admin';
 
   const handleInstall = async () => {
-    if (pwa.canPrompt) {
-      await pwa.install();
-      return;
+    const result = await pwa.install();
+    if (result.outcome === 'unavailable') {
+      showNotification({ title: 'نصب اپ', message: result.message, type: 'info' });
     }
-    showNotification({
-      title: 'نصب اپ',
-      message: pwa.ios
-        ? 'در Safari دکمه اشتراک‌گذاری را بزنید و «Add to Home Screen» را انتخاب کنید.'
-        : 'از منوی مرورگر گزینه «نصب برنامه» یا «Add to Home screen» را بزنید.',
-      type: 'info',
-    });
   };
+
 
   const handleLogout = () => {
     logout();

@@ -51,6 +51,20 @@ const personName = (inv: Invoice) => {
   return named && !named.startsWith('فاکتور') ? named : inv.customerName;
 };
 
+/** Generic walk-in labels ("مشتری تکی / حضوری", "مشتری حضوری") saved as the customer name on a sale. */
+const WALK_IN_NAME = /مشتری\s*(تکی|حضوری)(\s*\/?\s*حضوری)?/g;
+const isWalkIn = (inv: Invoice) => inv.type === 'sale' && new RegExp(WALK_IN_NAME.source).test(inv.customerName || '');
+/** The customer name without the generic walk-in words (empty when the sale had none). */
+const customerLabel = (inv: Invoice) => personName(inv).replace(WALK_IN_NAME, '').replace(/\s*\/\s*/g, '').trim();
+/** Name of the product when the invoice has exactly one line. */
+const soleProduct = (inv: Invoice) => (inv.items.length === 1 ? inv.items[0].productName : '');
+/** Main title of a row: the single product when there is one, otherwise the customer. */
+const titleOf = (inv: Invoice) => soleProduct(inv) || customerLabel(inv) || 'مشتری';
+
+const WalkInBadge: React.FC = () => (
+  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 whitespace-nowrap shrink-0">حضوری</span>
+);
+
 const FactoryMark: React.FC = () => (
   <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-900/80 bg-amber-100/80 px-1.5 py-0.5 rounded-full">
     <Factory className="w-3 h-3" />
@@ -78,17 +92,21 @@ const Card: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDate:
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[11px] font-semibold text-sky-800" dir="ltr">
+            <span className="font-mono text-[9px] font-medium text-slate-400" dir="ltr">
               {inv.invoiceNumber}
             </span>
             {v.showSaleType && <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${typeTone(inv)}`}>{typeLabel(inv)}</span>}
             {inv.fulfillment === 'factory' && <FactoryMark />}
             {isOverdue(inv) && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-600 text-white">تاخیر</span>}
           </div>
-          <h4 className="text-xs font-bold text-slate-800 mt-1 truncate">
-            {personName(inv)}
-            {inv.branchName ? ` · ${inv.branchName}` : ''}
+          <h4 className="text-xs font-bold text-slate-800 mt-1 flex items-center gap-1.5 min-w-0">
+            <span className="truncate">
+              {titleOf(inv)}
+              {inv.branchName ? ` · ${inv.branchName}` : ''}
+            </span>
+            {isWalkIn(inv) && <WalkInBadge />}
           </h4>
+          {soleProduct(inv) && customerLabel(inv) && <div className="text-[10px] text-slate-400 truncate">{customerLabel(inv)}</div>}
         </div>
       </div>
       <div className="text-left shrink-0">
@@ -121,13 +139,14 @@ const Compact: React.FC<{ inv: Invoice; v: SalesView; onOpen: () => void; showDa
   <button onClick={onOpen} className={`w-full flex items-center gap-2 px-3 py-2.5 text-right ${inv.fulfillment === 'factory' ? 'bg-amber-50/70' : 'active:bg-slate-50'}`}>
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-bold text-slate-800 truncate">{personName(inv)}</span>
+        <span className="text-xs font-bold text-slate-800 truncate">{titleOf(inv)}</span>
+        {isWalkIn(inv) && <WalkInBadge />}
         {v.showSaleType && <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${typeTone(inv)}`}>{typeLabel(inv)}</span>}
         {inv.fulfillment === 'factory' && <FactoryMark />}
         {isOverdue(inv) && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 bg-rose-600 text-white">تاخیر</span>}
       </div>
       <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-        <span dir="ltr" className="font-mono">
+        <span dir="ltr" className="font-mono text-[9px] text-slate-400">
           {inv.invoiceNumber}
         </span>
         {showDate && ` · ${formatJalali(dayOf(inv), { year: false })}${registeredStamp(inv) ? ` ${registeredStamp(inv)}` : ''}`}
@@ -159,7 +178,10 @@ const Table: React.FC<{ list: Invoice[]; v: SalesView; onOpen: (i: Invoice) => v
       <tbody className="divide-y divide-slate-100">
         {list.map((inv) => (
           <tr key={inv._id} onClick={() => onOpen(inv)} className="active:bg-sky-50 cursor-pointer">
-            <td className="px-2 py-2 font-bold text-slate-800 max-w-[110px] truncate">{personName(inv)}</td>
+            <td className="px-2 py-2 font-bold text-slate-800 max-w-[110px]">
+              <span className="block truncate">{titleOf(inv)}</span>
+              {isWalkIn(inv) && <WalkInBadge />}
+            </td>
             {showDate && (
               <td className="px-2 py-2 text-slate-500 whitespace-nowrap">
                 {formatJalali(dayOf(inv), { year: false })}
@@ -184,33 +206,49 @@ const Table: React.FC<{ list: Invoice[]; v: SalesView; onOpen: (i: Invoice) => v
 /** Invoice list honoring the "sales display" settings (layout, grouping, visible fields). */
 export const InvoiceList: React.FC<{ invoices: Invoice[]; view: SalesView; onOpen: (inv: Invoice) => void }> = ({ invoices, view, onOpen }) => {
   const groups = useMemo(() => {
-    if (!view.groupByDay) return [{ day: '', list: invoices }];
+    if (!view.groupByDay) return [{ day: '', list: invoices, shipped: [] as Invoice[] }];
     const m = new Map<string, Invoice[]>();
     for (const inv of invoices) {
       const d = dayOf(inv);
       if (!m.has(d)) m.set(d, []);
       m.get(d)!.push(inv);
     }
+    // Invoices written on one day but shipped on another show as a slim banner on their shipping day.
+    const shippedBy = new Map<string, Invoice[]>();
+    for (const inv of invoices) {
+      if (!inv.shippedAt) continue;
+      const shipDay = dateToYmd(new Date(inv.shippedAt));
+      if (shipDay === dayOf(inv)) continue;
+      if (!shippedBy.has(shipDay)) shippedBy.set(shipDay, []);
+      shippedBy.get(shipDay)!.push(inv);
+      if (!m.has(shipDay)) m.set(shipDay, []);
+    }
     // Groups follow the same rule as the rows: the day holding the newest registration comes first,
     // so a backdated invoice never drags its whole day to the wrong end of the list.
-    const stamp = (list: Invoice[]) =>
-      Math.max(...list.map((inv) => +new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate)));
+    const stamp = (day: string, list: Invoice[]) =>
+      list.length
+        ? Math.max(...list.map((inv) => +new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate)))
+        : +new Date(`${day}T23:59:59`);
     return [...m.entries()]
-      .map(([day, list]) => ({ day, list, at: stamp(list) }))
+      .map(([day, list]) => ({ day, list, shipped: shippedBy.get(day) || [], at: stamp(day, list) }))
       .sort((a, b) => b.at - a.at)
-      .map(({ day, list }) => ({ day, list }));
+      .map(({ day, list, shipped }) => ({ day, list, shipped }));
   }, [invoices, view.groupByDay]);
 
   const showDate = !view.groupByDay;
 
+  const jumpToDay = (day: string) => {
+    document.getElementById(`inv-day-${day}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="space-y-3">
-      {groups.map(({ day, list }) => {
+      {groups.map(({ day, list, shipped }) => {
         const total = list.reduce((s, i) => s + (i.finalAmount || 0), 0);
         const kg = list.reduce((s, i) => s + (i.totalWeightKg || 0), 0);
         return (
-          <section key={day || 'all'} className="space-y-2">
-            {day && (
+          <section key={day || 'all'} id={day ? `inv-day-${day}` : undefined} className="space-y-2">
+            {day && list.length > 0 && (
               <div className="flex items-center justify-between px-1 text-[11px]">
                 <span className="font-bold text-slate-700">{formatJalali(day, { weekday: true })}</span>
                 <span className="text-slate-400 font-mono">
@@ -219,7 +257,22 @@ export const InvoiceList: React.FC<{ invoices: Invoice[]; view: SalesView; onOpe
                 </span>
               </div>
             )}
-            {view.layout === 'cards' ? (
+            {shipped.map((inv) => (
+              <button
+                key={`ship-${inv._id}`}
+                type="button"
+                onClick={() => jumpToDay(dayOf(inv))}
+                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-100 text-[11px] text-sky-800 text-right active:bg-sky-100"
+              >
+                <span className="truncate">
+                  ارسال بار فاکتور {inv.invoiceNumber} ({inv.customerName})
+                </span>
+                <span className="shrink-0 font-bold whitespace-nowrap">
+                  از {formatJalali(dayOf(inv), { weekday: true })} ‹
+                </span>
+              </button>
+            ))}
+            {list.length > 0 && (view.layout === 'cards' ? (
               <div className="space-y-2.5">
                 {list.map((inv) => (
                   <Card key={inv._id} inv={inv} v={view} onOpen={() => onOpen(inv)} showDate={showDate} />
@@ -237,7 +290,7 @@ export const InvoiceList: React.FC<{ invoices: Invoice[]; view: SalesView; onOpe
                   <Table list={list} v={view} onOpen={onOpen} showDate={showDate} />
                 )}
               </div>
-            )}
+            ))}
           </section>
         );
       })}

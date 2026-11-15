@@ -1,0 +1,24 @@
+{
+  "name": "آریو — مدیریت فروشگاه",
+  "short_name": "آریو",
+  "description": "نرم‌افزار جامع مدیریت فروشگاه: فروش، فاکتور، انبار، مشتریان و نقشه",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "theme_color": "#e6f2ff",
+  "background_color": "#e6f2ff",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "فروش", "short_name": "فروش", "url": "/tabs/pos", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "فاکتورها", "short_name": "فاکتور", "url": "/tabs/invoices", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "کاتالوگ", "short_name": "کاتالوگ", "url": "/catalog", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -3,6 +3,7 @@ import { IonTabs, IonRouterOutlet, IonTabBar, IonTabButton, IonIcon, IonLabel } 
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { homeOutline, peopleOutline, cartOutline, receiptOutline, menuOutline } from 'ionicons/icons';
 import { PageLoader, PageLoadBoundary } from '../components/PageLoader';
+import { PWAInstallPrompt } from '../components/pwa/PWAInstallPrompt';
 
 const HomeTab = lazy(() => import('./tabs/HomeTab').then((m) => ({ default: m.HomeTab })));
 const CustomersTab = lazy(() => import('./tabs/CustomersTab').then((m) => ({ default: m.CustomersTab })));
@@ -170,6 +171,8 @@ export const TabsLayout: React.FC = () => {
           </IonTabButton>
         ))}
       </IonTabBar>
+
+      <PWAInstallPrompt />
     </IonTabs>
   );
 };

@@ -20,7 +20,7 @@ import { InvoiceList } from '../../components/invoices/InvoiceList';
 import { PendingProformasBanner } from '../../components/proformas/PendingProformasBanner';
 import { useSettings } from '../../services/settings.service';
 import { useNavigate } from 'react-router-dom';
-import { invoicesService } from '../../services/invoices.service';
+import { invoicesService, INVOICE_SAVED } from '../../services/invoices.service';
 import { readMellatReturn } from '../../services/payments.service';
 import type { Invoice } from '../../services/invoices.service';
 import { useNotification } from '../../context/NotificationContext';
@@ -90,6 +90,17 @@ export const InvoicesTab: React.FC = () => {
 
   useEffect(() => {
     loadInvoices();
+  }, []);
+
+  /** A sale saved on the POS shows up in the list right away, before the server reload finishes. */
+  useEffect(() => {
+    const onSaved = (event: Event) => {
+      const saved = (event as CustomEvent<Invoice>).detail;
+      if (!saved) return;
+      setInvoices((prev) => [saved, ...prev.filter((i) => i._id !== saved._id)]);
+    };
+    window.addEventListener(INVOICE_SAVED, onSaved);
+    return () => window.removeEventListener(INVOICE_SAVED, onSaved);
   }, []);
 
   /** The bank drops the customer back here with ?mellat=ok|fail after the callback. */
