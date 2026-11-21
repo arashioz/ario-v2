@@ -1,13 +1,13 @@
 # Single image: NestJS API + built React frontend, served together on one port.
 
-FROM node:22-slim AS frontend
+FROM docker.iranserver.com/library/node:22-slim AS frontend
 WORKDIR /build/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM node:22-slim AS backend
+FROM docker.iranserver.com/library/node:22-slim  AS backend
 # # bcrypt falls back to compiling from source when its prebuilt binary can't be downloaded.
 # RUN apt-get update \
 #   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -23,7 +23,7 @@ COPY backend/ ./
 # cgroup runs out and the OOM killer takes the build down with exit code 137.
 RUN NODE_OPTIONS=--max-old-space-size=1536 npm run build && npm prune --omit=dev
 
-FROM node:22-slim
+FROM docker.iranserver.com/library/node:22-slim 
 ENV NODE_ENV=production \
     PORT=3000 \
     STATIC_DIR=/app/public
