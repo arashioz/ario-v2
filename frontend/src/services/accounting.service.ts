@@ -72,6 +72,9 @@ export interface InventoryItem {
   avgBuyPerKg: number;
   soldKg: number;
   soldRevenue: number;
+  /** Sales up to and including today, regardless of the selected period. */
+  soldKgToDate?: number;
+  soldRevenueToDate?: number;
   soldCost: number;
   profit: number;
   marginPercent: number;

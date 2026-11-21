@@ -260,6 +260,8 @@ export class AccountingService {
           soldKg: 0,
           soldRevenue: 0,
           soldCost: 0,
+          soldKgToDate: 0,
+          soldRevenueToDate: 0,
           unknownSold: 0,
           fifoRemainingKg: 0,
           remainingValue: 0,
@@ -296,6 +298,16 @@ export class AccountingService {
       r.soldRevenue += l.revenue;
       r.soldCost += l.unknownCost ? 0 : l.cost;
       r.unknownSold = (r.unknownSold || 0) + (l.unknownCost ? l.revenue : 0);
+    }
+
+    // Sales up to and including today, independent of the selected period,
+    // so every product shows its running sales total and tonnage.
+    const today = dayKey(new Date());
+    for (const l of f.saleLines) {
+      if (dayKey(l.date) > today) continue;
+      const r = row(l.productId, l.productName);
+      r.soldKgToDate += l.kg;
+      r.soldRevenueToDate += l.revenue;
     }
 
     // Registered quantity should follow invoice lines: received purchases minus shop sales.
@@ -401,6 +413,8 @@ export class AccountingService {
           avgBuyPerKg: r.purchasedKg ? r0(r.purchasedAmount / r.purchasedKg) : 0,
           soldKg: r1(r.soldKg),
           soldRevenue: r0(r.soldRevenue),
+          soldKgToDate: r1(r.soldKgToDate),
+          soldRevenueToDate: r0(r.soldRevenueToDate),
           soldCost: r0(r.soldCost),
           profit: r0(profit),
           marginPercent: pct(profit, r.soldRevenue),

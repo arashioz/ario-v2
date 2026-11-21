@@ -480,6 +480,20 @@ const ProductRow: React.FC<{ item: InventoryItem; open: boolean; onToggle: () =>
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-2 mt-2 text-center">
+          <Mini
+            label="فروش تا امروز"
+            value={weight(i.soldKgToDate)}
+            sub={formatToman(i.soldRevenueToDate)}
+          />
+          <Mini
+            label="موجودی فعلی انبار"
+            value={formatStock(i.stockUnits, { unit: i.unit, weightPerUnitKg: i.weightPerUnitKg })}
+            sub={weight(i.stockKg)}
+            valueClass={i.stockKg < 0 ? 'text-rose-600' : 'text-sky-700'}
+          />
+        </div>
+
         {i.purchasedKg > 0 && (
           <div className="mt-3 h-1.5 rounded-full bg-slate-100 overflow-hidden">
             <div className="h-full bg-sky-500 rounded-full" style={{ width: `${soldShare}%` }} />
