@@ -32,10 +32,12 @@ import { useNotification } from '../../context/NotificationContext';
 import { EditInvoiceSheet } from './EditInvoiceSheet';
 import { DeleteInvoiceSheet } from './DeleteInvoiceSheet';
 import { InvoicePaymentSheet } from './InvoicePaymentSheet';
+import { InvoiceProfitCard } from './InvoiceProfitCard';
 import { PurchasePriceSheet } from '../pricing/PurchasePriceSheet';
 import { accountTitle } from '../ui/AccountPicker';
 import { customersService, PAYMENT_METHOD_LABELS } from '../../services/customers.service';
 import { invoiceSms, openSms, whatsappUrl } from '../../lib/sms';
+import { printInvoiceSheet } from '../../lib/print';
 import { copyText, requestCopyPermission } from '../../lib/permissions';
 import { formatToman, num, tons } from '../../lib/format';
 import { dateToYmd, formatClock, formatJalali } from '../../lib/jalali';
@@ -198,7 +200,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
     .map((m) => ({ method: m, title: accountTitle(settings.bankCards, invoice.depositAccounts?.[m]) }));
 
   const handlePrint = () => {
-    window.print();
+    printInvoiceSheet();
   };
 
   return (
@@ -564,6 +566,14 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               <p className="text-[11px] text-slate-500 text-center pt-2">{settings.invoiceFooter}</p>
             )}
           </div>
+          {isSale && invoice._id && (
+            <div className="print:hidden">
+              <InvoiceProfitCard
+                invoiceId={invoice._id}
+                version={`${invoice.invoiceNumber}:${invoice.finalAmount}:${invoice.items?.length || 0}`}
+              />
+            </div>
+          )}
           {invoice.type === 'purchase' && (
             <button
               onClick={() => setSheet('price')}

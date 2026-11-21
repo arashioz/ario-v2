@@ -54,6 +54,9 @@ export const CompanyPricesPage: React.FC = () => {
   const [retailPct, setRetailPct] = useState('');
   const [superPct, setSuperPct] = useState('');
   const [wholePct, setWholePct] = useState('');
+  // One global base price (Toman/kg). When set, every product's prices are computed from
+  // THIS base + its own کارمزد + the channel percent, instead of the product's last-buy base.
+  const [basePlain, setBasePlain] = useState('');
   const [marginPlain, setMarginPlain] = useState('');
   const [gapPlain, setGapPlain] = useState(String(DEFAULT_GAP));
   const [roundStep, setRoundStep] = useState(1000);
@@ -88,7 +91,9 @@ export const CompanyPricesPage: React.FC = () => {
     const kg = kgOf(p);
     const buy = baseOf(p);
     const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
-    const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
+    // A global "قیمت پایه" (when entered) overrides every product's own base; otherwise fall
+    // back to the product's last-buy-per-kg base. Either way each product's کارمزد still applies.
+    const basePerKg = Number(basePlain) > 0 ? Number(basePlain) : (row.kiloBase > 0 ? row.kiloBase : buyPerKg);
     if (!(basePerKg > 0)) return current;
     const margin = Math.max(0, Math.round(parseDecimal(marginPlain) || 0));
     return roundMoney(sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: n, kg, marginPerPack: margin }).pack, roundStep, roundDir);
@@ -236,6 +241,13 @@ export const CompanyPricesPage: React.FC = () => {
           {company && !loading && (
             <div className="rounded-2xl bg-white border border-violet-100 p-3 space-y-2">
               <p className="text-[11px] font-bold text-violet-900">درصد روی قیمت آخرین خرید، برای فروش از فروشگاه</p>
+              <label className="text-[10px] text-slate-600 space-y-1 block">
+                <span>قیمت پایه هر کیلو (تومان) — اختیاری؛ خالی = قیمت آخرین خریدِ هر کالا</span>
+                <div className="flex items-center gap-1">
+                  <MoneyTextInput className={field} value={Number(basePlain) || 0} onChange={setBasePlain} />
+                  <span className="text-[10px] text-slate-400 shrink-0">تومان / کیلو</span>
+                </div>
+              </label>
               <div className="grid grid-cols-3 gap-2">
                 <label className="text-[10px] text-slate-500 space-y-1"><span>تکی ٪</span><input className={field} inputMode="decimal" value={retailPct} onChange={(e) => setRetailPct(e.target.value)} /></label>
                 <label className="text-[10px] text-slate-500 space-y-1"><span>سوپرمارکت ٪</span><input className={field} inputMode="decimal" value={superPct} onChange={(e) => setSuperPct(e.target.value)} /></label>
@@ -275,7 +287,7 @@ export const CompanyPricesPage: React.FC = () => {
                 <MoneyTextInput className={field} value={Number(marginPlain) || 0} onChange={setMarginPlain} />
               </label>
               <button type="button" onClick={applyPercents} className="w-full rounded-xl bg-violet-600 py-2.5 text-xs font-bold text-white">اعمال درصد</button>
-              <p className="text-[10px] text-slate-400 leading-5">درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد می‌نشیند. کارمزد را می‌توانید کیلویی، بسته‌ای، یا هر دو بزنید. کارمزد بسته اول به هر کیلو تقسیم می‌شود.</p>
+              <p className="text-[10px] text-slate-400 leading-5">اگر «قیمت پایه» را بالا وارد کنید، برای همهٔ کالاها از همان پایه محاسبه می‌شود؛ در غیر این صورت قیمت آخرین خرید هر کالا پایه است. درصد روی قیمت پایهٔ هر کیلو به‌علاوه کارمزد می‌نشیند. کارمزد را می‌توانید کیلویی، بسته‌ای، یا هر دو بزنید. کارمزد بسته اول به هر کیلو تقسیم می‌شود.</p>
             </div>
           )}
 
@@ -289,7 +301,7 @@ export const CompanyPricesPage: React.FC = () => {
             const kg = kgOf(p);
             const perKg = (amount: number) => (kg > 0 && amount > 0 ? Math.round(amount / kg) : 0);
             const buyPerKg = kg > 0 && buy > 0 ? buy / kg : buy;
-            const basePerKg = row.kiloBase > 0 ? row.kiloBase : buyPerKg;
+            const basePerKg = Number(basePlain) > 0 ? Number(basePlain) : (row.kiloBase > 0 ? row.kiloBase : buyPerKg);
             const perKgFee = (row.feePerKg || 0) + (kg > 0 ? (row.feePerPack || 0) / kg : row.feePerPack || 0);
             const samplePct = retailPct.trim() === '' ? 0 : parseDecimal(retailPct);
             const preview = basePerKg > 0 ? sellFromBase({ basePerKg, feePerKg: row.feePerKg, feePerPack: row.feePerPack, percent: Number.isFinite(samplePct) ? samplePct : 0, kg }) : null;
