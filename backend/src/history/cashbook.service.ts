@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Invoice, InvoiceDocument } from '../invoices/schemas/invoice.schema';
 import { CustomerTransaction, CustomerTransactionDocument } from '../customers/schemas/customer-transaction.schema';
 import { Expense, ExpenseDocument } from '../expenses/schemas/expense.schema';
@@ -24,6 +24,17 @@ export interface CashEntry {
   ref?: string;
   /** Shop bank account (settings.bankCards[].id) for card payments, when recorded. */
   accountId?: string;
+}
+
+/** A card-to-card receipt that never recorded which shop card it landed in. */
+export interface UnspecifiedTransfer {
+  source: 'invoice' | 'walkin' | 'customer-tx' | 'expense';
+  id: string;
+  index?: number;
+  date: Date;
+  amount: number;
+  title: string;
+  ref: string;
 }
 
 const KIND_LABELS: Record<Kind, string> = {
@@ -156,6 +167,7 @@ export class CashbookService {
         amount: e.amount,
         title: e.description || e.categoryName,
         ref: e.categoryName,
+        accountId: (e as any).accountId || undefined,
       });
     }
     for (const p of supplierPayments) {
@@ -338,5 +350,111 @@ export class CashbookService {
   async clearBalance(method: 'cash' | 'pos' | 'transfer') {
     await this.adjustmentModel.deleteOne({ method });
     return this.cashbook({});
+  }
+
+  /**
+   * Incoming کارت‌به‌کارت entries that did not record which shop card the money landed in.
+   * These mirror exactly the "کارت‌به‌کارت بدون حساب" bucket in byAccount, across every source:
+   * sale invoices (transfer or a split's transfer slot), imported walk-in payments,
+   * customer debt payments, and manager deposits taken via transfer.
+   */
+  async unspecifiedTransfers(query: { from?: string; to?: string }) {
+    const rows = await this.collectUnspecified(query);
+    return { rows, total: rows.reduce((s, r) => s + r.amount, 0), count: rows.length };
+  }
+
+  private async collectUnspecified(query: { from?: string; to?: string }): Promise<UnspecifiedTransfer[]> {
+    const from = dayStart(query.from);
+    const to = dayEnd(query.to);
+    const range = (field: string) => {
+      const r: any = {};
+      if (from) r.$gte = from;
+      if (to) r.$lte = to;
+      return Object.keys(r).length ? { [field]: r } : {};
+    };
+    const inRange = (d: Date) => (!from || +new Date(d) >= +from) && (!to || +new Date(d) <= +to);
+
+    const transferRaw = ['transfer', 'card_to_card', 'paya'];
+    const [invoices, walkins, txs, deposits, companyPurchases] = await Promise.all([
+      this.invoiceModel
+        .find({ type: 'sale', paymentMethod: { $in: ['split', ...transferRaw] }, ...range('invoiceDate') })
+        .select('invoiceNumber invoiceDate customerName finalAmount creditAmount paymentMethod splitDetails depositAccounts')
+        .lean(),
+      this.invoiceModel.find({ type: 'sale', 'legacyPayments.0': { $exists: true } }).select('invoiceNumber customerName legacyPayments').lean(),
+      this.txModel.find({ type: 'payment', paymentMethod: { $in: transferRaw }, ...range('date') }).populate('customer', 'name').lean(),
+      this.expenseModel.find({ type: 'deposit', paymentMethod: { $in: transferRaw }, ...range('date') }).lean(),
+      this.invoiceModel.find({ type: 'purchase' }).select('_id customerName fulfillment').lean(),
+    ]);
+    const companyInvoiceIds = new Set(
+      companyPurchases.filter((inv) => !purchaseEntersShop(inv) && inv.fulfillment !== 'factory').map((inv) => String(inv._id)),
+    );
+
+    const rows: UnspecifiedTransfer[] = [];
+
+    for (const inv of invoices) {
+      if ((inv.depositAccounts as any)?.transfer) continue;
+      const upfront = Math.max(0, (inv.finalAmount || 0) - (inv.creditAmount || 0));
+      if (upfront <= 0) continue;
+      const amount = inv.paymentMethod === 'split' ? (inv.splitDetails as any)?.transfer || 0 : upfront;
+      if (amount > 0) rows.push({ source: 'invoice', id: String(inv._id), date: inv.invoiceDate, amount, title: `فاکتور فروش ${inv.invoiceNumber}`, ref: inv.customerName || '' });
+    }
+    for (const inv of walkins) {
+      (inv.legacyPayments || []).forEach((p: any, index: number) => {
+        if (!inRange(p.date) || p.accountId || drawerOf(p.method) !== 'transfer') return;
+        rows.push({ source: 'walkin', id: String(inv._id), index, date: p.date, amount: p.amount, title: `وصول فاکتور ${inv.invoiceNumber}`, ref: inv.customerName || '' });
+      });
+    }
+    for (const t of txs) {
+      if (t.accountId) continue;
+      rows.push({ source: 'customer-tx', id: String(t._id), date: t.date, amount: t.amount, title: t.description || 'دریافت از مشتری', ref: (t.customer as any)?.name || '' });
+    }
+    for (const e of deposits) {
+      if ((e as any).accountId) continue;
+      if ((e as any).invoiceId && companyInvoiceIds.has(String((e as any).invoiceId))) continue;
+      rows.push({ source: 'expense', id: String(e._id), date: e.date, amount: e.amount, title: e.description || 'واریز مدیر', ref: e.categoryName || '' });
+    }
+
+    rows.sort((a, b) => +new Date(b.date) - +new Date(a.date));
+    return rows;
+  }
+
+  private async assertCard(accountId: string) {
+    const id = (accountId || '').trim();
+    if (!id) throw new BadRequestException('یک کارت انتخاب کنید.');
+    const cards = (await this.settings.get()).bankCards || [];
+    if (!cards.some((c: any) => c.id === id)) throw new BadRequestException('کارت انتخابی معتبر نیست.');
+    return id;
+  }
+
+  private async applyAccount(source: string, id: string, accountId: string, index?: number) {
+    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('شناسه نامعتبر است.');
+    if (source === 'invoice') await this.invoiceModel.updateOne({ _id: id }, { $set: { 'depositAccounts.transfer': accountId } }).exec();
+    else if (source === 'customer-tx') await this.txModel.updateOne({ _id: id, type: 'payment' }, { $set: { accountId } }).exec();
+    else if (source === 'expense') await this.expenseModel.updateOne({ _id: id, type: 'deposit' }, { $set: { accountId } }).exec();
+    else if (source === 'walkin') {
+      if (!Number.isInteger(index) || (index as number) < 0) throw new BadRequestException('شماره پرداخت نامعتبر است.');
+      await this.invoiceModel.updateOne({ _id: id }, { $set: { [`legacyPayments.${index}.accountId`]: accountId } }).exec();
+    } else throw new BadRequestException('منبع نامعتبر است.');
+  }
+
+  /** Tag a single unspecified کارت‌به‌کارت with the card it actually landed in. */
+  async assignTransferAccount(dto: { source?: string; id?: string; index?: number; accountId?: string }) {
+    const accountId = await this.assertCard(dto?.accountId);
+    await this.applyAccount(dto?.source || '', (dto?.id || '').trim(), accountId, dto?.index);
+    return this.unspecifiedTransfers({});
+  }
+
+  /** Move every unspecified کارت‌به‌کارت in the period onto one card. */
+  async assignAllTransfers(dto: { from?: string; to?: string; accountId?: string }) {
+    const accountId = await this.assertCard(dto?.accountId);
+    const rows = await this.collectUnspecified({ from: dto?.from, to: dto?.to });
+    for (const r of rows) {
+      try {
+        await this.applyAccount(r.source, r.id, accountId, r.index);
+      } catch {
+        /* Skip a row whose document no longer matches; the rest still move. */
+      }
+    }
+    return this.unspecifiedTransfers({ from: dto?.from, to: dto?.to });
   }
 }

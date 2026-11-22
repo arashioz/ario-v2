@@ -21,11 +21,14 @@ const withDefaults = (options?: LocationOptions): Required<LocationOptions> => (
 /**
  * One positioning fix. Requires a user gesture on first use, because the browser
  * only shows the Allow dialog inside a tap.
+ *
+ * Concurrent callers share a single in-flight fix: `navigator.geolocation` does not
+ * queue well and firing two requests can surface two prompts or waste two GPS
+ * acquisitions (notably on iOS PWAs). The first caller's options win.
  */
-export async function getCurrentLocation(options?: LocationOptions): Promise<GeoPoint> {
-  const opts = withDefaults(options);
-  assertLocationUsable();
+let pendingFix: Promise<GeoPoint> | null = null;
 
+async function resolveFix(opts: Required<LocationOptions>): Promise<GeoPoint> {
   if (isNative()) {
     try {
       return fromNativePosition(await Geolocation.getCurrentPosition(opts));
@@ -41,6 +44,16 @@ export async function getCurrentLocation(options?: LocationOptions): Promise<Geo
       opts,
     );
   });
+}
+
+export async function getCurrentLocation(options?: LocationOptions): Promise<GeoPoint> {
+  const opts = withDefaults(options);
+  assertLocationUsable();
+  if (pendingFix) return pendingFix;
+  pendingFix = resolveFix(opts).finally(() => {
+    pendingFix = null;
+  });
+  return pendingFix;
 }
 
 /**

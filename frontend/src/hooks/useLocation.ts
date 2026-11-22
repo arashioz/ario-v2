@@ -34,6 +34,19 @@ export function useLocation(): UseLocationResult {
   const [loading, setLoading] = useState(false);
   const [tracking, setTracking] = useState(false);
   const watchId = useRef<number | null>(null);
+  // Remembers the intent so a backgrounded watch can resume itself on return,
+  // and so an explicit stopTracking never auto-resumes.
+  const wantTracking = useRef(false);
+  const trackingOptions = useRef<LocationOptions | undefined>(undefined);
+
+  const onPosition = useCallback((next: GeoPoint) => {
+    setPoint(next);
+    setError(null);
+  }, []);
+
+  const onPositionError = useCallback((err: unknown) => {
+    setError(describeLocationError(err));
+  }, []);
 
   const locate = useCallback(async (options?: LocationOptions) => {
     setLoading(true);
@@ -50,7 +63,15 @@ export function useLocation(): UseLocationResult {
     }
   }, []);
 
+  const startWatch = useCallback(() => {
+    if (watchId.current !== null) stopWatching(watchId.current);
+    const id = watchLocation(onPosition, onPositionError, trackingOptions.current);
+    watchId.current = id;
+    setTracking(id !== null);
+  }, [onPosition, onPositionError]);
+
   const stopTracking = useCallback(() => {
+    wantTracking.current = false;
     if (watchId.current !== null) stopWatching(watchId.current);
     watchId.current = null;
     setTracking(false);
@@ -58,23 +79,32 @@ export function useLocation(): UseLocationResult {
 
   const startTracking = useCallback(
     (options?: LocationOptions) => {
-      stopTracking();
+      wantTracking.current = true;
+      trackingOptions.current = options;
       setError(null);
-      const id = watchLocation(
-        (next) => {
-          setPoint(next);
-          setError(null);
-        },
-        (err) => {
-          setError(describeLocationError(err));
-        },
-        options,
-      );
-      watchId.current = id;
-      setTracking(id !== null);
+      startWatch();
     },
-    [stopTracking],
+    [startWatch],
   );
+
+  // Stop the GPS watch while the tab is hidden (Android/iOS PWAs throttle or revoke
+  // background location) and resume the same watch when it becomes visible again.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (watchId.current !== null) {
+          stopWatching(watchId.current);
+          watchId.current = null;
+          setTracking(false);
+        }
+      } else if (wantTracking.current) {
+        startWatch();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [startWatch]);
 
   useEffect(() => () => stopTracking(), [stopTracking]);
 

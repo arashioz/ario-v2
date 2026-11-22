@@ -23,7 +23,7 @@ COPY backend/ ./
 # cgroup runs out and the OOM killer takes the build down with exit code 137.
 RUN NODE_OPTIONS=--max-old-space-size=1536 npm run build && npm prune --omit=dev
 
-FROM docker.iranserver.com/library/node:22-slim 
+FROM docker.abrha.net/library/node:22-slim 
 ENV NODE_ENV=production \
     PORT=3000 \
     STATIC_DIR=/app/public

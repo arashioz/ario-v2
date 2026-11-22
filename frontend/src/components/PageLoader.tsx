@@ -1,6 +1,6 @@
 import React from 'react';
 import { IonContent, IonPage } from '@ionic/react';
-import { SplashScreen } from './SplashScreen';
+import { ListSkeleton } from './ui/Skeleton';
 
 /**
  * Suspense fallback for a lazily loaded page. It must NOT render an `IonPage`:
@@ -9,9 +9,13 @@ import { SplashScreen } from './SplashScreen';
  * as soon as the chunk resolves, and the replacement element stays hidden
  * (`ion-page-invisible`) because Ionic treats the repeat transition as a duplicate —
  * which is what turned cold starts (and slow chunk loads) into a white screen.
- * The splash is portalled to <body>, so it covers the outlet without being a page.
+ * A plain (non-IonPage) skeleton avoids that while keeping the look of the rest of the app.
  */
-export const PageLoader: React.FC = () => <SplashScreen message="در حال باز کردن صفحه…" />;
+export const PageLoader: React.FC = () => (
+  <div className="p-4 max-w-md mx-auto space-y-3" role="status" aria-label="در حال بارگذاری">
+    <ListSkeleton rows={6} />
+  </div>
+);
 
 /** A failed chunk download must offer recovery, rather than leave a blank screen. */
 export class PageLoadBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {

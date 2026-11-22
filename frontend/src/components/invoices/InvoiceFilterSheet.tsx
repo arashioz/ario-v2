@@ -52,8 +52,8 @@ const METHOD_OPTS = [
   ['credit', 'نسیه'],
 ] as const;
 const SORT_OPTS = [
-  ['new', 'جدیدترین'],
-  ['old', 'قدیمی‌ترین'],
+  ['new', 'تاریخ فاکتور (جدید)'],
+  ['old', 'تاریخ فاکتور (قدیم)'],
   ['amount', 'بیشترین مبلغ'],
 ] as const;
 
@@ -84,11 +84,13 @@ export function applyInvoiceFilters(list: Invoice[], f: InvoiceFilters): Invoice
     if (f.max && (inv.finalAmount || 0) > f.max) return false;
     return true;
   });
-  // Newest registration first — the invoice date can be backdated on purpose.
-  const time = (inv: Invoice) => new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate).getTime();
-  if (f.sort === 'old') out.sort((a, b) => time(a) - time(b));
+  // Order by the invoice's own business day (the date shown on the row), with the registration
+  // moment as a stable tie-breaker. The day groups in the list follow this order as-is.
+  const bizDay = (inv: Invoice) => String(inv.proformaDate || inv.invoiceDate || inv.registeredAt || inv.createdAt || '');
+  const time = (inv: Invoice) => new Date(inv.registeredAt || inv.createdAt || inv.invoiceDate || 0).getTime();
+  if (f.sort === 'old') out.sort((a, b) => bizDay(a).localeCompare(bizDay(b)) || time(a) - time(b));
   else if (f.sort === 'amount') out.sort((a, b) => (b.finalAmount || 0) - (a.finalAmount || 0));
-  else out.sort((a, b) => time(b) - time(a));
+  else out.sort((a, b) => bizDay(b).localeCompare(bizDay(a)) || time(b) - time(a));
   return out;
 }
 

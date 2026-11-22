@@ -272,6 +272,14 @@ export class Invoice {
   @Prop({ trim: true, default: '' })
   notes?: string;
 
+  /** Whether the invoice has been sent to the customer (SMS/WhatsApp). Toggled in the invoice editor. */
+  @Prop({ default: false })
+  sentToCustomer: boolean;
+
+  /** When the invoice was first marked as sent to the customer. */
+  @Prop({ type: Date })
+  sentToCustomerAt?: Date;
+
   @Prop({ default: 'مدیر سیستم' })
   createdByName: string;
 

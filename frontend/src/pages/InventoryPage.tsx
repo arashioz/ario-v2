@@ -260,7 +260,7 @@ export const InventoryPage: React.FC = () => {
               <span className="text-sm mb-1.5 text-sky-100">تن</span>
             </div>
             <div className="mt-1 text-[11px] text-sky-100">
-              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا · خرید منهای فروش از آریو
+              <span className="font-mono">{num(t?.stockKg, 1)}</span> کیلو در <span className="font-mono">{num(inStock)}</span> کالا · خرید منهای فروش + انبارگردانی
             </div>
             {isAdmin && (
               <button

@@ -364,7 +364,7 @@ export class AccountingService {
     }
 
     const prices = new Map(
-      (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale priceCostBasisPerKg').lean()).map((p: any) => [String(p._id), p]),
+      (await this.productModel.find().select('sellPrice priceRetail priceSupermarket priceWholesale priceCostBasisPerKg stockAdjust openingStock').lean()).map((p: any) => [String(p._id), p]),
     );
     const tierPrice = (p: any, tier: PriceTier) => {
       const v = tier === 'wholesale' ? p?.priceWholesale : tier === 'supermarket' ? p?.priceSupermarket : p?.priceRetail;
@@ -398,8 +398,13 @@ export class AccountingService {
             profit: r0(spread.profit),
           };
         });
-        const onHandKg = r.fifoRemainingKg;
-        const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits);
+        // The physical count (stockAdjust) and any opening stock are stored on the product in
+        // stock units, on top of the invoice-derived lots. Fold them in so a stocktake shows up
+        // in on-hand tonnage/quantity here too, matching the rebuild formula
+        // (purchases − sales + count adjustment + opening).
+        const countedUnits = (p?.stockAdjust || 0) + (p?.openingStock || 0);
+        const onHandKg = r.fifoRemainingKg + countedUnits * wpu;
+        const onHandUnits = wpu > 0 ? onHandKg / wpu : Math.max(0, expectedUnits + countedUnits);
         return {
           ...r,
           expectedUnits: r1(expectedUnits),

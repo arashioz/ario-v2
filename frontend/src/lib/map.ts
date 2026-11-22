@@ -1,6 +1,5 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { requestLocationPermission } from './permissions';
 import { getCurrentLocation, LocationError } from '../services/location';
 
 export type MapStyle = 'street' | 'satellite';
@@ -83,12 +82,13 @@ export const geoErrorMessage = (err: unknown) => {
 const toGeoError = (error: unknown): Error => new Error(geoErrorMessage(error));
 
 /**
- * Reads a fix through `services/location`, which owns the Capacitor/browser split and
- * the permission prompt. Kept here so the map screens keep their existing calls.
+ * Reads a fix through `services/location`, which owns the Capacitor/browser split,
+ * the secure-context guard and the permission prompt. `getCurrentLocation` fires
+ * `navigator.geolocation.getCurrentPosition` synchronously inside the tap, which is
+ * what surfaces the Allow dialog — so no separate permission request is needed here
+ * (firing both used to start two concurrent GPS acquisitions).
  */
 export const getCurrentPosition = async (): Promise<GeoResult> => {
-  // Start the prompt synchronously in the tap; the fix itself may take a while.
-  void requestLocationPermission();
   try {
     const point = await getCurrentLocation({ enableHighAccuracy: true });
     const result: GeoResult = { lat: point.lat, lng: point.lng };

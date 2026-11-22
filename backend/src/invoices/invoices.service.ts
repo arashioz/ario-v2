@@ -1024,6 +1024,12 @@ export class InvoicesService implements OnApplicationBootstrap {
         : {}),
       creditAmount: credit,
       notes: dto.notes ?? invoice.notes,
+      ...(dto.sentToCustomer !== undefined
+        ? {
+            sentToCustomer: dto.sentToCustomer,
+            sentToCustomerAt: dto.sentToCustomer ? invoice.sentToCustomerAt || new Date() : undefined,
+          }
+        : {}),
       ...(dto.shippingPayer !== undefined ? this.shippingFields(dto, isSale) : {}),
       ...(isSale && !invoice.shippedAt ? { shippedAt: invoiceDate } : {}),
       ...(isSale && (dto.finalAmount || 0) - credit > 0 && !invoice.paidAt ? { paidAt: invoiceDate } : {}),

@@ -45,6 +45,30 @@ export interface LegacyLedger {
   rows: { _id: string; date: string; type: string; label: string; direction: 'in' | 'out'; amount: number; description: string }[];
 }
 
+/** A کارت‌به‌کارت receipt that never recorded which shop card it landed in. */
+export interface UnspecifiedTransfer {
+  source: 'invoice' | 'walkin' | 'customer-tx' | 'expense';
+  id: string;
+  index?: number;
+  date: string;
+  amount: number;
+  title: string;
+  ref: string;
+}
+
+export interface UnspecifiedTransfers {
+  rows: UnspecifiedTransfer[];
+  total: number;
+  count: number;
+}
+
+export const SOURCE_LABELS: Record<UnspecifiedTransfer['source'], string> = {
+  invoice: 'فاکتور فروش',
+  walkin: 'وصول حضوری',
+  'customer-tx': 'وصول بدهی',
+  expense: 'واریز مدیر',
+};
+
 export const cashbookService = {
   async cashbook(from?: string, to?: string): Promise<Cashbook> {
     return (await api.get('/history/cashbook', { params: { from, to } })).data;
@@ -54,6 +78,15 @@ export const cashbookService = {
   },
   async clearBalance(method: 'cash' | 'pos' | 'transfer'): Promise<Cashbook> {
     return (await api.delete(`/history/cashbox/balance/${method}`)).data;
+  },
+  async unspecifiedTransfers(from?: string, to?: string): Promise<UnspecifiedTransfers> {
+    return (await api.get('/history/cashbox/unspecified', { params: { from, to } })).data;
+  },
+  async assignTransfer(row: { source: string; id: string; index?: number }, accountId: string): Promise<UnspecifiedTransfers> {
+    return (await api.patch('/history/cashbox/assign', { ...row, accountId })).data;
+  },
+  async assignAllTransfers(from: string | undefined, to: string | undefined, accountId: string): Promise<UnspecifiedTransfers> {
+    return (await api.patch('/history/cashbox/assign-all', { from, to, accountId })).data;
   },
   async legacy(type?: string, limit = 300): Promise<LegacyLedger> {
     return (await api.get('/history/legacy-ledger', { params: { type, limit } })).data;

@@ -56,6 +56,10 @@ export class Expense {
   })
   paymentMethod: string;
 
+  /** Card-to-card deposits: shop bank account (settings.bankCards[].id) the money landed in. */
+  @Prop({ trim: true, default: '' })
+  accountId?: string;
+
   @Prop({ trim: true, default: 'مدیر فروشگاه' })
   recordedByName: string;
 

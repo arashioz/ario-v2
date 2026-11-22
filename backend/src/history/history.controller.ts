@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { CashbookService } from './cashbook.service';
 import { SetCashboxBalanceDto } from './dto/cashbox-balance.dto';
@@ -35,6 +35,26 @@ export class HistoryController {
       throw new BadRequestException('روش صندوق نامعتبر است');
     }
     return this.cashbook.clearBalance(method);
+  }
+
+  /** Incoming کارت‌به‌کارت receipts that did not record which shop card the money landed in. */
+  @Get('cashbox/unspecified')
+  getUnspecifiedTransfers(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.cashbook.unspecifiedTransfers({ from, to });
+  }
+
+  @Patch('cashbox/assign')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  assignTransfer(@Body() body: any) {
+    return this.cashbook.assignTransferAccount(body);
+  }
+
+  @Patch('cashbox/assign-all')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  assignAllTransfers(@Body() body: any) {
+    return this.cashbook.assignAllTransfers(body);
   }
 
   @Get('legacy-ledger')

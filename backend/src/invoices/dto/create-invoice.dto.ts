@@ -193,4 +193,9 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsEnum(['shop', 'factory', 'ledger'])
   fulfillment?: string;
+
+  /** Whether the invoice has been sent to the customer. Persisted on edit. */
+  @IsOptional()
+  @IsBoolean()
+  sentToCustomer?: boolean;
 }
